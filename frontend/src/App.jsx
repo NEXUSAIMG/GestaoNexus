@@ -25,6 +25,8 @@ import Quadro from './pages/Quadro.jsx';
 import Processos from './pages/Processos.jsx';
 import EditorProcesso from './pages/EditorProcesso.jsx';
 import InstanciasProcesso from './pages/InstanciasProcesso.jsx';
+import Portfolio from './pages/Portfolio.jsx';
+import PortfolioProduto from './pages/PortfolioProduto.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -89,6 +91,10 @@ export default function App() {
         <Route path="/processos/:id" element={<EditorProcesso />} />
         {/* Sprint 15 — Instâncias / execuções do processo */}
         <Route path="/processos/:id/instancias" element={<InstanciasProcesso />} />
+
+        {/* Sprint 16 — Portfólio de produtos */}
+        <Route path="/portfolio" element={<Portfolio />} />
+        <Route path="/portfolio/:id" element={<PortfolioProduto />} />
 
         {/* Sprint 7 — Configurações de notificações (admin-only) */}
         <Route

@@ -9,6 +9,7 @@ import {
   FileText,
   KanbanSquare,
   Workflow,
+  Package,
   Users,
   Users2,
   UserCog,
@@ -29,6 +30,7 @@ const itensBase = [
   { to: '/governanca',    rotulo: 'Governança',      icone: FileText },
   { to: '/tarefas',       rotulo: 'Tarefas',         icone: KanbanSquare },
   { to: '/processos',     rotulo: 'Processos',       icone: Workflow },
+  { to: '/portfolio',     rotulo: 'Portfólio',        icone: Package },
 ];
 
 const itensCadastro = [

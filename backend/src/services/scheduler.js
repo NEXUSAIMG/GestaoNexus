@@ -4,6 +4,7 @@ import { pool } from '../config/database.js';
 import { sincronizar } from './asaas.sync.js';
 import { enviarResumoDiarioParaAdmins, enviarAvisosCardsPrazoHoje } from './notificacoes.service.js';
 import { estenderSeriesInfinitas } from './recorrencia-contas.service.js';
+import { sincronizarTodos as sincronizarTodosProdutos } from './portfolio-sync.service.js';
 
 /**
  * Agenda a sincronização automática do ASAAS no processo do Express.
@@ -176,5 +177,50 @@ export function pararAgendadorRecorrencias() {
   if (tarefaExtensor) {
     tarefaExtensor.stop();
     tarefaExtensor = null;
+  }
+}
+
+// =============================================================================
+// Sprint 16 — Cron diário pra sincronizar métricas dos produtos.
+// =============================================================================
+//
+// Roda todo dia às 4h da manhã (horário mais tranquilo, após o sync ASAAS
+// das 5h pra não concorrer). Sincroniza todos os produtos com integração
+// 'api_rest' ativa. Erros num produto não afetam os outros.
+
+let rodandoPortfolio = false;
+let tarefaPortfolio = null;
+
+export function iniciarAgendadorPortfolio() {
+  const expr = '0 4 * * *'; // 4h da manhã
+  const tz = env.NOTIFICACOES_TIMEZONE;
+
+  tarefaPortfolio = cron.schedule(
+    expr,
+    async () => {
+      if (rodandoPortfolio) {
+        console.warn('[cron] Sync portfólio já em execução — pulando.');
+        return;
+      }
+      rodandoPortfolio = true;
+      try {
+        const r = await sincronizarTodosProdutos({ origem: 'cron' });
+        console.log(`[cron] Sync portfólio: ${JSON.stringify(r)}`);
+      } catch (err) {
+        console.error('[cron] Erro ao sincronizar portfólio:', err?.message || err);
+      } finally {
+        rodandoPortfolio = false;
+      }
+    },
+    { timezone: tz },
+  );
+
+  console.log(`[cron] Sync portfólio agendado (${expr} · ${tz}).`);
+}
+
+export function pararAgendadorPortfolio() {
+  if (tarefaPortfolio) {
+    tarefaPortfolio.stop();
+    tarefaPortfolio = null;
   }
 }

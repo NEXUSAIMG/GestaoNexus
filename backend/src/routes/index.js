@@ -22,6 +22,7 @@ import cardsRoutes from './cards.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import processosRoutes from './processos.routes.js';
 import instanciasRoutes from './instancias.routes.js';
+import produtosRoutes from './produtos.routes.js';
 
 const router = Router();
 
@@ -32,8 +33,8 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.3', // bump quando rodar deploy novo
-    sprints_ativas: 'até 15 (execução de processos)',
+    versao: '1.4', // bump a cada deploy novo
+    sprints_ativas: 'até 16 (portfólio de produtos)',
   });
 });
 
@@ -80,5 +81,8 @@ router.use('/processos', processosRoutes);
 
 // Sprint 15 — Instâncias de processos
 router.use('/instancias', instanciasRoutes);
+
+// Sprint 16 — Portfólio de produtos
+router.use('/produtos', produtosRoutes);
 
 export default router;

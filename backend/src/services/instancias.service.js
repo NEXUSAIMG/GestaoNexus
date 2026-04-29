@@ -29,13 +29,20 @@ import { randomUUID } from 'node:crypto';
 export async function criarInstancia(client, {
   processoId, nome, descricao, dataInicio, pessoaId,
 }) {
-  // 1. Confere processo e pega versão atual
+  // 1. Confere processo e pega versão atual.
+  // equipe_id = a primeira equipe (alfabética) associada ao processo, que
+  // será a "dona" do quadro auto-criado. Usamos ORDER BY + LIMIT em vez de
+  // MIN(uuid) porque o Postgres não tem MIN nativo pra UUID.
   const { rows: procs } = await client.query(
-    `SELECT id, nome, status, versao, cor, criado_por_id,
-            (SELECT MIN(ee.equipe_id) FROM processos_equipes ee
-              WHERE ee.processo_id = processos.id) AS equipe_id
-       FROM processos
-      WHERE id = $1`,
+    `SELECT p.id, p.nome, p.status, p.versao, p.cor, p.criado_por_id,
+            (SELECT ee.equipe_id
+               FROM processos_equipes ee
+               JOIN equipes e ON e.id = ee.equipe_id
+              WHERE ee.processo_id = p.id
+              ORDER BY e.nome
+              LIMIT 1) AS equipe_id
+       FROM processos p
+      WHERE p.id = $1`,
     [processoId],
   );
   const proc = procs[0];
