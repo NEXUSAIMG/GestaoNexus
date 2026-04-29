@@ -36,21 +36,38 @@ app.use('/api', apiRoutes);
 
 // Em produção, servimos o build do frontend.
 // O build do Vite vai parar em ../../frontend/dist (caminho relativo a este arquivo).
-if (isProduction) {
-  const frontendDist = path.resolve(__dirname, '../../frontend/dist');
+//
+// Importante: NUNCA confiamos só em NODE_ENV pra decidir servir o frontend.
+// Se o dist existe, servimos. Isso evita um problema clássico de deploy onde
+// NODE_ENV não foi setado e o usuário vê "Cannot GET /".
+const frontendDist = path.resolve(__dirname, '../../frontend/dist');
+const frontendDistExiste = existsSync(frontendDist);
 
-  if (existsSync(frontendDist)) {
-    app.use(express.static(frontendDist));
+if (frontendDistExiste) {
+  console.log(`[server] Servindo frontend de ${frontendDist}`);
+  app.use(express.static(frontendDist));
 
-    // SPA fallback: qualquer rota que não seja /api devolve o index.html.
-    app.get(/^\/(?!api).*/, (_req, res) => {
-      res.sendFile(path.join(frontendDist, 'index.html'));
+  // SPA fallback: qualquer rota que não seja /api devolve o index.html.
+  app.get(/^\/(?!api).*/, (_req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  console.warn(
+    `[server] Build do frontend não encontrado em ${frontendDist}. ` +
+      'Em desenvolvimento isso é normal (use o Vite). ' +
+      'Em produção, rode "npm run build" antes de iniciar.',
+  );
+
+  // Mensagem amigável pra raiz quando não tem frontend buildado — evita
+  // o "Cannot GET /" feio do Express.
+  if (isProduction) {
+    app.get('/', (_req, res) => {
+      res.status(503).type('text/plain').send(
+        'Backend rodando, mas frontend não encontrado.\n\n' +
+        `Esperado em: ${frontendDist}\n` +
+        'Verifique se o build do frontend rodou e foi incluído na imagem.',
+      );
     });
-  } else {
-    console.warn(
-      `[server] Build do frontend não encontrado em ${frontendDist}. ` +
-        'Rode "npm run build" antes de iniciar em produção.',
-    );
   }
 }
 

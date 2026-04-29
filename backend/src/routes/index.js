@@ -26,7 +26,15 @@ import instanciasRoutes from './instancias.routes.js';
 const router = Router();
 
 router.get('/saude', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Diagnóstico amplo: ajuda a confirmar deploy e configuração em produção
+  // sem precisar logar SSH no container.
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    node_env: process.env.NODE_ENV ?? '(não definido)',
+    versao: '1.3', // bump quando rodar deploy novo
+    sprints_ativas: 'até 15 (execução de processos)',
+  });
 });
 
 router.use('/auth', authRoutes);
