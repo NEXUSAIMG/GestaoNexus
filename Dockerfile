@@ -48,5 +48,6 @@ ENV NODE_ENV=production
 # Porta padrão (Railway injeta a real via $PORT, server.js usa env.PORT)
 EXPOSE 3001
 
-# Comando de start: roda o backend, que serve a API + os estáticos do frontend
-CMD ["node", "backend/src/server.js"]
+# Comando de start: migra banco, seeda admin, e sobe o backend
+# (que serve a API + os estáticos do frontend)
+CMD ["npm", "run", "start"]

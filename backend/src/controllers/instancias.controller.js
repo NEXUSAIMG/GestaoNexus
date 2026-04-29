@@ -89,21 +89,28 @@ export async function listarPorProcesso(req, res, next) {
     const isAdmin = !!req.pessoa?.administrador;
     const processoId = req.params.id;
 
-    // Confere visibilidade do processo
+    // Confere visibilidade do processo (mesmo padrão de processos.controller#listar)
+    const params = [processoId];
+    let filtroVisib;
+    if (isAdmin) {
+      filtroVisib = 'TRUE';
+    } else {
+      params.push(req.pessoa.id);
+      filtroVisib = `(
+        p.status = 'publicado'
+        OR EXISTS (
+          SELECT 1 FROM processos_equipes pe
+           JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
+          WHERE pe.processo_id = p.id AND em.pessoa_id = $2
+        )
+      )`;
+    }
+
     const { rows: procs } = await query(
       `SELECT p.id, p.status
          FROM processos p
-        WHERE p.id = $1
-          AND (
-            $2 = TRUE
-            OR p.status = 'publicado'
-            OR EXISTS (
-              SELECT 1 FROM processos_equipes pe
-               JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
-              WHERE pe.processo_id = p.id AND em.pessoa_id = $3
-            )
-          )`,
-      [processoId, isAdmin, req.pessoa.id],
+        WHERE p.id = $1 AND ${filtroVisib}`,
+      params,
     );
     if (!procs[0]) throw new NaoEncontradoError('Processo não encontrado');
 
@@ -265,22 +272,29 @@ export async function obterPorQuadro(req, res, next) {
   try {
     const isAdmin = !!req.pessoa?.administrador;
 
+    const params = [req.params.id];
+    let filtroVisib;
+    if (isAdmin) {
+      filtroVisib = 'TRUE';
+    } else {
+      params.push(req.pessoa.id);
+      filtroVisib = `(
+        p.status = 'publicado'
+        OR EXISTS (
+          SELECT 1 FROM processos_equipes pe
+           JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
+          WHERE pe.processo_id = p.id AND em.pessoa_id = $2
+        )
+      )`;
+    }
+
     const { rows } = await query(
       `SELECT i.id
          FROM processos_instancias i
          JOIN processos p ON p.id = i.processo_id
-        WHERE i.quadro_id = $1
-          AND (
-            $2 = TRUE
-            OR p.status = 'publicado'
-            OR EXISTS (
-              SELECT 1 FROM processos_equipes pe
-               JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
-              WHERE pe.processo_id = p.id AND em.pessoa_id = $3
-            )
-          )
+        WHERE i.quadro_id = $1 AND ${filtroVisib}
         LIMIT 1`,
-      [req.params.id, isAdmin, req.pessoa.id],
+      params,
     );
 
     if (!rows[0]) {

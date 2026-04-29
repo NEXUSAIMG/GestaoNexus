@@ -15,6 +15,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Railway/Heroku/etc colocam um proxy na frente que injeta X-Forwarded-For.
+// Sem trust proxy, express-rate-limit rejeita o header e polui o log.
+// '1' = confia em UMA camada de proxy (a do Railway). Mais seguro que 'true'.
+app.set('trust proxy', 1);
+
 // Segurança básica.
 // "contentSecurityPolicy: false" porque o Vite injeta scripts inline
 // na página servida em produção; vamos tratar CSP de forma mais fina depois.

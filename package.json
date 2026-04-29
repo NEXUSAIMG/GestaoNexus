@@ -9,7 +9,7 @@
     "dev:frontend": "npm run dev --prefix frontend",
     "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
     "postinstall": "echo 'install raiz pronto'",
-    "start": "npm run start --prefix backend",
+    "start": "npm run migrate --prefix backend && npm run seed --prefix backend && npm run start --prefix backend",
     "migrate": "npm run migrate --prefix backend",
     "seed": "npm run seed --prefix backend"
   },

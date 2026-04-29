@@ -117,7 +117,25 @@ function filtroVisibilidade(isAdmin, pessoaIdParam) {
 export async function listar(req, res, next) {
   try {
     const isAdmin = !!req.pessoa?.administrador;
-    const filtro = filtroVisibilidade(isAdmin, '$1');
+
+    // Admin vê tudo; não-admin vê publicados ou de equipes que é membro.
+    // Construímos a query com parâmetros condicionais pra não passar
+    // parâmetro sem $N correspondente (causa erro 08P01 no PG).
+    const params = [];
+    let filtro;
+    if (isAdmin) {
+      filtro = 'TRUE';
+    } else {
+      params.push(req.pessoa.id);
+      filtro = `(
+        p.status = 'publicado'
+        OR EXISTS (
+          SELECT 1 FROM processos_equipes pe
+           JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
+          WHERE pe.processo_id = p.id AND em.pessoa_id = $1
+        )
+      )`;
+    }
 
     const { rows } = await query(
       `SELECT p.id, p.nome, p.descricao, p.cor, p.status, p.versao,
@@ -134,7 +152,7 @@ export async function listar(req, res, next) {
         WHERE p.status <> 'arquivado'
           AND ${filtro}
         ORDER BY p.atualizado_em DESC`,
-      [req.pessoa.id],
+      params,
     );
 
     res.json(rows);
@@ -150,12 +168,28 @@ export async function listar(req, res, next) {
 export async function obter(req, res, next) {
   try {
     const isAdmin = !!req.pessoa?.administrador;
-    const filtro = filtroVisibilidade(isAdmin, '$2');
+
+    // Mesmo padrão do listar: parâmetros condicionais
+    const params = [req.params.id];
+    let filtro;
+    if (isAdmin) {
+      filtro = 'TRUE';
+    } else {
+      params.push(req.pessoa.id);
+      filtro = `(
+        p.status = 'publicado'
+        OR EXISTS (
+          SELECT 1 FROM processos_equipes pe
+           JOIN equipes_membros em ON em.equipe_id = pe.equipe_id
+          WHERE pe.processo_id = p.id AND em.pessoa_id = $2
+        )
+      )`;
+    }
 
     const { rows: cabecalhos } = await query(
       `SELECT p.* FROM processos p
         WHERE p.id = $1 AND ${filtro}`,
-      [req.params.id, req.pessoa.id],
+      params,
     );
     if (!cabecalhos[0]) throw new NaoEncontradoError('Processo não encontrado');
     const proc = cabecalhos[0];

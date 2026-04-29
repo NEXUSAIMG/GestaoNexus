@@ -47,6 +47,24 @@ function condicaoVisibilidadeQuadros(isAdmin, pessoaIdParam) {
   )`;
 }
 
+/**
+ * Constrói o filtro de visibilidade + array de parâmetros pra usar nas
+ * queries que filtram quadros. Quando admin, não passa nenhum parâmetro
+ * (evita o erro 08P01 "bind message supplies N parameters but prepared
+ * statement requires 0" no Postgres).
+ */
+function filtroEParams(isAdmin, pessoaId) {
+  if (isAdmin) return { filtro: 'TRUE', params: [] };
+  return {
+    filtro: `(
+      EXISTS (SELECT 1 FROM equipes_membros m
+               WHERE m.equipe_id = q.equipe_id AND m.pessoa_id = $1)
+      OR q.aberto_a_socios = TRUE
+    )`,
+    params: [pessoaId],
+  };
+}
+
 const RESUMO_VAZIO = {
   atrasados: 0, hoje: 0, proximos_7: 0, proximos_30: 0, sem_prazo: 0, total: 0,
 };
@@ -65,8 +83,11 @@ export async function obter(req, res, next) {
   try {
     const isAdmin = !!req.pessoa?.administrador;
     const pessoaId = req.pessoa.id;
-    const filtroQuadro = condicaoVisibilidadeQuadros(isAdmin, '$1');
-    const params = [pessoaId];
+
+    // Filtro condicional: admin não passa parâmetro (TRUE puro);
+    // não-admin passa $1 = pessoaId. Isso é essencial pra não cair em
+    // "bind message supplies N parameters but prepared statement requires 0".
+    const { filtro: filtroQuadro, params } = filtroEParams(isAdmin, pessoaId);
 
     // ===========================================================
     // 1. CARDS / TAREFAS
@@ -311,11 +332,11 @@ export async function obter(req, res, next) {
 
     const atividade = await tentar('atividade', async () => {
       const { rows } = await query(
-        `SELECT la.acao, la.detalhes, la.criado_em,
+        `SELECT la.acao, la.detalhes, la.created_at AS criado_em,
                 p.nome AS pessoa_nome
            FROM log_acoes la
            LEFT JOIN pessoas_acesso p ON p.id = la.pessoa_acesso_id
-          ORDER BY la.criado_em DESC
+          ORDER BY la.created_at DESC
           LIMIT 15`,
       );
       return rows;
