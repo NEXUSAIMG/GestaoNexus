@@ -1,0 +1,45 @@
+# ============================================================================
+# .dockerignore — arquivos que NÃO devem ir pra imagem
+# ============================================================================
+
+# Dependências locais (instaladas no Linux do container)
+node_modules
+**/node_modules
+
+# Builds locais (gerados dentro do container)
+dist
+**/dist
+build
+**/build
+
+# Variáveis de ambiente (sensíveis — Railway injeta via Variables)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# Git
+.git
+.gitignore
+
+# Documentação e arquivos não essenciais pro runtime
+docs
+README.md
+*.md
+
+# Editores
+.vscode
+.idea
+
+# Logs
+*.log
+npm-debug.log*
+
+# Uploads (volume persistente no Railway, não vão pra imagem)
+uploads
+backend/uploads
+
+# Sistema
+.DS_Store
+Thumbs.db
