@@ -1,0 +1,47 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variáveis de ambiente (sensíveis)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Cache
+.cache/
+.parcel-cache/
+.npm/
+
+# Coverage de testes
+coverage/
+
+# Outros
+*.pem
+
+# Sprint 6 — uploads de governança (atas, contratos)
+# A pasta contém arquivos sensíveis dos sócios; nunca versionar.
+# Em produção, configurar um Volume persistente.
+backend/uploads/
+uploads/

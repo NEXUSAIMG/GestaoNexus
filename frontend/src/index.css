@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 font-sans antialiased;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+
+/* ----------------------------------------------------------
+ * Impressão / PDF — usado principalmente na página Mês a mês.
+ *
+ * A ideia é: quem quiser um "relatório do mês" em PDF usa Ctrl+P
+ * e escolhe "Salvar como PDF" na caixa de impressão do navegador.
+ *
+ * Regras gerais:
+ *   - .no-print      → some na impressão (menus, botões, alertas)
+ *   - .print-only    → só aparece na impressão (cabeçalho do relatório,
+ *                       rodapé, etc.)
+ *   - O menu lateral e o cabeçalho de navegação são escondidos
+ *     automaticamente via seletor de id/classe do Layout.
+ * ---------------------------------------------------------- */
+@media print {
+  /* Fundo branco chapado pra não gastar tinta/desperdiçar em PDF. */
+  body, html {
+    background: #ffffff !important;
+  }
+
+  /* Esconde menu lateral (aside), barra superior mobile, overlay. */
+  aside, header.sticky {
+    display: none !important;
+  }
+
+  /* Tira margens externas do layout — cuida a impressora das margens. */
+  main, div, section {
+    background-color: transparent !important;
+  }
+
+  main {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Classes utilitárias do app */
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+
+  /* Tiramos sombras e hover porque nem saem no papel mesmo. */
+  [class*='shadow'] {
+    box-shadow: none !important;
+  }
+
+  /* Bordas bem fininhas pra economizar espaço. */
+  [class*='rounded'] {
+    border-radius: 0 !important;
+  }
+
+  /* Evita quebra feia dentro de cartões e tabelas. */
+  table, tr, td, th,
+  section, .card-quebra {
+    page-break-inside: avoid;
+  }
+
+  /* Força quebra de página antes de blocos marcados explicitamente. */
+  .quebra-pagina-antes {
+    page-break-before: always;
+  }
+
+  /* Links: sem azul sublinhado no PDF. */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+}
+
+/* Fora do modo impressão, garante que .print-only realmente é invisível. */
+.print-only {
+  display: none;
+}
+
