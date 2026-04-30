@@ -2,29 +2,24 @@
 -- Sprint 17 — Inventário (Patrimônio)
 -- ===========================================================================
 --
--- Cadastro de bens físicos da empresa: móveis, eletrônicos, TI, etc.
--- Cada item tem responsável, status, valor, histórico de movimentações
--- e anexos (NF, foto, manual).
+-- Quatro tabelas:
+--   1. inventario_categorias   → cadastráveis pelo admin
+--   2. inventario_itens        → cada item físico (código auto INV-XXXX)
+--   3. inventario_movimentos   → histórico de auditoria (transferências, status, etc)
+--   4. inventario_anexos       → arquivos vinculados (NF, foto, manual)
 --
--- Tabelas:
---   1. inventario_categorias  → categorias cadastráveis pelo admin
---   2. inventario_itens       → cada item físico
---   3. inventario_movimentos  → histórico (cadastro, transferência, descarte...)
---   4. inventario_anexos      → arquivos (NF, foto)
---
--- Visibilidade: todos sócios veem (transparência). Edição: só admin.
+-- Decisões:
+--   1C — quantidade livre: 1 item ou N agrupados, admin escolhe
+--   2A — anexo de NF (e outros) já contemplado em inventario_anexos
+--   3B — categorias cadastráveis, com seed inicial
+--   4B — sem ligação com contas a pagar (campos soltos: nf, fornecedor)
+--   5A — histórico completo automático em inventario_movimentos
 -- ===========================================================================
 
 BEGIN;
 
 -- ===========================================================================
--- Sequence pra gerar codigo automatico INV-0001, INV-0002...
--- ===========================================================================
-
-CREATE SEQUENCE IF NOT EXISTS inventario_codigo_seq START 1;
-
--- ===========================================================================
--- 1. Categorias (cadastráveis)
+-- 1. Categorias
 -- ===========================================================================
 
 CREATE TABLE IF NOT EXISTS inventario_categorias (
@@ -33,43 +28,40 @@ CREATE TABLE IF NOT EXISTS inventario_categorias (
   slug            text NOT NULL,
   cor             text NOT NULL DEFAULT 'slate'
                     CHECK (cor IN (
-                      'slate', 'red', 'orange', 'amber', 'yellow',
-                      'lime', 'emerald', 'teal', 'cyan', 'blue',
-                      'indigo', 'violet', 'fuchsia', 'pink', 'rose'
+                      'slate', 'red', 'orange', 'amber', 'yellow', 'lime',
+                      'emerald', 'teal', 'cyan', 'blue', 'indigo', 'violet',
+                      'fuchsia', 'pink', 'rose'
                     )),
-  icone           text,                       -- nome do ícone lucide-react (ex: 'monitor', 'sofa')
-  ordem           integer NOT NULL DEFAULT 0,
-  arquivada_em    timestamptz,                -- soft-archive (não deleta, só esconde)
+  icone           text,                          -- nome do ícone lucide-react
+  ordem           integer NOT NULL DEFAULT 0,    -- ordem manual (admin arrasta)
+  arquivada_em    timestamptz,
   criado_em       timestamptz NOT NULL DEFAULT now(),
   atualizado_em   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_inventario_categorias_slug
-  ON inventario_categorias (lower(slug))
-  WHERE arquivada_em IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_inventario_categorias_nome
+-- Únicos entre não-arquivadas
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inv_cat_nome_ativa
   ON inventario_categorias (lower(nome))
   WHERE arquivada_em IS NULL;
 
--- Seed: categorias padrão pra ter algo logo de cara
-INSERT INTO inventario_categorias (nome, slug, cor, icone, ordem) VALUES
-  ('Mobília',      'mobilia',     'amber',   'sofa',     1),
-  ('TI',           'ti',          'blue',    'monitor',  2),
-  ('Eletrônicos',  'eletronicos', 'violet',  'tv',       3),
-  ('Veículos',     'veiculos',    'red',     'car',      4),
-  ('Suprimentos',  'suprimentos', 'emerald', 'package',  5),
-  ('Outros',       'outros',      'slate',   'box',      6)
-ON CONFLICT DO NOTHING;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inv_cat_slug_ativa
+  ON inventario_categorias (lower(slug))
+  WHERE arquivada_em IS NULL;
+
 
 -- ===========================================================================
--- 2. Itens
+-- 2. Sequence para gerar códigos INV-0001, INV-0002...
+-- ===========================================================================
+
+CREATE SEQUENCE IF NOT EXISTS inventario_codigo_seq START 1;
+
+
+-- ===========================================================================
+-- 3. Itens
 -- ===========================================================================
 
 CREATE TABLE IF NOT EXISTS inventario_itens (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-
-  -- Código sequencial automático (INV-0001, INV-0002...)
   codigo                text NOT NULL UNIQUE
                           DEFAULT 'INV-' || LPAD(nextval('inventario_codigo_seq')::text, 4, '0'),
 
@@ -77,47 +69,46 @@ CREATE TABLE IF NOT EXISTS inventario_itens (
   descricao             text,
   categoria_id          uuid NOT NULL REFERENCES inventario_categorias(id) ON DELETE RESTRICT,
 
-  -- Quantidade flexível: 1 pra item único, N pra homogêneos (10 cadeiras iguais)
-  qtd                   integer NOT NULL DEFAULT 1 CHECK (qtd > 0),
-  valor_unitario        numeric(12, 2) NOT NULL DEFAULT 0 CHECK (valor_unitario >= 0),
-  valor_total           numeric(12, 2) GENERATED ALWAYS AS (qtd * valor_unitario) STORED,
+  -- Quantidade (1C: livre)
+  qtd                   integer NOT NULL DEFAULT 1 CHECK (qtd >= 1),
+  valor_unitario        numeric(14, 2) NOT NULL DEFAULT 0 CHECK (valor_unitario >= 0),
+  -- Calculado automaticamente. Mantido como coluna pra agregação rápida.
+  valor_total           numeric(14, 2) GENERATED ALWAYS AS (qtd * valor_unitario) STORED,
 
-  -- Aquisição (campos soltos pra simplicidade — sem link com contas-pagar nessa sprint)
+  -- Nota fiscal (campos soltos — Sprint 17 não liga com /contas-pagar)
   nf_numero             text,
   nf_serie              text,
   nf_data               date,
-  nf_valor              numeric(12, 2),
+  nf_valor              numeric(14, 2),
   fornecedor            text,
   data_aquisicao        date,
-  forma_pagamento       text  CHECK (forma_pagamento IS NULL OR forma_pagamento IN (
+  forma_pagamento       text CHECK (forma_pagamento IN (
                           'cartao_credito', 'cartao_debito', 'pix',
                           'boleto', 'transferencia', 'dinheiro', 'outro'
                         )),
 
   -- Localização e responsável
-  localizacao           text,                 -- texto livre: "Sala 3, mesa João"
+  localizacao           text,
   responsavel_id        uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
 
-  -- Status do ciclo de vida
+  -- Status
   status                text NOT NULL DEFAULT 'em_uso'
                           CHECK (status IN (
-                            'em_uso',
-                            'em_estoque',
-                            'manutencao',
-                            'descartado',
-                            'vendido',
-                            'perdido'
+                            'em_uso', 'em_estoque', 'manutencao',
+                            'descartado', 'vendido', 'perdido'
                           )),
-  data_descarte         date,                 -- preenche quando vai pra descartado/vendido/perdido
+
+  -- Descarte (preenchido só quando dá baixa)
+  data_descarte         date,
   motivo_descarte       text,
 
   -- Garantia
   garantia_meses        integer CHECK (garantia_meses IS NULL OR garantia_meses >= 0),
-  garantia_fim          date,                 -- calculado pelo controller na criacao/edicao
+  garantia_fim          date,
 
   -- Identificação física
-  numero_serie          text,
-  patrimonio_etiqueta   text,                 -- número da etiqueta colada no item
+  numero_serie          text,                       -- serial do fabricante
+  patrimonio_etiqueta   text,                       -- etiqueta colada no item
 
   -- Auditoria
   registrado_por_id     uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
@@ -125,38 +116,43 @@ CREATE TABLE IF NOT EXISTS inventario_itens (
   atualizado_em         timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_inventario_itens_categoria
+CREATE INDEX IF NOT EXISTS idx_inv_itens_categoria
   ON inventario_itens (categoria_id);
-CREATE INDEX IF NOT EXISTS idx_inventario_itens_responsavel
+
+CREATE INDEX IF NOT EXISTS idx_inv_itens_responsavel
   ON inventario_itens (responsavel_id) WHERE responsavel_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_inventario_itens_status
+
+CREATE INDEX IF NOT EXISTS idx_inv_itens_status
   ON inventario_itens (status);
-CREATE INDEX IF NOT EXISTS idx_inventario_itens_codigo
-  ON inventario_itens (codigo);
+
+CREATE INDEX IF NOT EXISTS idx_inv_itens_garantia_fim
+  ON inventario_itens (garantia_fim) WHERE garantia_fim IS NOT NULL;
+
+-- Etiqueta de patrimônio é única quando preenchida
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inv_itens_etiqueta
+  ON inventario_itens (lower(patrimonio_etiqueta))
+  WHERE patrimonio_etiqueta IS NOT NULL;
+
 
 -- ===========================================================================
--- 3. Movimentos (histórico)
+-- 4. Movimentos (histórico)
 -- ===========================================================================
--- Cada mudança relevante vira uma linha. Campos `de_*` e `para_*` capturam
--- o estado antes/depois pra renderização rica do histórico.
 
 CREATE TABLE IF NOT EXISTS inventario_movimentos (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id               uuid NOT NULL REFERENCES inventario_itens(id) ON DELETE CASCADE,
 
-  tipo                  text NOT NULL
-                          CHECK (tipo IN (
-                            'cadastro',
-                            'edicao',
-                            'transferencia',
-                            'troca_status',
-                            'manutencao',
-                            'descarte',
-                            'anexo_adicionado',
-                            'anexo_removido'
-                          )),
+  tipo                  text NOT NULL CHECK (tipo IN (
+                          'cadastro',         -- item criado
+                          'edicao',           -- campos genéricos editados
+                          'transferencia',    -- mudou responsável e/ou localização
+                          'troca_status',     -- mudou status (não-descarte)
+                          'descarte',         -- baixou (descartado/vendido/perdido)
+                          'manutencao',       -- entrou ou voltou de manutenção
+                          'anexo'             -- anexo adicionado/removido
+                        )),
 
-  -- Campos antes/depois (preenchidos só nos tipos relevantes)
+  -- "De" (estado anterior) e "Para" (estado novo) pra cada eixo
   de_responsavel_id     uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
   para_responsavel_id   uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
   de_localizacao        text,
@@ -165,43 +161,80 @@ CREATE TABLE IF NOT EXISTS inventario_movimentos (
   para_status           text,
 
   observacao            text,
-  -- Campos arbitrários (ex: campos editados num 'edicao'). JSON pra
-  -- não criar coluna nova a cada novo tipo de movimento.
-  detalhes              jsonb,
+  detalhes              jsonb,    -- pra outros campos (ex: edição genérica)
 
   feito_por_id          uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
   criado_em             timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_inventario_movimentos_item
+CREATE INDEX IF NOT EXISTS idx_inv_mov_item
   ON inventario_movimentos (item_id, criado_em DESC);
 
+
 -- ===========================================================================
--- 4. Anexos (arquivos)
+-- 5. Anexos
 -- ===========================================================================
--- Cada item pode ter vários anexos: a NF é o principal, mas o admin pode
--- subir foto, manual, etc. O arquivo físico fica no filesystem (UPLOADS_DIR/inventario)
--- e aqui guardamos só metadados.
 
 CREATE TABLE IF NOT EXISTS inventario_anexos (
-  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id               uuid NOT NULL REFERENCES inventario_itens(id) ON DELETE CASCADE,
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id         uuid NOT NULL REFERENCES inventario_itens(id) ON DELETE CASCADE,
 
-  tipo                  text NOT NULL DEFAULT 'outro'
-                          CHECK (tipo IN ('nf', 'foto', 'manual', 'outro')),
+  tipo            text NOT NULL DEFAULT 'outro'
+                    CHECK (tipo IN ('nf', 'foto', 'manual', 'outro')),
+  nome_original   text NOT NULL,                 -- nome do arquivo enviado
+  arquivo_path    text NOT NULL,                 -- caminho relativo no UPLOADS_DIR
+  mime_type       text,
+  tamanho_bytes   bigint,
+  descricao       text,
 
-  arquivo_nome          text NOT NULL,        -- nome original (pra exibir no download)
-  arquivo_caminho       text NOT NULL,        -- relativo a UPLOADS_DIR
-  arquivo_tamanho       integer NOT NULL,     -- bytes
-  arquivo_mime          text NOT NULL,
-
-  descricao             text,                 -- opcional: "NF da compra", "manual em pdf"
-
-  enviado_por_id        uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
-  criado_em             timestamptz NOT NULL DEFAULT now()
+  enviado_por_id  uuid REFERENCES pessoas_acesso(id) ON DELETE SET NULL,
+  criado_em       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_inventario_anexos_item
-  ON inventario_anexos (item_id, tipo, criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_inv_anexos_item
+  ON inventario_anexos (item_id, tipo);
+
+
+-- ===========================================================================
+-- 6. Trigger: atualizado_em automático
+-- ===========================================================================
+
+CREATE OR REPLACE FUNCTION inventario_set_atualizado_em()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.atualizado_em := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_inv_cat_updated ON inventario_categorias;
+CREATE TRIGGER trg_inv_cat_updated
+  BEFORE UPDATE ON inventario_categorias
+  FOR EACH ROW EXECUTE FUNCTION inventario_set_atualizado_em();
+
+DROP TRIGGER IF EXISTS trg_inv_itens_updated ON inventario_itens;
+CREATE TRIGGER trg_inv_itens_updated
+  BEFORE UPDATE ON inventario_itens
+  FOR EACH ROW EXECUTE FUNCTION inventario_set_atualizado_em();
+
+
+-- ===========================================================================
+-- 7. Seed inicial de categorias (idempotente)
+-- ===========================================================================
+-- Cria categorias padrão se ainda não existem. Admin pode arquivar/editar
+-- depois.
+
+INSERT INTO inventario_categorias (nome, slug, cor, icone, ordem)
+SELECT * FROM (VALUES
+  ('Mobília',     'mobilia',     'amber',   'Armchair',     1),
+  ('TI',          'ti',          'blue',    'Monitor',      2),
+  ('Eletrônicos', 'eletronicos', 'violet',  'Tv',           3),
+  ('Veículos',    'veiculos',    'slate',   'Car',          4),
+  ('Suprimentos', 'suprimentos', 'emerald', 'Package',      5),
+  ('Outros',      'outros',      'slate',   'Box',          99)
+) AS novas(nome, slug, cor, icone, ordem)
+WHERE NOT EXISTS (
+  SELECT 1 FROM inventario_categorias c WHERE lower(c.slug) = lower(novas.slug)
+);
 
 COMMIT;

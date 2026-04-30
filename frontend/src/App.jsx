@@ -27,6 +27,8 @@ import EditorProcesso from './pages/EditorProcesso.jsx';
 import InstanciasProcesso from './pages/InstanciasProcesso.jsx';
 import Portfolio from './pages/Portfolio.jsx';
 import PortfolioProduto from './pages/PortfolioProduto.jsx';
+import Inventario from './pages/Inventario.jsx';
+import InventarioItem from './pages/InventarioItem.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -95,6 +97,10 @@ export default function App() {
         {/* Sprint 16 — Portfólio de produtos */}
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/portfolio/:id" element={<PortfolioProduto />} />
+
+        {/* Sprint 17 — Inventário / Patrimônio */}
+        <Route path="/inventario" element={<Inventario />} />
+        <Route path="/inventario/:id" element={<InventarioItem />} />
 
         {/* Sprint 7 — Configurações de notificações (admin-only) */}
         <Route

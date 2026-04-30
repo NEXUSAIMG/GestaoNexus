@@ -23,6 +23,7 @@ import dashboardRoutes from './dashboard.routes.js';
 import processosRoutes from './processos.routes.js';
 import instanciasRoutes from './instancias.routes.js';
 import produtosRoutes from './produtos.routes.js';
+import inventarioRoutes from './inventario.routes.js';
 
 const router = Router();
 
@@ -33,8 +34,8 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.4', // bump a cada deploy novo
-    sprints_ativas: 'até 16 (portfólio de produtos)',
+    versao: '1.5', // bump a cada deploy novo
+    sprints_ativas: 'até 17 (inventário / patrimônio)',
   });
 });
 
@@ -84,5 +85,8 @@ router.use('/instancias', instanciasRoutes);
 
 // Sprint 16 — Portfólio de produtos
 router.use('/produtos', produtosRoutes);
+
+// Sprint 17 — Inventário / Patrimônio
+router.use('/inventario', inventarioRoutes);
 
 export default router;

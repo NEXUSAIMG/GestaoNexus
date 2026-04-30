@@ -10,6 +10,7 @@ import {
   KanbanSquare,
   Workflow,
   Package,
+  Boxes,
   Users,
   Users2,
   UserCog,
@@ -31,6 +32,7 @@ const itensBase = [
   { to: '/tarefas',       rotulo: 'Tarefas',         icone: KanbanSquare },
   { to: '/processos',     rotulo: 'Processos',       icone: Workflow },
   { to: '/portfolio',     rotulo: 'Portfólio',        icone: Package },
+  { to: '/inventario',    rotulo: 'Inventário',       icone: Boxes },
 ];
 
 const itensCadastro = [
