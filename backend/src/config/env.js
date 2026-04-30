@@ -89,6 +89,20 @@ export const env = {
   NOTIFICACOES_ATIVO: booleano(process.env.NOTIFICACOES_ATIVO, true),
   NOTIFICACOES_CRON: process.env.NOTIFICACOES_CRON ?? '0 8 * * *',
   NOTIFICACOES_TIMEZONE: process.env.NOTIFICACOES_TIMEZONE ?? 'America/Sao_Paulo',
+
+  // ------------------------------------------------------------------
+  // Integrações server-to-server com outros produtos Nexus — Sprint 16 Fase B
+  // ------------------------------------------------------------------
+  // SeuCartório expoe /api/integracoes/portfolio (métricas + clientes).
+  // Configurar SEU_CARTORIO_URL com a URL base do SeuCartorio em produção.
+  // SEU_CARTORIO_API_KEY tem que ser igual a INTEGRACAO_NEXUS_API_KEY lá.
+  // Quando ambas vazias, sync é pulado (modo manual continua funcionando).
+  SEU_CARTORIO_URL: process.env.SEU_CARTORIO_URL ?? '',
+  SEU_CARTORIO_API_KEY: process.env.SEU_CARTORIO_API_KEY ?? '',
+
+  // Cron diario do portfolio. Default: 4h da manha SP (depois do ASAAS).
+  PORTFOLIO_SYNC_ATIVO: booleano(process.env.PORTFOLIO_SYNC_ATIVO, true),
+  PORTFOLIO_SYNC_CRON: process.env.PORTFOLIO_SYNC_CRON ?? '0 4 * * *',
 };
 
 export const isProduction = env.NODE_ENV === 'production';
@@ -105,3 +119,10 @@ export const asaasConfigurado = !!env.ASAAS_API_KEY;
  * a notificação in-app continua funcionando, mas o e-mail é pulado.
  */
 export const emailConfigurado = !!env.RESEND_API_KEY;
+
+/**
+ * Indica se a integração com o SeuCartório está configurada (Sprint 16 Fase B).
+ * Quando false, o cron de portfólio não roda e o botão "Sincronizar agora"
+ * fica desabilitado pra produtos com fonte_dados='seu_cartorio'.
+ */
+export const seuCartorioConfigurado = !!env.SEU_CARTORIO_URL && !!env.SEU_CARTORIO_API_KEY;

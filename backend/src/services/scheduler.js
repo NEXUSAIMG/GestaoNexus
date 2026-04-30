@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { env, asaasConfigurado } from '../config/env.js';
+import { env, asaasConfigurado, seuCartorioConfigurado } from '../config/env.js';
 import { pool } from '../config/database.js';
 import { sincronizar } from './asaas.sync.js';
 import { enviarResumoDiarioParaAdmins, enviarAvisosCardsPrazoHoje } from './notificacoes.service.js';
@@ -192,8 +192,24 @@ let rodandoPortfolio = false;
 let tarefaPortfolio = null;
 
 export function iniciarAgendadorPortfolio() {
-  const expr = '0 4 * * *'; // 4h da manhã
+  if (!env.PORTFOLIO_SYNC_ATIVO) {
+    console.log('[cron] Sync portfólio desligado (PORTFOLIO_SYNC_ATIVO=false).');
+    return;
+  }
+  // Se nenhuma fonte está configurada, não liga o cron pra não ficar
+  // logando "falhou" toda manhã. Quando configurarem env vars, redeploy.
+  if (!seuCartorioConfigurado) {
+    console.log('[cron] Sync portfólio desligado (nenhuma fonte configurada — SEU_CARTORIO_URL/KEY vazios).');
+    return;
+  }
+
+  const expr = env.PORTFOLIO_SYNC_CRON;
   const tz = env.NOTIFICACOES_TIMEZONE;
+
+  if (!cron.validate(expr)) {
+    console.warn(`[cron] PORTFOLIO_SYNC_CRON inválido: "${expr}". Não vai rodar.`);
+    return;
+  }
 
   tarefaPortfolio = cron.schedule(
     expr,

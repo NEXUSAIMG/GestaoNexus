@@ -4,6 +4,7 @@ import {
   ArrowLeft, Package, ExternalLink, Pencil, Save, X, Plus,
   TrendingUp, TrendingDown, Users, AlertCircle, Trash2, Archive,
   GitBranch, BarChart3, ListChecks, Calendar, CheckCircle2,
+  RefreshCw, Zap,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -89,6 +90,8 @@ export default function PortfolioProduto() {
   const [erro, setErro] = useState('');
   const [tab, setTab] = useState('overview');
   const [editandoCabecalho, setEditandoCabecalho] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [resultadoSync, setResultadoSync] = useState(null);
 
   async function carregar() {
     setCarregando(true);
@@ -104,6 +107,32 @@ export default function PortfolioProduto() {
   }
 
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [id]);
+
+  /**
+   * Dispara sync sob demanda. Aceita meses pra escolher histórico:
+   *   - meses=1  — só mês atual ("rápido")
+   *   - meses=12 — puxa o ano todo ("primeira sincronização")
+   */
+  async function sincronizarAgora(meses = 1) {
+    if (!produto || produto.fonte_dados === 'manual') return;
+    setSincronizando(true);
+    setResultadoSync(null);
+    try {
+      const r = await api.post(`/produtos/${id}/sincronizar?meses=${meses}`);
+      setResultadoSync({
+        ok: true,
+        msg: `Sincronizado: ${r.data.qtd_metricas} mês(es), ${r.data.qtd_clientes} cliente(s) (${r.data.duracao_ms}ms)`,
+      });
+      await carregar();
+    } catch (err) {
+      setResultadoSync({
+        ok: false,
+        msg: mensagemDeErro(err, 'Falha ao sincronizar.'),
+      });
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   if (carregando) {
     return <div className="p-4 text-sm text-slate-500">Carregando produto...</div>;
@@ -196,6 +225,15 @@ export default function PortfolioProduto() {
                 )}
               </div>
             )}
+            {souAdmin && produto.fonte_dados !== 'manual' && (
+              <button type="button" onClick={() => sincronizarAgora(1)}
+                disabled={sincronizando}
+                title="Puxar dados atualizados do produto-fonte agora"
+                className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+                <RefreshCw size={11} className={sincronizando ? 'animate-spin' : ''} />
+                {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
+              </button>
+            )}
             {souAdmin && (
               <button type="button" onClick={() => setEditandoCabecalho(true)}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
@@ -204,6 +242,42 @@ export default function PortfolioProduto() {
             )}
           </div>
         </div>
+
+        {/* Status do sync (só quando produto tem fonte != manual) */}
+        {produto.fonte_dados !== 'manual' && (
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-slate-600">
+              <Zap size={12} className="text-blue-500" />
+              <span>
+                Sync automático de <strong>{produto.fonte_dados}</strong>
+                {produto.sincronizado_em && (
+                  <> · última vez: {new Date(produto.sincronizado_em).toLocaleString('pt-BR')}</>
+                )}
+                {!produto.sincronizado_em && (
+                  <> · <span className="text-amber-700">nunca sincronizado</span></>
+                )}
+              </span>
+            </div>
+            {souAdmin && !produto.sincronizado_em && (
+              <button type="button" onClick={() => sincronizarAgora(12)}
+                disabled={sincronizando}
+                className="text-blue-700 hover:underline disabled:opacity-50">
+                Puxar 12 meses de histórico
+              </button>
+            )}
+          </div>
+        )}
+
+        {resultadoSync && (
+          <div className={[
+            'mt-3 rounded-lg px-3 py-2 text-xs',
+            resultadoSync.ok
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border border-red-200 text-red-700',
+          ].join(' ')}>
+            {resultadoSync.msg}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -1317,6 +1391,7 @@ function ModalEditarCabecalho({ produto, aoFechar, aoSalvo }) {
     link_app: produto.link_app || '',
     link_landing: produto.link_landing || '',
     data_lancamento: produto.data_lancamento?.slice(0, 10) || '',
+    fonte_dados: produto.fonte_dados || 'manual',
   });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -1430,6 +1505,18 @@ function ModalEditarCabecalho({ produto, aoFechar, aoSalvo }) {
                 placeholder="https://..." className={inputCls} />
             </Campo>
           </div>
+
+          <Campo label="Fonte de dados das métricas">
+            <select value={d.fonte_dados} onChange={(e) => setField('fonte_dados', e.target.value)}
+              className={inputCls}>
+              <option value="manual">Manual (admin atualiza pela UI)</option>
+              <option value="seu_cartorio">Seu Cartório (sync automático via API)</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Sync automático exige que o servidor esteja com SEU_CARTORIO_URL e
+              SEU_CARTORIO_API_KEY configuradas.
+            </p>
+          </Campo>
 
           {erro && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</div>

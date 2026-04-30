@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { query } from '../config/database.js';
 import { NaoEncontradoError, AppError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
+import { sincronizarProduto, testarFonte } from '../services/portfolio-sync.service.js';
+import { seuCartorioConfigurado } from '../config/env.js';
 
 /**
  * Portfólio de produtos — Sprint 16.
@@ -328,5 +330,75 @@ export async function desarquivar(req, res, next) {
     });
 
     res.status(204).send();
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/produtos/:id/sincronizar (admin)
+ *
+ * Dispara um sync sob demanda. Aceita ?meses=N pra puxar histórico
+ * (default 1, max 24). Útil pra primeira sincronização (com meses=12)
+ * e pra forçar atualização sem esperar o cron.
+ */
+export async function sincronizar(req, res, next) {
+  try {
+    const meses = Math.min(
+      Math.max(parseInt(req.query.meses, 10) || 1, 1),
+      24,
+    );
+
+    const r = await sincronizarProduto({ produtoId: req.params.id, meses });
+
+    registrarAcao({
+      acao: 'produto.sincronizou',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: {
+        produto_id: req.params.id,
+        meses,
+        qtd_metricas: r.qtd_metricas,
+        qtd_clientes: r.qtd_clientes,
+      },
+      req,
+    });
+
+    res.json(r);
+  } catch (err) {
+    // Erros de negócio do sync viram 400 com mensagem amigável
+    if (err.message && (
+      err.message.includes('manual') ||
+      err.message.includes('não configurada') ||
+      err.message.includes('Falha de rede') ||
+      err.message.includes('HTTP') ||
+      err.message.includes('Payload')
+    )) {
+      return next(new AppError(err.message, 400));
+    }
+    next(err);
+  }
+}
+
+/**
+ * GET /api/produtos/:id/sincronizar/testar (admin)
+ *
+ * Testa só a conectividade com a fonte (chama o /health). Não grava nada.
+ */
+export async function testarSincronizacao(req, res, next) {
+  try {
+    const { rows } = await query(
+      `SELECT fonte_dados FROM produtos WHERE id = $1`,
+      [req.params.id],
+    );
+    const produto = rows[0];
+    if (!produto) throw new NaoEncontradoError('Produto não encontrado');
+    if (produto.fonte_dados === 'manual') {
+      throw new AppError('Produto está em modo manual.', 400);
+    }
+
+    const r = await testarFonte(produto.fonte_dados);
+    res.json({
+      fonte: produto.fonte_dados,
+      configurada: seuCartorioConfigurado,
+      ...r,
+    });
   } catch (err) { next(err); }
 }

@@ -7,6 +7,8 @@ import {
   atualizar as atualizarProduto,
   arquivar as arquivarProduto,
   desarquivar as desarquivarProduto,
+  sincronizar as sincronizarProduto,
+  testarSincronizacao as testarSincronizacaoProduto,
 } from '../controllers/produtos.controller.js';
 import {
   listar as listarMetricas,
@@ -38,6 +40,10 @@ router.post('/', exigirAdmin, criarProduto);
 router.put('/:id', exigirAdmin, atualizarProduto);
 router.post('/:id/arquivar', exigirAdmin, arquivarProduto);
 router.post('/:id/desarquivar', exigirAdmin, desarquivarProduto);
+
+// Sprint 16 Fase B — sincronização automática
+router.post('/:id/sincronizar', exigirAdmin, sincronizarProduto);
+router.get('/:id/sincronizar/testar', exigirAdmin, testarSincronizacaoProduto);
 
 // =============================================================================
 // Métricas mensais
