@@ -20,6 +20,7 @@ import { AppError } from './errors.js';
 const SUBPASTAS = {
   governanca: 'governanca',
   comprovantes: 'comprovantes',
+  inventario: 'inventario',
 };
 
 /**
@@ -120,6 +121,32 @@ export function uploaderComprovantes() {
     subpasta: SUBPASTAS.comprovantes,
     mimesPermitidos: MIME_PERMITIDOS_COMPROVANTES,
     descricaoTipos: 'PDF e imagens (PNG/JPG/WebP)',
+  });
+}
+
+/**
+ * MIMEs permitidos pra anexos de inventário (NFs, fotos, manuais).
+ * Mais amplo que comprovantes pra aceitar manuais em Word ou PDF
+ * grandes de equipamentos.
+ */
+const MIME_PERMITIDOS_INVENTARIO = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+]);
+
+/**
+ * Cria um multer pré-configurado para uploads de inventário (NFs, fotos
+ * de bens, manuais).
+ */
+export function uploaderInventario() {
+  return criarUploader({
+    subpasta: SUBPASTAS.inventario,
+    mimesPermitidos: MIME_PERMITIDOS_INVENTARIO,
+    descricaoTipos: 'PDF, imagens (PNG/JPG/WebP) e Word',
   });
 }
 
