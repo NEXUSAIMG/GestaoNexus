@@ -7,6 +7,12 @@ import {
   anexar as anexarComprovante,
   remover as removerComprovante,
 } from '../controllers/comprovantes.controller.js';
+import {
+  listar as listarAnexos,
+  criar as criarAnexo,
+  baixar as baixarAnexo,
+  excluir as excluirAnexo,
+} from '../controllers/contas-pagar-anexos.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
 import { uploaderComprovantes } from '../utils/uploads.js';
 
@@ -30,9 +36,16 @@ router.post('/:id/cancelar', exigirAdmin, cancelar);
 // preserva pagas e já canceladas).
 router.post('/grupo/:grupoId/cancelar-serie', exigirAdmin, cancelarSerie);
 
-// Comprovante (Sprint 7): baixar é aberto, subir/apagar é admin.
+// Comprovante Único (Sprint 7) — mantido pra compatibilidade com histórico.
+// O frontend novo usa /anexos (múltiplos) abaixo.
 router.get   ('/:id/comprovante', baixarComprovante('conta_pagar'));
 router.post  ('/:id/comprovante', exigirAdmin, upload.single('arquivo'), anexarComprovante('conta_pagar'));
 router.delete('/:id/comprovante', exigirAdmin, removerComprovante('conta_pagar'));
+
+// Sprint 17.1 — múltiplos anexos. Reusa o uploaderComprovantes (PDF + imagens).
+router.get   ('/:id/anexos',                listarAnexos);
+router.post  ('/:id/anexos',                exigirAdmin, upload.single('arquivo'), criarAnexo);
+router.get   ('/:id/anexos/:anexoId/baixar', baixarAnexo);
+router.delete('/:id/anexos/:anexoId',        exigirAdmin, excluirAnexo);
 
 export default router;

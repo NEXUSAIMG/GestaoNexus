@@ -20,8 +20,10 @@ const contaSchema = z.object({
   agencia: z.string().max(20).optional().nullable(),
   conta: z.string().max(30).optional().nullable(),
   tipo: z.enum(['corrente', 'poupanca', 'investimento', 'caixa']).default('corrente'),
-  saldo_atual: z.number().default(0),
-  ordem: z.number().int().min(0).max(999).default(0),
+  // Aceita number direto OU string "vinda do <input type=number>". Z.coerce.number
+  // converte ambos. Se vier null/undefined/string vazia, usa 0.
+  saldo_atual: z.coerce.number().default(0).nullable().transform((v) => v ?? 0),
+  ordem: z.coerce.number().int().min(0).max(999).default(0).nullable().transform((v) => v ?? 0),
   observacoes: z.string().max(2000).optional().nullable(),
 });
 
@@ -30,7 +32,7 @@ const contaUpdateSchema = contaSchema.partial().extend({
 });
 
 const saldoSchema = z.object({
-  saldo_atual: z.number(),
+  saldo_atual: z.coerce.number(),
 });
 
 function serializar(row, saldoAtualizadoPor = null) {

@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Edit2, CheckCircle2, Ban, X, Search, AlertTriangle,
   Calendar, Clock, FileText, ExternalLink, CircleDollarSign, Receipt, Filter,
-  Repeat, Layers,
+  Repeat, Layers, Paperclip,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { BadgeCategoria } from './CategoriasDespesa.jsx';
 import CampoComprovante from '../components/CampoComprovante.jsx';
+import MultiplosAnexos from '../components/MultiplosAnexos.jsx';
 
 /**
  * Contas a pagar — Sprint 3.
@@ -344,6 +345,7 @@ export default function ContasPagar() {
                       conta={c}
                       souAdmin={souAdmin}
                       onEditar={() => setModal({ tipo: 'editar', conta: c })}
+                      onAnexos={() => setModal({ tipo: 'anexos', conta: c })}
                       onPagar={() => setModal({ tipo: 'pagar', conta: c })}
                       onCancelar={() => setModal({ tipo: 'cancelar', conta: c })}
                       onCancelarSerie={() => setModal({ tipo: 'cancelar-serie', conta: c })}
@@ -436,75 +438,122 @@ export default function ContasPagar() {
           }}
         />
       )}
+
+      {modal?.tipo === 'anexos' && (
+        <ModalAnexos
+          conta={modal.conta}
+          souAdmin={souAdmin}
+          aoFechar={() => {
+            setModal(null);
+            // recarrega só a lista pra atualizar contador de anexos
+            carregarContas();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function Acoes({ conta, souAdmin, onEditar, onPagar, onCancelar, onCancelarSerie }) {
+function Acoes({ conta, souAdmin, onEditar, onAnexos, onPagar, onCancelar, onCancelarSerie }) {
   if (!souAdmin) {
-    return conta.comprovante_url ? (
-      <a
-        href={conta.comprovante_url}
-        target="_blank" rel="noopener noreferrer"
-        className="inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-        title="Comprovante"
-      >
-        <ExternalLink size={13} />
-      </a>
-    ) : null;
-  }
-
-  if (conta.status === 'pendente') {
     return (
       <div className="flex justify-end gap-1">
         <button
           type="button"
-          onClick={onPagar}
-          className="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50"
-          title="Marcar como paga"
+          onClick={onAnexos}
+          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 relative"
+          title={`Anexos (${conta.qtd_anexos || 0})`}
         >
-          <CheckCircle2 size={15} />
+          <Paperclip size={13} />
+          {conta.qtd_anexos > 0 && (
+            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-nexus-600 px-1 text-[9px] font-bold leading-3 text-white min-w-[14px] h-[14px]">
+              {conta.qtd_anexos}
+            </span>
+          )}
         </button>
-        <button
-          type="button"
-          onClick={onEditar}
-          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-          title="Editar"
-        >
-          <Edit2 size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={onCancelar}
-          className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
-          title="Cancelar esta"
-        >
-          <Ban size={15} />
-        </button>
-        {conta.eh_recorrente && (
-          <button
-            type="button"
-            onClick={onCancelarSerie}
-            className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
-            title="Cancelar SÉRIE inteira (todas as pendentes)"
+        {conta.comprovante_url && (
+          <a
+            href={conta.comprovante_url}
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            title="Link externo"
           >
-            <Layers size={15} />
-          </button>
+            <ExternalLink size={13} />
+          </a>
         )}
       </div>
     );
   }
 
-  return conta.comprovante_url ? (
-    <a
-      href={conta.comprovante_url}
-      target="_blank" rel="noopener noreferrer"
-      className="inline-flex rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-      title="Comprovante"
-    >
-      <FileText size={13} />
-    </a>
-  ) : null;
+  // Sprint 17.1 — edição e anexos passam a estar disponíveis em QUALQUER status
+  // (não só pendente). Útil pra corrigir erro depois de marcar como paga.
+  return (
+    <div className="flex justify-end gap-1">
+      <button
+        type="button"
+        onClick={onAnexos}
+        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 relative"
+        title={`Anexos (${conta.qtd_anexos || 0})`}
+      >
+        <Paperclip size={15} />
+        {conta.qtd_anexos > 0 && (
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full bg-nexus-600 px-1 text-[9px] font-bold leading-3 text-white min-w-[14px] h-[14px]">
+            {conta.qtd_anexos}
+          </span>
+        )}
+      </button>
+
+      {conta.status === 'pendente' && (
+        <>
+          <button
+            type="button"
+            onClick={onPagar}
+            className="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50"
+            title="Marcar como paga"
+          >
+            <CheckCircle2 size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={onEditar}
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            title="Editar"
+          >
+            <Edit2 size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
+            title="Cancelar esta"
+          >
+            <Ban size={15} />
+          </button>
+          {conta.eh_recorrente && (
+            <button
+              type="button"
+              onClick={onCancelarSerie}
+              className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
+              title="Cancelar SÉRIE inteira (todas as pendentes)"
+            >
+              <Layers size={15} />
+            </button>
+          )}
+        </>
+      )}
+
+      {(conta.status === 'paga' || conta.status === 'cancelada') && (
+        <button
+          type="button"
+          onClick={onEditar}
+          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          title="Editar (corrigir erro)"
+        >
+          <Edit2 size={15} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 function CartaoResumo({ titulo, valor, qtd, subtitulo, icone: Icone, cor = 'slate', destaque }) {
@@ -576,6 +625,7 @@ function BadgeStatus({ conta, atrasada }) {
 
 function ModalConta({ conta, categorias, aoFechar, aoSalvar }) {
   const ehNovo = !conta;
+  const ehHistorico = !ehNovo && (conta.status === 'paga' || conta.status === 'cancelada');
   const [form, setForm] = useState({
     descricao: conta?.descricao ?? '',
     fornecedor_nome: conta?.fornecedor_nome ?? '',
@@ -632,8 +682,21 @@ function ModalConta({ conta, categorias, aoFechar, aoSalvar }) {
   }
 
   return (
-    <Modal titulo={ehNovo ? 'Nova conta a pagar' : 'Editar conta'} aoFechar={aoFechar}>
+    <Modal titulo={ehNovo ? 'Nova conta a pagar' : (ehHistorico ? 'Corrigir conta ' + (conta.status === 'paga' ? 'paga' : 'cancelada') : 'Editar conta')} aoFechar={aoFechar}>
       <form onSubmit={enviar} className="space-y-4">
+        {ehHistorico && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-700" />
+              <div>
+                <strong>Esta conta já está {conta.status === 'paga' ? 'paga' : 'cancelada'}.</strong>{' '}
+                Edite somente pra corrigir erros cadastrais (descrição, fornecedor,
+                categoria, observações). Cada alteração fica registrada no log
+                de auditoria.
+              </div>
+            </div>
+          </div>
+        )}
         <Campo rotulo="Descrição" obrigatorio>
           <input
             type="text"
@@ -1178,6 +1241,58 @@ function ModalCancelarSerie({ conta, aoFechar, aoConfirmar }) {
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/**
+ * Modal dedicado a gerenciar os múltiplos anexos de uma conta a pagar.
+ * Reusa o componente <MultiplosAnexos> que faz todo o trabalho.
+ */
+function ModalAnexos({ conta, souAdmin, aoFechar }) {
+  return (
+    <Modal titulo={`Anexos — ${conta.descricao}`} aoFechar={aoFechar}>
+      <div className="space-y-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Vencimento</div>
+              <div className="font-medium text-slate-900">{formatarData(conta.data_vencimento)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Valor</div>
+              <div className="font-medium text-slate-900 tabular-nums">{formatarBRL(conta.valor)}</div>
+            </div>
+            {conta.fornecedor_nome && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fornecedor</div>
+                <div className="font-medium text-slate-900">{conta.fornecedor_nome}</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-600">
+          Anexe quantos arquivos precisar: boleto, comprovante de pagamento, nota fiscal do
+          fornecedor, etc. Cada arquivo pode ter um <strong>tipo</strong> pra organizar a busca.
+        </p>
+
+        <MultiplosAnexos
+          recurso="contas-pagar"
+          id={conta.id}
+          podeEditar={souAdmin}
+        />
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={aoFechar}
+            className={botaoPrimario}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
     </Modal>
   );
 }

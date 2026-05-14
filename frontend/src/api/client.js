@@ -45,7 +45,24 @@ api.interceptors.response.use(
   },
 );
 
-/** Extrai a mensagem de erro num formato amigável. */
+/**
+ * Extrai a mensagem de erro num formato amigável.
+ *
+ * Trata erros de validação do backend (Zod) que vêm com `detalhes: [{campo, mensagem}]`,
+ * exibindo os campos específicos. Sem isso o usuário só vê "Dados inválidos"
+ * genérico, sem saber qual campo corrigir.
+ */
 export function mensagemDeErro(err, fallback = 'Algo deu errado. Tente de novo.') {
-  return err?.response?.data?.erro || err?.message || fallback;
+  const data = err?.response?.data;
+
+  // Erro de validação do Zod — mostra qual campo falhou.
+  if (data?.codigo === 'validacao' && Array.isArray(data.detalhes) && data.detalhes.length > 0) {
+    const partes = data.detalhes.map((d) => {
+      if (d.campo) return `${d.campo}: ${d.mensagem}`;
+      return d.mensagem;
+    });
+    return `${data.erro}— ${partes.join('; ')}`;
+  }
+
+  return data?.erro || err?.message || fallback;
 }

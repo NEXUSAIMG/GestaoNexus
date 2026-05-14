@@ -73,11 +73,39 @@ const SELECT_COMPLETO = `
   SELECT cp.*,
          c.nome    AS categoria_nome,
          c.cor     AS categoria_cor,
-         cb.apelido AS conta_bancaria_apelido
+         cb.apelido AS conta_bancaria_apelido,
+         (SELECT COUNT(*)::int FROM contas_pagar_anexos a WHERE a.conta_id = cp.id) AS qtd_anexos
     FROM contas_pagar cp
     LEFT JOIN categorias_despesa c ON c.id = cp.categoria_id
     LEFT JOIN contas_bancarias cb  ON cb.id = cp.conta_bancaria_id
 `;
+
+/**
+ * Converte um valor que pode ser:
+ *   - Date (node-pg às vezes converte DATE pra Date em alguns ambientes)
+ *   - string 'YYYY-MM-DD'
+ *   - string ISO com hora 'YYYY-MM-DDTHH:mm:ss.sssZ'
+ *   - null
+ * pra string 'YYYY-MM-DD' (sem timezone) ou null.
+ *
+ * Crucial pro frontend formatar sem virar dia anterior por causa de TZ.
+ */
+function dataParaIso(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') {
+    // Já pode estar em 'YYYY-MM-DD' ou ISO completo — pega os 10 primeiros chars
+    return v.length >= 10 ? v.slice(0, 10) : null;
+  }
+  if (v instanceof Date) {
+    // toISOString dá UTC; pra DATE sem hora, isso pode mudar o dia em fuso
+    // negativo. Usa componentes em UTC pra garantir consistência.
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(v.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+}
 
 function serializar(r) {
   return {
@@ -91,11 +119,13 @@ function serializar(r) {
     categoria_cor: r.categoria_cor,
 
     valor: Number(r.valor),
-    data_vencimento: r.data_vencimento,
+    // Sprint 17.1 — sempre como 'YYYY-MM-DD' string. Evita bug do timezone
+    // que aparecia ao concatenar 'T12:00:00' no frontend.
+    data_vencimento: dataParaIso(r.data_vencimento),
 
     status: r.status,
 
-    data_pagamento: r.data_pagamento,
+    data_pagamento: dataParaIso(r.data_pagamento),
     valor_pago: r.valor_pago != null ? Number(r.valor_pago) : null,
     forma_pagamento: r.forma_pagamento,
     conta_bancaria_id: r.conta_bancaria_id,
@@ -105,17 +135,20 @@ function serializar(r) {
     comprovante_url: r.comprovante_url,
     observacoes: r.observacoes,
 
-    // Sprint 7 — comprovante anexado no servidor (filesystem).
+    // Sprint 7 — comprovante único (legado). Mantido pra não quebrar UI antiga.
     comprovante_nome: r.comprovante_nome ?? null,
     comprovante_tamanho: r.comprovante_tamanho != null ? Number(r.comprovante_tamanho) : null,
     comprovante_mime: r.comprovante_mime ?? null,
     tem_comprovante: !!r.comprovante_caminho,
 
+    // Sprint 17.1 — múltiplos anexos (contagem agregada).
+    qtd_anexos: r.qtd_anexos != null ? Number(r.qtd_anexos) : 0,
+
     // Sprint 13 — recorrência
     grupo_recorrencia_id: r.grupo_recorrencia_id ?? null,
     recorrencia_tipo: r.recorrencia_tipo ?? null,
     recorrencia_qtd: r.recorrencia_qtd ?? null,
-    recorrencia_ate: r.recorrencia_ate ?? null,
+    recorrencia_ate: dataParaIso(r.recorrencia_ate),
     recorrencia_indice: r.recorrencia_indice ?? null,
     eh_recorrente: !!r.grupo_recorrencia_id,
 
@@ -395,32 +428,46 @@ export async function cancelarSerie(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * PUT /api/contas-pagar/:id
+ *
+ * Sprint 17.1 — permite editar em QUALQUER status (pendente, paga,
+ * cancelada). Útil pra corrigir erros depois de marcar como paga
+ * (valor errado, fornecedor errado, etc).
+ *
+ * Cuidados:
+ *   - Cada alteração gera linha de log com os campos alterados (já fazemos
+ *     via registrarAcao). Histórico de auditoria preservado.
+ *   - Não permitimos mudar o `status` por aqui (continua precisando dos
+ *     endpoints /pagar e /cancelar pra evitar burlar validações).
+ *   - Não permitimos mudar `data_pagamento`, `valor_pago`, `forma_pagamento`,
+ *     `motivo_cancelamento` por aqui pela mesma razão (campos não estão no
+ *     atualizarSchema).
+ */
 export async function atualizar(req, res, next) {
   try {
     const d = atualizarSchema.parse(req.body);
     const campos = Object.keys(d);
     if (campos.length === 0) throw new AppError('Nenhum campo para atualizar', 400);
 
-    // Só pode editar dados "cadastrais" enquanto pendente. Depois de paga ou
-    // cancelada, trata-se de um fato histórico.
+    // Confere que a conta existe (pega o estado anterior pra logá-lo).
     const { rows: atuais } = await query(
-      `SELECT status FROM contas_pagar WHERE id = $1`,
+      `SELECT id, status, descricao, valor, data_vencimento, fornecedor_nome, categoria_id
+         FROM contas_pagar WHERE id = $1`,
       [req.params.id],
     );
     if (!atuais[0]) throw new NaoEncontradoError('Conta não encontrada');
-    if (atuais[0].status !== 'pendente') {
-      throw new AppError(
-        'Contas pagas ou canceladas não podem ser editadas. Cancele e crie uma nova se precisar corrigir.',
-        400,
-      );
-    }
+    const antes = atuais[0];
 
-    const sets = campos.map((c, i) => `${c} = $${i + 1}`).join(', ');
+    // Monta SET dinâmico com placeholders $1, $2... pra cada campo.
+    // Importante: usar o cifrão literal $ — o erro mais comum aqui é
+    // perdê-lo num refactor com template literals.
+    const sets = campos.map((c, i) => c + ' = $' + (i + 1)).join(', ');
     const valores = campos.map((c) => (typeof d[c] === 'string' ? d[c].trim() : d[c]));
     valores.push(req.params.id);
 
     await query(
-      `UPDATE contas_pagar SET ${sets}, updated_at = NOW() WHERE id = $${valores.length}`,
+      'UPDATE contas_pagar SET ' + sets + ', updated_at = NOW() WHERE id = $' + valores.length,
       valores,
     );
 
@@ -428,10 +475,26 @@ export async function atualizar(req, res, next) {
       `${SELECT_COMPLETO} WHERE cp.id = $1`, [req.params.id],
     );
 
+    // Loga quais campos mudaram + valor antes/depois pros principais.
+    // Crucial pra auditoria: se admin altera valor de conta paga, fica claro.
+    const mudancas = {};
+    for (const c of campos) {
+      if (antes[c] !== d[c]) {
+        mudancas[c] = { de: antes[c] ?? null, para: d[c] ?? null };
+      }
+    }
+
     await registrarAcao({
       pessoa_acesso_id: req.pessoa.id,
-      acao: 'conta_pagar.atualizar',
-      detalhes: { conta_id: req.params.id, campos },
+      acao: antes.status === 'pendente'
+        ? 'conta_pagar.atualizar'
+        : `conta_pagar.atualizar_apos_${antes.status}`,
+      detalhes: {
+        conta_id: req.params.id,
+        status_quando_editou: antes.status,
+        campos,
+        mudancas,
+      },
       req,
     });
 
