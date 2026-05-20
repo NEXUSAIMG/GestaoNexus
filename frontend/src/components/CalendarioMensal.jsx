@@ -15,6 +15,9 @@ import { Repeat } from 'lucide-react';
  * Sprint 9: drag & drop opcional. Se `aoMoverEvento` é passado, cada chip
  * vira arrastável e cada célula vira drop target. O callback recebe
  * `(evento, novaDataYMD)` e o pai decide o que fazer (PUT, etc).
+ *
+ * Sprint 24: cada evento pode ter `cor` customizada (token da paleta).
+ * Se presente, ganha precedência sobre a cor por tipo.
  */
 
 const NOMES_DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -28,6 +31,25 @@ const CORES_TIPO = {
   marco:                 { bg: 'bg-violet-100',  texto: 'text-violet-800',  barra: 'bg-violet-500' },
   card:                  { bg: 'bg-emerald-100', texto: 'text-emerald-800', barra: 'bg-emerald-500' },
   outro:                 { bg: 'bg-slate-100',   texto: 'text-slate-800',   barra: 'bg-slate-400' },
+};
+
+// Sprint 24 — cor customizada por evento (e.cor). Tem precedência sobre o tipo.
+const CORES_CUSTOM = {
+  slate:   { bg: 'bg-slate-100',   texto: 'text-slate-800',   barra: 'bg-slate-500' },
+  red:     { bg: 'bg-red-100',     texto: 'text-red-800',     barra: 'bg-red-500' },
+  orange:  { bg: 'bg-orange-100',  texto: 'text-orange-800',  barra: 'bg-orange-500' },
+  amber:   { bg: 'bg-amber-100',   texto: 'text-amber-800',   barra: 'bg-amber-500' },
+  yellow:  { bg: 'bg-yellow-100',  texto: 'text-yellow-800',  barra: 'bg-yellow-500' },
+  lime:    { bg: 'bg-lime-100',    texto: 'text-lime-800',    barra: 'bg-lime-500' },
+  emerald: { bg: 'bg-emerald-100', texto: 'text-emerald-800', barra: 'bg-emerald-500' },
+  teal:    { bg: 'bg-teal-100',    texto: 'text-teal-800',    barra: 'bg-teal-500' },
+  cyan:    { bg: 'bg-cyan-100',    texto: 'text-cyan-800',    barra: 'bg-cyan-500' },
+  blue:    { bg: 'bg-blue-100',    texto: 'text-blue-800',    barra: 'bg-blue-500' },
+  indigo:  { bg: 'bg-indigo-100',  texto: 'text-indigo-800',  barra: 'bg-indigo-500' },
+  violet:  { bg: 'bg-violet-100',  texto: 'text-violet-800',  barra: 'bg-violet-500' },
+  fuchsia: { bg: 'bg-fuchsia-100', texto: 'text-fuchsia-800', barra: 'bg-fuchsia-500' },
+  pink:    { bg: 'bg-pink-100',    texto: 'text-pink-800',    barra: 'bg-pink-500' },
+  rose:    { bg: 'bg-rose-100',    texto: 'text-rose-800',    barra: 'bg-rose-500' },
 };
 
 function ymd(d) {
@@ -186,7 +208,10 @@ function CelulaDia({ dia, aoClicarDia, aoClicarEvento, aoMoverEvento, eventosPor
 
       <div className="mt-1 space-y-0.5">
         {visiveis.map((e) => {
-          const cor = CORES_TIPO[e.tipo] ?? CORES_TIPO.outro;
+          // Sprint 24: e.cor (customizado) ganha de e.tipo. Fallback final é 'outro'.
+          const cor = (e.cor && CORES_CUSTOM[e.cor])
+            || CORES_TIPO[e.tipo]
+            || CORES_TIPO.outro;
           return (
             <button
               key={`${e.id}-${e.data_inicio}`}

@@ -12,15 +12,20 @@ import { tplCardAtribuido } from '../services/email-templates.js';
 import { avancarApos } from '../services/instancias.service.js';
 
 /**
- * Cards — Sprint 10.
+ * Cards — Sprint 10 + Sprint 18 (múltiplos responsáveis).
  *
  * Card pertence a uma coluna (e por denormalização, a um quadro).
  * Mover entre colunas é o caso comum (drag & drop). Mover entre
  * quadros não é suportado.
  *
- * Notificação: ao atribuir responsável (no criar OU no editar), se a
- * pessoa for diferente do criador/editor, notificamos in-app + e-mail
- * (se a flag de e-mail estiver ligada).
+ * Sprint 18: múltiplos responsáveis via tabela N:N `cards_responsaveis`.
+ * A coluna legada `cards.responsavel_id` é mantida e sincronizada pelo
+ * trigger sync_card_responsavel_principal (= primeiro da lista).
+ *
+ * Notificação: ao atribuir responsável, se a pessoa for diferente do
+ * criador/editor, notificamos in-app + e-mail (se config permitir).
+ * Por simplicidade, notificamos apenas o "principal" (1 pessoa); fan-out
+ * pra todos os responsáveis pode entrar em iteração futura.
  */
 
 const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar em YYYY-MM-DD');
@@ -29,7 +34,10 @@ const criarSchema = z.object({
   coluna_id: z.string().uuid(),
   titulo: z.string().min(1).max(255),
   descricao: z.string().max(20000).optional().nullable(),
+  // responsavel_id (singular) mantido por back-compat. Sprint 18: prefira responsavel_ids.
+  // Se ambos vierem, responsavel_ids ganha.
   responsavel_id: z.string().uuid().optional().nullable(),
+  responsavel_ids: z.array(z.string().uuid()).optional(),
   data_prazo: dataIso.optional().nullable(),
   etiqueta_ids: z.array(z.string().uuid()).optional().default([]),
   posicao: z.number().int().min(0).optional(),
@@ -38,7 +46,9 @@ const criarSchema = z.object({
 const atualizarSchema = z.object({
   titulo: z.string().min(1).max(255).optional(),
   descricao: z.string().max(20000).optional().nullable(),
+  // Sprint 18: prefira responsavel_ids. Singular continua aceito por back-compat.
   responsavel_id: z.string().uuid().nullable().optional(),
+  responsavel_ids: z.array(z.string().uuid()).optional(),
   data_prazo: dataIso.nullable().optional(),
   etiqueta_ids: z.array(z.string().uuid()).optional(),
 });
@@ -100,8 +110,8 @@ async function renormalizarCards(client, colunaId) {
 // =============================================================================
 
 /**
- * Avisa o responsável que ele foi atribuído num card. Só dispara se:
- *   - há responsável
+ * Avisa o responsável principal que foi atribuído num card. Só dispara se:
+ *   - há responsável (cards.responsavel_id setado pelo trigger)
  *   - o responsável é diferente de quem fez a ação
  *   - a pessoa está ativa
  */
@@ -164,9 +174,12 @@ function serializar(c) {
     quadro_id: c.quadro_id,
     titulo: c.titulo,
     descricao: c.descricao,
+    // Sprint 18: campo legado (= primeiro da N:N por trigger). Mantido pra back-compat.
     responsavel_id: c.responsavel_id,
     responsavel_nome: c.responsavel_nome,
     responsavel_email: c.responsavel_email,
+    // Sprint 18: nova fonte da verdade. Array de { id, nome, email } em ordem.
+    responsaveis: c.responsaveis ?? [],
     data_prazo: c.data_prazo,
     ordem: c.ordem,
     arquivado: !!c.arquivado_em,
@@ -182,10 +195,54 @@ const SELECT_BASE = `
          COALESCE(
            (SELECT json_agg(ce.etiqueta_id) FROM cards_etiquetas ce WHERE ce.card_id = c.id),
            '[]'::json
-         ) AS etiqueta_ids
+         ) AS etiqueta_ids,
+         COALESCE(
+           (SELECT json_agg(
+                     json_build_object('id', pa.id, 'nome', pa.nome, 'email', pa.email)
+                     ORDER BY cr.ordem, cr.adicionado_em
+                   )
+              FROM cards_responsaveis cr
+              JOIN pessoas_acesso pa ON pa.id = cr.pessoa_id
+             WHERE cr.card_id = c.id),
+           '[]'::json
+         ) AS responsaveis
     FROM cards c
     LEFT JOIN pessoas_acesso p ON p.id = c.responsavel_id
 `;
+
+// =============================================================================
+// Helper: resolve a lista final de responsáveis a partir do payload
+// =============================================================================
+
+/**
+ * Aplica a regra de precedência (responsavel_ids > responsavel_id) e devolve
+ * { lista, vieio } onde:
+ *   - lista: array deduplicado de uuids (pode ser vazio)
+ *   - veio: boolean, true se o payload mencionou QUALQUER campo de responsável
+ *     (mesmo que vazio/null — sinaliza "limpar responsáveis").
+ *
+ * Usado no atualizar pra distinguir "não mexer" vs "limpar".
+ */
+function resolverResponsaveis(d) {
+  if (d.responsavel_ids !== undefined) {
+    return { lista: [...new Set(d.responsavel_ids)], veio: true };
+  }
+  if (d.responsavel_id !== undefined) {
+    return { lista: d.responsavel_id ? [d.responsavel_id] : [], veio: true };
+  }
+  return { lista: [], veio: false };
+}
+
+async function validarResponsaveisAtivos(client, ids) {
+  if (ids.length === 0) return;
+  const { rows: ativas } = await client.query(
+    `SELECT id FROM pessoas_acesso WHERE id = ANY($1::uuid[]) AND ativo = TRUE`,
+    [ids],
+  );
+  if (ativas.length !== ids.length) {
+    throw new AppError('Uma ou mais pessoas responsáveis não estão ativas.', 400);
+  }
+}
 
 // =============================================================================
 // CRUD
@@ -197,11 +254,15 @@ const SELECT_BASE = `
  * Lista cards atribuídos à pessoa logada. Filtros opcionais:
  *   ?atrasados=true   → só com data_prazo < hoje
  *   ?proximos=true    → só com data_prazo entre hoje e +7 dias
+ *
+ * Sprint 18: usa a N:N pra cobrir múltiplos responsáveis. O EXISTS garante
+ * que cada card aparece UMA vez mesmo se a pessoa estiver atribuída duas
+ * vezes (não acontece, mas defesa em profundidade).
  */
 export async function meusCards(req, res, next) {
   try {
     const partes = [
-      `c.responsavel_id = $1`,
+      `EXISTS (SELECT 1 FROM cards_responsaveis cr WHERE cr.card_id = c.id AND cr.pessoa_id = $1)`,
       `c.arquivado_em IS NULL`,
     ];
     const params = [req.pessoa.id];
@@ -275,17 +336,32 @@ export async function criar(req, res, next) {
       ordem = max[0].prox;
     }
 
+    // INSERT do card sem responsavel_id — o trigger preenche a partir da N:N.
     const { rows } = await client.query(
       `INSERT INTO cards (
          coluna_id, quadro_id, titulo, descricao,
-         responsavel_id, data_prazo, ordem, criado_por_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+         data_prazo, ordem, criado_por_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
       [
         d.coluna_id, quadroId, d.titulo.trim(), d.descricao?.trim() || null,
-        d.responsavel_id || null, d.data_prazo || null, ordem, req.pessoa.id,
+        d.data_prazo || null, ordem, req.pessoa.id,
       ],
     );
     const cardId = rows[0].id;
+
+    // Sprint 18 — múltiplos responsáveis.
+    // Prioridade: responsavel_ids (array) > responsavel_id (singular, back-compat).
+    const { lista: idsResp } = resolverResponsaveis(d);
+    if (idsResp.length > 0) {
+      await validarResponsaveisAtivos(client, idsResp);
+      for (let i = 0; i < idsResp.length; i += 1) {
+        await client.query(
+          `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
+           VALUES ($1, $2, $3, $4)`,
+          [cardId, idsResp[i], i, req.pessoa.id],
+        );
+      }
+    }
 
     if (d.etiqueta_ids && d.etiqueta_ids.length > 0) {
       // Confere que todas as etiquetas pertencem ao mesmo quadro
@@ -319,7 +395,7 @@ export async function criar(req, res, next) {
     const final = await query(`${SELECT_BASE} WHERE c.id = $1`, [cardId]);
     const card = final.rows[0];
 
-    // Notifica responsável (se for diferente de quem criou)
+    // Notifica responsável principal (= primeiro da N:N, espelhado em responsavel_id)
     if (card.responsavel_id) {
       disparar(() => notificarAtribuicao(card, req.pessoa.id));
     }
@@ -354,26 +430,45 @@ export async function atualizar(req, res, next) {
 
     await client.query('BEGIN');
 
+    // Monta UPDATE dinâmico apenas pros campos diretos da tabela cards.
+    // Responsáveis e etiquetas são tratados separadamente (N:N).
+    // Concatenação em vez de template literal pra evitar ambiguidade do "$$" em ferramentas.
     const updates = [];
     const params = [];
     for (const [k, v] of Object.entries(d)) {
       if (v === undefined) continue;
-      if (k === 'etiqueta_ids') continue; // tratada separadamente
+      if (k === 'etiqueta_ids') continue;
+      if (k === 'responsavel_id') continue;
+      if (k === 'responsavel_ids') continue;
       params.push(typeof v === 'string' ? v.trim() : v);
-      updates.push(`${k} = $${params.length}`);
+      updates.push(k + ' = $' + params.length);
     }
 
     if (updates.length > 0) {
       params.push(req.params.id);
       await client.query(
-        `UPDATE cards SET ${updates.join(', ')} WHERE id = $${params.length}`,
+        'UPDATE cards SET ' + updates.join(', ') + ' WHERE id = $' + params.length,
         params,
       );
     }
 
+    // Sprint 18 — Responsáveis: se veio responsavel_ids OU responsavel_id
+    // explicitamente no payload, substitui o conjunto inteiro.
+    const { lista: novoConjunto, veio } = resolverResponsaveis(d);
+    if (veio) {
+      await validarResponsaveisAtivos(client, novoConjunto);
+      await client.query(`DELETE FROM cards_responsaveis WHERE card_id = $1`, [req.params.id]);
+      for (let i = 0; i < novoConjunto.length; i += 1) {
+        await client.query(
+          `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
+           VALUES ($1, $2, $3, $4)`,
+          [req.params.id, novoConjunto[i], i, req.pessoa.id],
+        );
+      }
+    }
+
     // Etiquetas: se vier no payload, substitui o conjunto inteiro
     if (d.etiqueta_ids !== undefined) {
-      // Valida que pertencem ao quadro
       if (d.etiqueta_ids.length > 0) {
         const { rows: validas } = await client.query(
           `SELECT id FROM quadros_etiquetas
@@ -405,9 +500,9 @@ export async function atualizar(req, res, next) {
     const final = await query(`${SELECT_BASE} WHERE c.id = $1`, [req.params.id]);
     const card = final.rows[0];
 
-    // Se mudou o responsável (e o novo é diferente), notifica
+    // Notifica se o RESPONSÁVEL PRINCIPAL mudou (e veio mudança no payload)
     if (
-      d.responsavel_id !== undefined
+      veio
       && card.responsavel_id
       && card.responsavel_id !== responsavelAnterior
     ) {
@@ -475,7 +570,6 @@ export async function mover(req, res, next) {
         [req.params.id],
       );
       if (hr[0] && hr[0].coluna_concluida_id === coluna_id) {
-        // Card chegou no "Concluído" da instância — avança o fluxo
         const r = await avancarApos(client, { cardId: req.params.id });
         avancoInstancia = r;
       }

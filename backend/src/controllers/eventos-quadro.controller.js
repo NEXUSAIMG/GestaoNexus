@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { query } from '../config/database.js';
+import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { podeVerQuadro } from './quadros.controller.js';
 
 /**
- * Eventos do quadro — Sprint 11.
+ * Eventos do quadro — Sprint 11 + Sprint 24 (cor + múltiplos responsáveis).
  *
  * Calendário por quadro. Reaproveita o algoritmo de recorrência de
  * eventos_calendario (governança), mas escopa por quadro_id.
@@ -16,6 +16,11 @@ import { podeVerQuadro } from './quadros.controller.js';
  *
  * Cards com data_prazo são mesclados como "ocorrências virtuais" na
  * listagem, mas não vivem nesta tabela — vêm do JOIN com cards.
+ *
+ * Sprint 24:
+ *   - Cor opcional por evento (token da paleta tailwind). Se NULL, UI usa cor por tipo.
+ *   - Múltiplos responsáveis via N:N eventos_quadro_responsaveis (migration 018).
+ *     Eventos sem nenhum responsável são permitidos.
  */
 
 const isoDateTime = z.string().regex(
@@ -25,6 +30,12 @@ const isoDateTime = z.string().regex(
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar em YYYY-MM-DD');
 const tiposRecorrencia = ['mensal', 'trimestral', 'semestral', 'anual'];
 const tiposEvento = ['reuniao', 'deadline', 'marco', 'outro'];
+
+// Tokens da paleta aceitos (mesmo conjunto usado em etiquetas)
+const coresValidas = [
+  'slate', 'red', 'orange', 'amber', 'yellow', 'lime', 'emerald', 'teal',
+  'cyan', 'blue', 'indigo', 'violet', 'fuchsia', 'pink', 'rose',
+];
 
 const criarSchema = z.object({
   titulo: z.string().min(1).max(255),
@@ -38,6 +49,9 @@ const criarSchema = z.object({
   observacao: z.string().max(2000).optional().nullable(),
   recorrencia_tipo: z.enum(tiposRecorrencia).optional().nullable(),
   recorrencia_ate: isoDate.optional().nullable(),
+  // Sprint 24
+  cor: z.enum(coresValidas).optional().nullable(),
+  responsavel_ids: z.array(z.string().uuid()).optional(),
 });
 
 const atualizarSchema = criarSchema.partial();
@@ -45,8 +59,19 @@ const atualizarSchema = criarSchema.partial();
 const HORIZONTE_DEFAULT_MESES = 24;
 const MAX_OCORRENCIAS = 500;
 
+// SELECT_BASE traz o evento + nome de quem criou + array de responsáveis (Sprint 24)
 const SELECT_BASE = `
-  SELECT e.*, p.nome AS criado_por_nome
+  SELECT e.*, p.nome AS criado_por_nome,
+         COALESCE(
+           (SELECT json_agg(
+                     json_build_object('id', pa.id, 'nome', pa.nome, 'email', pa.email)
+                     ORDER BY er.ordem, er.adicionado_em
+                   )
+              FROM eventos_quadro_responsaveis er
+              JOIN pessoas_acesso pa ON pa.id = er.pessoa_id
+             WHERE er.evento_id = e.id),
+           '[]'::json
+         ) AS responsaveis
     FROM eventos_quadro e
     LEFT JOIN pessoas_acesso p ON p.id = e.criado_por_id
 `;
@@ -135,6 +160,9 @@ function formatar(e, opcoes = {}) {
     observacao: e.observacao,
     recorrencia_tipo: e.recorrencia_tipo ?? null,
     recorrencia_ate: e.recorrencia_ate ?? null,
+    // Sprint 24
+    cor: e.cor ?? null,
+    responsaveis: e.responsaveis ?? [],
     criado_em: e.criado_em,
     criado_por_nome: e.criado_por_nome,
     fonte: 'evento', // distingue de cards
@@ -172,6 +200,8 @@ function cardComoEvento(card) {
     observacao: null,
     recorrencia_tipo: null,
     recorrencia_ate: null,
+    cor: null,
+    responsaveis: [],
     criado_em: card.criado_em,
     criado_por_nome: null,
     fonte: 'card',
@@ -179,6 +209,35 @@ function cardComoEvento(card) {
     responsavel_nome: card.responsavel_nome,
     coluna_id: card.coluna_id,
   };
+}
+
+// =============================================================================
+// Helpers de responsáveis (Sprint 24)
+// =============================================================================
+
+async function validarResponsaveisAtivos(client, ids) {
+  if (ids.length === 0) return;
+  const { rows: ativas } = await client.query(
+    `SELECT id FROM pessoas_acesso WHERE id = ANY($1::uuid[]) AND ativo = TRUE`,
+    [ids],
+  );
+  if (ativas.length !== ids.length) {
+    throw new AppError('Uma ou mais pessoas responsáveis não estão ativas.', 400);
+  }
+}
+
+async function gravarResponsaveisEvento(client, eventoId, ids) {
+  await client.query(
+    `DELETE FROM eventos_quadro_responsaveis WHERE evento_id = $1`,
+    [eventoId],
+  );
+  for (let i = 0; i < ids.length; i += 1) {
+    await client.query(
+      `INSERT INTO eventos_quadro_responsaveis (evento_id, pessoa_id, ordem)
+       VALUES ($1, $2, $3)`,
+      [eventoId, ids[i], i],
+    );
+  }
 }
 
 // =============================================================================
@@ -288,6 +347,7 @@ export async function obter(req, res, next) {
  * POST /api/quadros/:id/eventos
  */
 export async function criar(req, res, next) {
+  const client = await pool.connect();
   try {
     const isAdmin = !!req.pessoa?.administrador;
     const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, req.params.id);
@@ -305,40 +365,60 @@ export async function criar(req, res, next) {
       throw new AppError('A data limite da recorrência precisa ser igual ou posterior ao início.', 400);
     }
 
-    const { rows } = await query(
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
       `INSERT INTO eventos_quadro (
          quadro_id, titulo, descricao, tipo,
          data_inicio, data_fim, dia_inteiro,
          local, link, observacao,
          recorrencia_tipo, recorrencia_ate,
+         cor,
          criado_por_id
-       ) VALUES ($1,$2,$3,$4, $5,$6,$7, $8,$9,$10, $11,$12, $13)
+       ) VALUES ($1,$2,$3,$4, $5,$6,$7, $8,$9,$10, $11,$12, $13, $14)
        RETURNING id`,
       [
         req.params.id, e.titulo, e.descricao, e.tipo,
         e.data_inicio, e.data_fim, e.dia_inteiro,
         e.local, e.link, e.observacao,
         e.recorrencia_tipo ?? null, e.recorrencia_ate ?? null,
+        e.cor ?? null,
         req.pessoa.id,
       ],
     );
+    const eventoId = rows[0].id;
+
+    // Sprint 24 — múltiplos responsáveis (opcional)
+    if (e.responsavel_ids && e.responsavel_ids.length > 0) {
+      const idsUnicos = [...new Set(e.responsavel_ids)];
+      await validarResponsaveisAtivos(client, idsUnicos);
+      await gravarResponsaveisEvento(client, eventoId, idsUnicos);
+    }
+
+    await client.query('COMMIT');
 
     registrarAcao({
       acao: 'evento_quadro.criou',
       pessoa_acesso_id: req.pessoa.id,
-      detalhes: { evento_id: rows[0].id, quadro_id: req.params.id, titulo: e.titulo },
+      detalhes: { evento_id: eventoId, quadro_id: req.params.id, titulo: e.titulo },
       req,
     });
 
-    const final = await query(`${SELECT_BASE} WHERE e.id = $1`, [rows[0].id]);
+    const final = await query(`${SELECT_BASE} WHERE e.id = $1`, [eventoId]);
     res.status(201).json(formatar(final.rows[0]));
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 }
 
 /**
  * PUT /api/quadros/:id/eventos/:eventoId
  */
 export async function atualizar(req, res, next) {
+  const client = await pool.connect();
   try {
     const isAdmin = !!req.pessoa?.administrador;
     const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, req.params.id);
@@ -350,29 +430,48 @@ export async function atualizar(req, res, next) {
       throw new AppError('Não dá pra ter limite de recorrência sem tipo de recorrência.', 400);
     }
 
+    await client.query('BEGIN');
+
+    // Monta UPDATE dinâmico só pros campos diretos da tabela.
+    // Responsáveis são tratados separadamente (N:N).
+    // Concatenação em vez de template literal pra evitar ambiguidade do "$$" em ferramentas.
     const updates = [];
     const params = [];
     for (const [k, v] of Object.entries(e)) {
       if (v === undefined) continue;
+      if (k === 'responsavel_ids') continue; // N:N separado
       params.push(v);
-      updates.push(`${k} = $${params.length}`);
-    }
-    if (updates.length === 0) {
-      const final = await query(
-        `${SELECT_BASE} WHERE e.id = $1 AND e.quadro_id = $2`,
-        [req.params.eventoId, req.params.id],
-      );
-      if (!final.rows[0]) throw new NaoEncontradoError('Evento não encontrado');
-      return res.json(formatar(final.rows[0]));
+      updates.push(k + ' = $' + params.length);
     }
 
-    params.push(req.params.eventoId, req.params.id);
-    const { rowCount } = await query(
-      `UPDATE eventos_quadro SET ${updates.join(', ')}
-        WHERE id = $${params.length - 1} AND quadro_id = $${params.length}`,
-      params,
-    );
-    if (rowCount === 0) throw new NaoEncontradoError('Evento não encontrado');
+    if (updates.length > 0) {
+      params.push(req.params.eventoId, req.params.id);
+      const { rowCount } = await client.query(
+        'UPDATE eventos_quadro SET ' + updates.join(', ')
+          + ' WHERE id = $' + (params.length - 1)
+          + ' AND quadro_id = $' + params.length,
+        params,
+      );
+      if (rowCount === 0) {
+        throw new NaoEncontradoError('Evento não encontrado');
+      }
+    } else {
+      // Sem campos diretos pra atualizar — confere que o evento existe
+      const cR = await client.query(
+        `SELECT id FROM eventos_quadro WHERE id = $1 AND quadro_id = $2`,
+        [req.params.eventoId, req.params.id],
+      );
+      if (!cR.rows[0]) throw new NaoEncontradoError('Evento não encontrado');
+    }
+
+    // Sprint 24 — responsáveis: se veio responsavel_ids no payload, substitui o conjunto
+    if (e.responsavel_ids !== undefined) {
+      const idsUnicos = [...new Set(e.responsavel_ids)];
+      await validarResponsaveisAtivos(client, idsUnicos);
+      await gravarResponsaveisEvento(client, req.params.eventoId, idsUnicos);
+    }
+
+    await client.query('COMMIT');
 
     registrarAcao({
       acao: 'evento_quadro.editou',
@@ -383,12 +482,18 @@ export async function atualizar(req, res, next) {
 
     const final = await query(`${SELECT_BASE} WHERE e.id = $1`, [req.params.eventoId]);
     res.json(formatar(final.rows[0]));
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 }
 
 /**
  * DELETE /api/quadros/:id/eventos/:eventoId
  * Remove a série inteira (não há suporte a exceção por ocorrência).
+ * Os registros em eventos_quadro_responsaveis caem por CASCADE.
  */
 export async function excluir(req, res, next) {
   try {

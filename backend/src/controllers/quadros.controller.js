@@ -150,7 +150,17 @@ export async function obter(req, res, next) {
                 COALESCE(
                   (SELECT json_agg(ce.etiqueta_id) FROM cards_etiquetas ce WHERE ce.card_id = c.id),
                   '[]'::json
-                ) AS etiqueta_ids
+                ) AS etiqueta_ids,
+                COALESCE(
+                  (SELECT json_agg(
+                            json_build_object('id', pa.id, 'nome', pa.nome, 'email', pa.email)
+                            ORDER BY cr.ordem, cr.adicionado_em
+                          )
+                     FROM cards_responsaveis cr
+                     JOIN pessoas_acesso pa ON pa.id = cr.pessoa_id
+                    WHERE cr.card_id = c.id),
+                  '[]'::json
+                ) AS responsaveis
            FROM cards c
            LEFT JOIN pessoas_acesso p ON p.id = c.responsavel_id
           WHERE c.quadro_id = $1 AND c.arquivado_em IS NULL
@@ -173,6 +183,8 @@ export async function obter(req, res, next) {
       cards: cardsR.rows.map((c) => ({
         ...c,
         etiqueta_ids: c.etiqueta_ids || [],
+        // Sprint 18 — múltiplos responsáveis (array de { id, nome, email })
+        responsaveis: c.responsaveis || [],
       })),
       etiquetas: etiqR.rows,
     });

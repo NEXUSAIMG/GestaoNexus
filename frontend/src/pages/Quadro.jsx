@@ -3,18 +3,20 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Globe, Lock, Users2, X, Calendar,
   AlertCircle, Trash2, Archive, Settings, Tag as TagIcon, KanbanSquare,
-  Workflow, GitBranch, ListChecks, CheckCircle2,
+  Workflow, GitBranch, ListChecks, CheckCircle2, GripVertical, Pencil,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
-  rectIntersection,
+  rectIntersection, useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, verticalListSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api, mensagemDeErro } from '../api/client.js';
 import QuadroCalendario from '../components/QuadroCalendario.jsx';
+import MultiSelectPessoas from '../components/MultiSelectPessoas.jsx';
 
 /**
  * Quadro (board) — Sprint 10.
@@ -105,6 +107,9 @@ export default function Quadro() {
     setErro('');
     try {
       const r = await api.get(`/quadros/${id}`);
+      // TEMP DIAG — remover após investigação do bug "card volta ao estado antigo"
+      console.log('[DIAG-card] ← GET /quadros recarregou', r.data.cards.length, 'cards:',
+        r.data.cards.map((c) => `${c.id.slice(0, 8)} "${c.titulo}" prazo=${c.data_prazo || '∅'} resp=${c.responsavel_id?.slice(0, 8) || '∅'} etqs=${(c.etiqueta_ids || []).length}`));
       setQuadro(r.data);
       // Em paralelo, descobre se este quadro é de uma instância de processo
       carregarInstancia();
@@ -142,9 +147,16 @@ export default function Quadro() {
   // ---------------------------------------------------------------------------
 
   function aoIniciarDrag(event) {
-    const cardId = event.active.id;
-    const card = quadro.cards.find((c) => c.id === cardId);
-    setArrastando(card);
+    const id = event.active.id;
+    // Sprint 19: pode ser drag de COLUNA (prefixo 'col-') ou de CARD (uuid)
+    if (String(id).startsWith('col-')) {
+      const colunaId = String(id).replace('col-', '');
+      const col = quadro.colunas.find((c) => c.id === colunaId);
+      setArrastando({ tipo: 'coluna', coluna: col });
+    } else {
+      const card = quadro.cards.find((c) => c.id === id);
+      setArrastando({ tipo: 'card', card });
+    }
   }
 
   async function aoFinalizarDrag(event) {
@@ -152,6 +164,37 @@ export default function Quadro() {
     setArrastando(null);
     if (!over) return;
 
+    // ----- Sprint 19: drag de COLUNA -----
+    if (String(active.id).startsWith('col-')) {
+      if (!String(over.id).startsWith('col-')) return;
+      if (active.id === over.id) return;
+      const ativaId = String(active.id).replace('col-', '');
+      const sobreId = String(over.id).replace('col-', '');
+
+      const ordenadas = [...quadro.colunas].sort((a, b) => a.ordem - b.ordem);
+      const idxAtiva = ordenadas.findIndex((c) => c.id === ativaId);
+      const idxSobre = ordenadas.findIndex((c) => c.id === sobreId);
+      if (idxAtiva < 0 || idxSobre < 0 || idxAtiva === idxSobre) return;
+
+      // Atualização otimista: reordena local
+      const snapshot = quadro;
+      const novaOrdem = [...ordenadas];
+      const [movida] = novaOrdem.splice(idxAtiva, 1);
+      novaOrdem.splice(idxSobre, 0, movida);
+      novaOrdem.forEach((c, i) => { c.ordem = (i + 1) * 1000; });
+      setQuadro((q) => ({ ...q, colunas: novaOrdem }));
+
+      try {
+        await api.post(`/colunas/${ativaId}/mover`, { posicao: idxSobre });
+        carregar(); // recarrega pra ter a ordem real do servidor
+      } catch (err) {
+        setQuadro(snapshot);
+        alert(mensagemDeErro(err, 'Não consegui reordenar a coluna.'));
+      }
+      return;
+    }
+
+    // ----- Drag de CARD (fluxo original) -----
     const cardId = active.id;
     const cardArrastado = quadro.cards.find((c) => c.id === cardId);
     if (!cardArrastado) return;
@@ -162,6 +205,11 @@ export default function Quadro() {
     // `over.id` pode ser o ID de um card OU 'coluna-XYZ' (área vazia da coluna)
     if (String(over.id).startsWith('coluna-')) {
       novaColunaId = String(over.id).replace('coluna-', '');
+      const cardsNaColuna = quadro.cards.filter((c) => c.coluna_id === novaColunaId && c.id !== cardId);
+      novaPosicao = cardsNaColuna.length;
+    } else if (String(over.id).startsWith('col-')) {
+      // Card solto sobre o handle da coluna — trata como solto no fim da coluna
+      novaColunaId = String(over.id).replace('col-', '');
       const cardsNaColuna = quadro.cards.filter((c) => c.coluna_id === novaColunaId && c.id !== cardId);
       novaPosicao = cardsNaColuna.length;
     } else {
@@ -215,8 +263,11 @@ export default function Quadro() {
   const cardsFiltrados = useMemo(() => {
     if (!quadro) return [];
     return quadro.cards.filter((c) => {
-      if (filtroResponsavel === '__sem__' && c.responsavel_id) return false;
-      if (filtroResponsavel && filtroResponsavel !== '__sem__' && c.responsavel_id !== filtroResponsavel) return false;
+      // Sprint 18: filtra contra a lista de responsáveis (N:N)
+      const resps = c.responsaveis || [];
+      if (filtroResponsavel === '__sem__' && resps.length > 0) return false;
+      if (filtroResponsavel && filtroResponsavel !== '__sem__'
+          && !resps.some((r) => r.id === filtroResponsavel)) return false;
       if (filtroEtiqueta && !(c.etiqueta_ids || []).includes(filtroEtiqueta)) return false;
       if (filtroAtrasados) {
         if (!c.data_prazo) return false;
@@ -229,10 +280,11 @@ export default function Quadro() {
 
   const responsaveisDisponiveis = useMemo(() => {
     if (!quadro) return [];
+    // Sprint 18: agrega de todos os responsáveis (N:N) presentes nos cards do quadro
     const map = new Map();
     for (const c of quadro.cards) {
-      if (c.responsavel_id && !map.has(c.responsavel_id)) {
-        map.set(c.responsavel_id, { id: c.responsavel_id, nome: c.responsavel_nome });
+      for (const r of (c.responsaveis || [])) {
+        if (!map.has(r.id)) map.set(r.id, { id: r.id, nome: r.nome });
       }
     }
     return [...map.values()].sort((a, b) => a.nome.localeCompare(b.nome));
@@ -365,6 +417,11 @@ export default function Quadro() {
             onDragEnd={aoFinalizarDrag}
           onDragCancel={() => setArrastando(null)}
         >
+          {/* Sprint 19: SortableContext de colunas (horizontal) */}
+          <SortableContext
+            items={colunasOrdenadas.map((c) => 'col-' + c.id)}
+            strategy={horizontalListSortingStrategy}
+          >
           <div className="flex h-full gap-3 p-4">
             {colunasOrdenadas.map((col) => {
               const cardsDaColuna = cardsFiltrados
@@ -394,9 +451,17 @@ export default function Quadro() {
               <BotaoNovaColuna quadroId={quadro.id} onCriada={carregar} />
             )}
           </div>
+          </SortableContext>
 
           <DragOverlay>
-            {arrastando ? <Card card={arrastando} etiquetas={quadro.etiquetas} arrastando /> : null}
+            {arrastando?.tipo === 'card' && (
+              <Card card={arrastando.card} etiquetas={quadro.etiquetas} arrastando />
+            )}
+            {arrastando?.tipo === 'coluna' && (
+              <div className="w-72 rounded-xl bg-slate-100 px-3 py-2 shadow-2xl ring-2 ring-nexus-300 opacity-90">
+                <h3 className="text-sm font-semibold text-slate-900">{arrastando.coluna?.nome}</h3>
+              </div>
+            )}
           </DragOverlay>
         </DndContext>
         </div>
@@ -650,17 +715,38 @@ function moverCardLocal(quadro, cardId, novaColunaId, novaPosicao) {
 // =============================================================================
 
 function Coluna({ coluna, cards, podeEditar, etiquetas, aoClicarCard, aoNovoCard, aoArquivarColuna }) {
-  const { setNodeRef } = useSortable({ id: `coluna-${coluna.id}` });
+  // Sprint 19: useSortable pro próprio drag da coluna (handle no header)
+  const sortable = useSortable({ id: 'col-' + coluna.id });
+  // Mantido: useDroppable pra coluna ser zona de drop de cards (mesmo quando vazia)
+  const drop = useDroppable({ id: `coluna-${coluna.id}` });
   const [menuAberto, setMenuAberto] = useState(false);
+
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+  };
 
   return (
     <div
-      ref={setNodeRef}
+      ref={sortable.setNodeRef}
+      style={style}
       className="flex h-full w-72 shrink-0 flex-col rounded-xl bg-slate-100"
     >
       <header className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <h3 className="truncate text-sm font-semibold text-slate-900">{coluna.nome}</h3>
+        <div className="flex items-center gap-1 min-w-0">
+          {podeEditar && (
+            <button
+              type="button"
+              {...sortable.attributes}
+              {...sortable.listeners}
+              className="cursor-grab rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 active:cursor-grabbing"
+              title="Arraste para reordenar a coluna"
+            >
+              <GripVertical size={13} />
+            </button>
+          )}
+          <h3 title={coluna.nome} className="text-sm font-semibold text-slate-900 leading-tight break-words">{coluna.nome}</h3>
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
             {cards.length}
           </span>
@@ -708,7 +794,7 @@ function Coluna({ coluna, cards, podeEditar, etiquetas, aoClicarCard, aoNovoCard
         )}
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2 pt-1">
+      <div ref={drop.setNodeRef} className="flex-1 space-y-2 overflow-y-auto px-2 pb-2 pt-1">
         <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <CardSortable
@@ -767,6 +853,8 @@ function Card({ card, etiquetas, aoClicar, arrastando }) {
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
     .filter(Boolean);
+  // Sprint 18: lista de responsáveis (N:N). Pode estar vazia.
+  const resps = card.responsaveis || [];
 
   return (
     <div
@@ -797,7 +885,7 @@ function Card({ card, etiquetas, aoClicar, arrastando }) {
 
       <div className="text-sm font-medium text-slate-900 leading-snug">{card.titulo}</div>
 
-      {(prazo || card.responsavel_id) && (
+      {(prazo || resps.length > 0) && (
         <div className="mt-2 flex items-center justify-between gap-2">
           {prazo ? (
             <span
@@ -808,13 +896,26 @@ function Card({ card, etiquetas, aoClicar, arrastando }) {
             </span>
           ) : <span />}
 
-          {card.responsavel_id && (
-            <span
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-nexus-100 text-[9px] font-semibold text-nexus-800"
-              title={card.responsavel_nome}
-            >
-              {iniciais(card.responsavel_nome)}
-            </span>
+          {resps.length > 0 && (
+            <div className="flex -space-x-1.5" title={resps.map((r) => r.nome).join(', ')}>
+              {resps.slice(0, 3).map((r) => (
+                <span
+                  key={r.id}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-nexus-100 text-[9px] font-semibold text-nexus-800 ring-1 ring-white"
+                  title={r.nome}
+                >
+                  {iniciais(r.nome)}
+                </span>
+              ))}
+              {resps.length > 3 && (
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-semibold text-slate-700 ring-1 ring-white"
+                  title={resps.slice(3).map((r) => r.nome).join(', ')}
+                >
+                  +{resps.length - 3}
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -949,16 +1050,19 @@ function ModalCard({ cardId, colunaId, quadro, onFechar, onSalvo }) {
   // Form state
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [responsavelId, setResponsavelId] = useState('');
+  // Sprint 18: lista de UUIDs (vazia = sem responsável)
+  const [responsavelIds, setResponsavelIds] = useState([]);
   const [dataPrazo, setDataPrazo] = useState('');
   const [etiquetaIds, setEtiquetaIds] = useState([]);
 
-  // Carrega pessoas elegíveis (membros da equipe do quadro)
+  // Sprint 18: lista TODAS as pessoas ativas — responsáveis podem ser de
+  // equipes diferentes da equipe do quadro. O nome da variável de estado
+  // (`pessoasEquipe`) ficou legado, mas o conteúdo agora é global.
   useEffect(() => {
-    api.get(`/equipes/${quadro.equipe_id}`)
-      .then((r) => setPessoasEquipe(r.data.membros.map((m) => m.pessoa)))
-      .catch(() => { /* admin pode não estar listado como membro — deixa vazio */ });
-  }, [quadro.equipe_id]);
+    api.get('/pessoas')
+      .then((r) => setPessoasEquipe((r.data || []).filter((p) => p.ativo)))
+      .catch(() => { /* sem permissão — deixa vazio */ });
+  }, []);
 
   // Carrega card existente
   useEffect(() => {
@@ -969,7 +1073,8 @@ function ModalCard({ cardId, colunaId, quadro, onFechar, onSalvo }) {
         const c = r.data;
         setTitulo(c.titulo);
         setDescricao(c.descricao || '');
-        setResponsavelId(c.responsavel_id || '');
+        // Sprint 18: extrai IDs da lista de responsáveis (mantém ordem)
+        setResponsavelIds((c.responsaveis || []).map((p) => p.id));
         setDataPrazo(c.data_prazo ? String(c.data_prazo).slice(0, 10) : '');
         setEtiquetaIds(c.etiqueta_ids || []);
       })
@@ -991,17 +1096,23 @@ function ModalCard({ cardId, colunaId, quadro, onFechar, onSalvo }) {
       const body = {
         titulo,
         descricao: descricao || null,
-        responsavel_id: responsavelId || null,
+        // Sprint 18: array de UUIDs (vazio = sem responsável)
+        responsavel_ids: responsavelIds,
         data_prazo: dataPrazo || null,
         etiqueta_ids: etiquetaIds,
       };
+      // TEMP DIAG — remover após investigação do bug "card volta ao estado antigo"
+      console.log('[DIAG-card] →', editando ? 'PUT /cards/' + cardId : 'POST /cards', 'body:', body);
+      let r;
       if (editando) {
-        await api.put(`/cards/${cardId}`, body);
+        r = await api.put(`/cards/${cardId}`, body);
       } else {
-        await api.post('/cards', { ...body, coluna_id: colunaId });
+        r = await api.post('/cards', { ...body, coluna_id: colunaId });
       }
+      console.log('[DIAG-card] ← resposta status', r.status, 'data:', r.data);
       onSalvo();
     } catch (err) {
+      console.error('[DIAG-card] ✗ erro no save:', err.response?.status, err.response?.data, err);
       setErro(mensagemDeErro(err));
     } finally {
       setSalvando(false);
@@ -1042,19 +1153,22 @@ function ModalCard({ cardId, colunaId, quadro, onFechar, onSalvo }) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-slate-900 mb-1">Responsável</label>
-            <select
-              className={inputCls}
-              value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)}
-            >
-              <option value="">— ninguém —</option>
-              {pessoasEquipe.map((p) => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
+            <label className="block text-sm font-medium text-slate-900 mb-1">
+              Responsáveis
+              {responsavelIds.length > 0 && (
+                <span className="ml-1 text-xs font-normal text-slate-500">
+                  ({responsavelIds.length} selecionado{responsavelIds.length === 1 ? '' : 's'})
+                </span>
+              )}
+            </label>
+            <MultiSelectPessoas
+              pessoas={pessoasEquipe}
+              selecionadosIds={responsavelIds}
+              onChange={setResponsavelIds}
+            />
             {pessoasEquipe.length === 0 && (
               <p className="mt-1 text-xs text-slate-500">
-                Adicione membros à equipe pra atribuir.
+                Nenhuma pessoa ativa cadastrada.
               </p>
             )}
           </div>
@@ -1250,6 +1364,10 @@ function ListaEtiquetas({ quadroId, etiquetas, onMudou }) {
   const [criando, setCriando] = useState(false);
   const [novoNome, setNovoNome] = useState('');
   const [novaCor, setNovaCor] = useState('slate');
+  // Sprint 19: edição de etiqueta existente
+  const [editandoId, setEditandoId] = useState(null);
+  const [editNome, setEditNome] = useState('');
+  const [editCor, setEditCor] = useState('slate');
 
   async function criar() {
     if (!novoNome.trim()) return;
@@ -1274,24 +1392,96 @@ function ListaEtiquetas({ quadroId, etiquetas, onMudou }) {
     }
   }
 
+  function iniciarEdicao(et) {
+    setEditandoId(et.id);
+    setEditNome(et.nome);
+    setEditCor(et.cor || 'slate');
+    setCriando(false); // não pode editar e criar ao mesmo tempo
+  }
+
+  function cancelarEdicao() {
+    setEditandoId(null);
+    setEditNome('');
+    setEditCor('slate');
+  }
+
+  async function salvarEdicao() {
+    if (!editNome.trim()) return;
+    try {
+      const r = await api.put(`/quadros/${quadroId}/etiquetas/${editandoId}`, {
+        nome: editNome.trim(),
+        cor: editCor,
+      });
+      onMudou(etiquetas.map((e) => (e.id === editandoId ? (r.data || { ...e, nome: editNome.trim(), cor: editCor }) : e)));
+      cancelarEdicao();
+    } catch (err) {
+      alert(mensagemDeErro(err));
+    }
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         {etiquetas.map((e) => (
-          <span
-            key={e.id}
-            className={`group inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium border ${COR_CHIP[e.cor] || COR_CHIP.slate}`}
-          >
-            {e.nome}
-            <button
-              type="button"
-              onClick={() => excluir(e.id)}
-              className="opacity-0 group-hover:opacity-70 hover:opacity-100"
-              title="Excluir"
+          editandoId === e.id ? (
+            // Modo edição inline
+            <div key={e.id} className="w-full rounded-lg border border-nexus-200 bg-nexus-50/50 p-2 space-y-2">
+              <input
+                autoFocus
+                className={inputCls}
+                value={editNome}
+                onChange={(ev) => setEditNome(ev.target.value)}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter') { ev.preventDefault(); salvarEdicao(); }
+                  if (ev.key === 'Escape') cancelarEdicao();
+                }}
+                maxLength={50}
+              />
+              <div className="flex flex-wrap gap-1">
+                {CORES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setEditCor(c)}
+                    className={[
+                      'h-5 w-5 rounded-full transition-transform',
+                      COR_CHIP[c]?.split(' ')[0]?.replace('-100', '-500') || 'bg-slate-500',
+                      editCor === c ? 'ring-2 ring-offset-1 ring-nexus-700 scale-110' : '',
+                    ].join(' ')}
+                  />
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <button type="button" onClick={salvarEdicao}
+                  className="rounded-md bg-nexus-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-nexus-800">
+                  Salvar
+                </button>
+                <button type="button" onClick={cancelarEdicao}
+                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                  Cancelar
+                </button>
+                <button type="button" onClick={() => { excluir(e.id); cancelarEdicao(); }}
+                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+                  <Trash2 size={10} /> Excluir
+                </button>
+              </div>
+            </div>
+          ) : (
+            <span
+              key={e.id}
+              className={`group inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium border ${COR_CHIP[e.cor] || COR_CHIP.slate}`}
             >
-              <X size={10} />
-            </button>
-          </span>
+              {e.nome}
+              <button
+                type="button"
+                onClick={() => iniciarEdicao(e)}
+                className="opacity-0 group-hover:opacity-70 hover:opacity-100"
+                title="Editar"
+              >
+                <Pencil size={9} />
+              </button>
+            </span>
+          )
         ))}
       </div>
 
@@ -1313,7 +1503,7 @@ function ListaEtiquetas({ quadroId, etiquetas, onMudou }) {
                 onClick={() => setNovaCor(c)}
                 className={[
                   'h-5 w-5 rounded-full transition-transform',
-                  COR_CHIP[c]?.split(' ')[0]?.replace('bg-', 'bg-').replace('-100', '-500') || 'bg-slate-500',
+                  COR_CHIP[c]?.split(' ')[0]?.replace('-100', '-500') || 'bg-slate-500',
                   novaCor === c ? 'ring-2 ring-offset-1 ring-nexus-700 scale-110' : '',
                 ].join(' ')}
               />
@@ -1330,7 +1520,7 @@ function ListaEtiquetas({ quadroId, etiquetas, onMudou }) {
             </button>
           </div>
         </div>
-      ) : (
+      ) : !editandoId ? (
         <button
           type="button"
           onClick={() => setCriando(true)}
@@ -1338,7 +1528,7 @@ function ListaEtiquetas({ quadroId, etiquetas, onMudou }) {
         >
           <Plus size={11} /> Nova etiqueta
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

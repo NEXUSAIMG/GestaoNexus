@@ -94,10 +94,29 @@ export async function login(req, res, next) {
 
     const representacoes = await representacoesAtivas(pessoa.id);
 
+    // Sprint 18 — pessoas operacionais (atendentes, equipe extrajudicial,
+    // estagiários) podem logar mesmo sem representação ativa, desde que
+    // sejam membros de pelo menos uma equipe não-arquivada. Sem isso,
+    // funcionários cadastrados em equipes ficavam órfãos: tinham vínculo
+    // operacional, mas não conseguiam entrar no sistema.
+    let ehOperacional = false;
     if (representacoes.length === 0 && !pessoa.administrador) {
-      throw new NaoAutorizadoError(
-        'Você não tem nenhuma representação ativa. Fale com um administrador.',
+      const { rows: eq } = await query(
+        `SELECT COUNT(*)::int AS qtd
+           FROM equipes_membros em
+           JOIN equipes e ON e.id = em.equipe_id
+          WHERE em.pessoa_id = $1
+            AND e.arquivada_em IS NULL`,
+        [pessoa.id],
       );
+      ehOperacional = (eq[0]?.qtd ?? 0) > 0;
+
+      if (!ehOperacional) {
+        throw new NaoAutorizadoError(
+          'Sua conta não tem vínculo ativo (representação ou equipe). ' +
+          'Fale com um administrador.',
+        );
+      }
     }
 
     await query('UPDATE pessoas_acesso SET ultimo_login_em = NOW() WHERE id = $1', [pessoa.id]);
@@ -126,7 +145,9 @@ export async function login(req, res, next) {
         administrador: pessoa.administrador,
       },
       representacoes: representacoes.map(serializarRepresentacao),
-      contexto_definido: contextoAutomatico !== null || pessoa.administrador,
+      // Operacional não tem socio_id (e nem precisa) — entra direto.
+      contexto_definido:
+        contextoAutomatico !== null || pessoa.administrador || ehOperacional,
       precisa_escolher_contexto: representacoes.length > 1,
     });
   } catch (err) {

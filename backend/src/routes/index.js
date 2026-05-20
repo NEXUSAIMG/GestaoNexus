@@ -24,6 +24,7 @@ import processosRoutes from './processos.routes.js';
 import instanciasRoutes from './instancias.routes.js';
 import produtosRoutes from './produtos.routes.js';
 import inventarioRoutes from './inventario.routes.js';
+import cartoriosRoutes from './cartorios.routes.js';
 
 const router = Router();
 
@@ -88,5 +89,8 @@ router.use('/produtos', produtosRoutes);
 
 // Sprint 17 — Inventário / Patrimônio
 router.use('/inventario', inventarioRoutes);
+
+// Sprint 20 — Cartórios
+router.use('/cartorios', cartoriosRoutes);
 
 export default router;

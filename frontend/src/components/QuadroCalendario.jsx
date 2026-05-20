@@ -1,28 +1,52 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, MapPin, Link2, Repeat, AlertCircle, X,
+  CalendarDays, CalendarRange, CalendarClock,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import CalendarioMensal from './CalendarioMensal.jsx';
+import CalendarioTimeline from './CalendarioTimeline.jsx';
+import MultiSelectPessoas from './MultiSelectPessoas.jsx';
 
 /**
- * Visão de calendário do quadro — Sprint 11.
+ * Visão de calendário do quadro — Sprint 11 + Sprint 24.
  *
- * Componente isolado que substitui a view do board quando o usuário
- * clica em "Calendário" nas abas do topo. Reaproveita CalendarioMensal.
- *
- * Mostra:
- *   - Eventos avulsos do quadro (tipo='reuniao'|'deadline'|'marco'|'outro')
- *   - Cards do quadro com data_prazo (tipo='card', fonte='card')
+ * Sprint 11: visão mensal com eventos avulsos do quadro + cards com prazo.
+ * Sprint 24A: cor opcional por evento + múltiplos responsáveis.
+ * Sprint 24B: alternância entre visualizações Dia / Semana / Mês (estilo Google Agenda).
  *
  * Cards são read-only no calendário: click leva ao modal do card no
  * kanban (callback `aoClicarCard`). Eventos podem ser criados, editados
  * e excluídos pela própria aba.
  */
 
+// Sprint 24 — paleta de cores opcionais para eventos (tokens da paleta tailwind).
+const CORES = [
+  { token: 'slate',   classe: 'bg-slate-500' },
+  { token: 'red',     classe: 'bg-red-500' },
+  { token: 'orange',  classe: 'bg-orange-500' },
+  { token: 'amber',   classe: 'bg-amber-500' },
+  { token: 'yellow',  classe: 'bg-yellow-500' },
+  { token: 'lime',    classe: 'bg-lime-500' },
+  { token: 'emerald', classe: 'bg-emerald-500' },
+  { token: 'teal',    classe: 'bg-teal-500' },
+  { token: 'cyan',    classe: 'bg-cyan-500' },
+  { token: 'blue',    classe: 'bg-blue-500' },
+  { token: 'indigo',  classe: 'bg-indigo-500' },
+  { token: 'violet',  classe: 'bg-violet-500' },
+  { token: 'fuchsia', classe: 'bg-fuchsia-500' },
+  { token: 'pink',    classe: 'bg-pink-500' },
+  { token: 'rose',    classe: 'bg-rose-500' },
+];
+
 const NOMES_MES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const NOMES_MES_CURTOS = [
+  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+  'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
 ];
 
 const ROTULO_TIPO = {
@@ -39,6 +63,10 @@ const ROTULO_RECORRENCIA = {
   anual:      'Anualmente',
 };
 
+// =============================================================================
+// Helpers de data
+// =============================================================================
+
 function ymd(d) {
   const ano = d.getFullYear();
   const mes = String(d.getMonth() + 1).padStart(2, '0');
@@ -46,10 +74,67 @@ function ymd(d) {
   return `${ano}-${mes}-${dia}`;
 }
 
+/**
+ * Domingo da semana que contém `ref`. Hora zerada.
+ */
+function inicioDaSemana(ref) {
+  const d = new Date(ref);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+
+function diasDaSemana(ref) {
+  const dom = inicioDaSemana(ref);
+  const out = [];
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(dom);
+    d.setDate(dom.getDate() + i);
+    out.push(d);
+  }
+  return out;
+}
+
+/**
+ * Calcula o range a buscar no backend + título a mostrar no header,
+ * baseado na view e na data de referência.
+ */
+function calcularRange(view, ref) {
+  if (view === 'dia') {
+    const iso = ymd(ref);
+    const titulo = ref.toLocaleDateString('pt-BR', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+    });
+    return { inicioISO: iso, fimISO: iso, titulo };
+  }
+  if (view === 'semana') {
+    const dom = inicioDaSemana(ref);
+    const sab = new Date(dom);
+    sab.setDate(dom.getDate() + 6);
+    const mesmoMes = dom.getMonth() === sab.getMonth() && dom.getFullYear() === sab.getFullYear();
+    const titulo = mesmoMes
+      ? `${dom.getDate()}–${sab.getDate()} de ${NOMES_MES[dom.getMonth()]} de ${dom.getFullYear()}`
+      : `${dom.getDate()} ${NOMES_MES_CURTOS[dom.getMonth()]} – ${sab.getDate()} ${NOMES_MES_CURTOS[sab.getMonth()]} ${sab.getFullYear()}`;
+    return { inicioISO: ymd(dom), fimISO: ymd(sab), titulo };
+  }
+  // mes
+  const ini = new Date(ref.getFullYear(), ref.getMonth(), 1);
+  const fim = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+  return {
+    inicioISO: ymd(ini),
+    fimISO: ymd(fim),
+    titulo: `${NOMES_MES[ref.getMonth()]} de ${ref.getFullYear()}`,
+  };
+}
+
+// =============================================================================
+// Componente principal
+// =============================================================================
+
 export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
-  const hoje = new Date();
-  const [ano, setAno] = useState(hoje.getFullYear());
-  const [mes, setMes] = useState(hoje.getMonth() + 1);
+  // Sprint 24B — view ('dia' | 'semana' | 'mes') + ponto de referência (Date)
+  const [view, setView] = useState('mes');
+  const [referencia, setReferencia] = useState(new Date());
 
   const [eventos, setEventos] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -57,11 +142,10 @@ export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
 
   const [modal, setModal] = useState(null); // { modo: 'criar'|'editar', evento?, dataInicial? }
 
-  const { inicioISO, fimISO } = useMemo(() => {
-    const ini = new Date(ano, mes - 1, 1);
-    const fim = new Date(ano, mes, 0);
-    return { inicioISO: ymd(ini), fimISO: ymd(fim) };
-  }, [ano, mes]);
+  const { inicioISO, fimISO, titulo } = useMemo(
+    () => calcularRange(view, referencia),
+    [view, referencia],
+  );
 
   async function carregar() {
     setCarregando(true);
@@ -78,15 +162,36 @@ export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
     }
   }
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [ano, mes, quadro.id]);
+  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [view, referencia, quadro.id]);
 
-  function mesAnterior() { if (mes === 1) { setAno(ano - 1); setMes(12); } else setMes(mes - 1); }
-  function proximoMes() { if (mes === 12) { setAno(ano + 1); setMes(1); } else setMes(mes + 1); }
-  function irHoje() { setAno(hoje.getFullYear()); setMes(hoje.getMonth() + 1); }
+  // Navegação adaptativa: anterior/próximo respeitam a view
+  function anterior() {
+    const nova = new Date(referencia);
+    if (view === 'dia') nova.setDate(nova.getDate() - 1);
+    else if (view === 'semana') nova.setDate(nova.getDate() - 7);
+    else nova.setMonth(nova.getMonth() - 1);
+    setReferencia(nova);
+  }
+  function proximo() {
+    const nova = new Date(referencia);
+    if (view === 'dia') nova.setDate(nova.getDate() + 1);
+    else if (view === 'semana') nova.setDate(nova.getDate() + 7);
+    else nova.setMonth(nova.getMonth() + 1);
+    setReferencia(nova);
+  }
+  function irHoje() { setReferencia(new Date()); }
 
   function aoClicarDia(iso) {
     if (!podeEditar) return;
     setModal({ modo: 'criar', dataInicial: iso });
+  }
+
+  // Sprint 24B — click num slot de hora no timeline (dia/semana)
+  function aoClicarSlot(iso, hora, minutos) {
+    if (!podeEditar) return;
+    const hh = String(hora).padStart(2, '0');
+    const mm = String(minutos).padStart(2, '0');
+    setModal({ modo: 'criar', dataInicial: `${iso}T${hh}:${mm}` });
   }
 
   function aoClicarEvento(e) {
@@ -103,32 +208,47 @@ export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={mesAnterior}
+          <button type="button" onClick={anterior}
             className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-            title="Mês anterior"
+            title={view === 'dia' ? 'Dia anterior' : view === 'semana' ? 'Semana anterior' : 'Mês anterior'}
           ><ChevronLeft size={16} /></button>
 
           <button type="button" onClick={irHoje}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >Hoje</button>
 
-          <button type="button" onClick={proximoMes}
+          <button type="button" onClick={proximo}
             className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-            title="Próximo mês"
+            title={view === 'dia' ? 'Próximo dia' : view === 'semana' ? 'Próxima semana' : 'Próximo mês'}
           ><ChevronRight size={16} /></button>
 
-          <h2 className="ml-2 text-lg font-semibold text-slate-900 capitalize">
-            {NOMES_MES[mes - 1]} de {ano}
+          <h2 className="ml-2 text-base md:text-lg font-semibold text-slate-900 capitalize">
+            {titulo}
           </h2>
         </div>
 
-        {podeEditar && (
-          <button type="button" onClick={() => setModal({ modo: 'criar' })}
-            className="inline-flex items-center gap-2 rounded-lg bg-nexus-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-nexus-800"
-          >
-            <Plus size={14} /> Novo evento
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Sprint 24B — Switch de view */}
+          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+            <BotaoView ativo={view === 'dia'} onClick={() => setView('dia')} icone={<CalendarClock size={12} />}>
+              Dia
+            </BotaoView>
+            <BotaoView ativo={view === 'semana'} onClick={() => setView('semana')} icone={<CalendarRange size={12} />}>
+              Semana
+            </BotaoView>
+            <BotaoView ativo={view === 'mes'} onClick={() => setView('mes')} icone={<CalendarDays size={12} />}>
+              Mês
+            </BotaoView>
+          </div>
+
+          {podeEditar && (
+            <button type="button" onClick={() => setModal({ modo: 'criar' })}
+              className="inline-flex items-center gap-2 rounded-lg bg-nexus-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-nexus-800"
+            >
+              <Plus size={14} /> Novo evento
+            </button>
+          )}
+        </div>
       </div>
 
       {erro && (
@@ -137,13 +257,32 @@ export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
 
       {carregando && <div className="mb-2 text-xs text-slate-500">Carregando eventos...</div>}
 
-      <CalendarioMensal
-        ano={ano}
-        mes={mes}
-        eventos={eventos}
-        aoClicarDia={podeEditar ? aoClicarDia : undefined}
-        aoClicarEvento={aoClicarEvento}
-      />
+      {/* Render condicional por view */}
+      {view === 'mes' && (
+        <CalendarioMensal
+          ano={referencia.getFullYear()}
+          mes={referencia.getMonth() + 1}
+          eventos={eventos}
+          aoClicarDia={podeEditar ? aoClicarDia : undefined}
+          aoClicarEvento={aoClicarEvento}
+        />
+      )}
+      {view === 'semana' && (
+        <CalendarioTimeline
+          dias={diasDaSemana(referencia)}
+          eventos={eventos}
+          aoClicarSlot={podeEditar ? aoClicarSlot : undefined}
+          aoClicarEvento={aoClicarEvento}
+        />
+      )}
+      {view === 'dia' && (
+        <CalendarioTimeline
+          dias={[new Date(referencia)]}
+          eventos={eventos}
+          aoClicarSlot={podeEditar ? aoClicarSlot : undefined}
+          aoClicarEvento={aoClicarEvento}
+        />
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
         <Legenda cor="bg-sky-500"     texto="Reunião" />
@@ -171,6 +310,23 @@ export default function QuadroCalendario({ quadro, podeEditar, aoClicarCard }) {
   );
 }
 
+function BotaoView({ ativo, onClick, icone, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+        ativo
+          ? 'bg-nexus-700 text-white'
+          : 'text-slate-600 hover:bg-slate-50',
+      ].join(' ')}
+    >
+      {icone} {children}
+    </button>
+  );
+}
+
 function Legenda({ cor, texto }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -190,7 +346,11 @@ function ModalEvento({ quadroId, modo, evento, dataInicial, podeEditar, onFechar
   const [tipo, setTipo] = useState(evento?.tipo || 'outro');
   const [dataInicio, setDataInicio] = useState(() => {
     if (evento?.data_inicio) return paraInputDateTime(evento.data_inicio);
-    if (dataInicial) return `${dataInicial}T09:00`;
+    if (dataInicial) {
+      // Pode vir como "YYYY-MM-DD" (click num dia no mensal) ou
+      // "YYYY-MM-DDTHH:MM" (click num slot no timeline).
+      return dataInicial.includes('T') ? dataInicial : `${dataInicial}T09:00`;
+    }
     return paraInputDateTime(new Date());
   });
   const [dataFim, setDataFim] = useState(evento?.data_fim ? paraInputDateTime(evento.data_fim) : '');
@@ -202,10 +362,23 @@ function ModalEvento({ quadroId, modo, evento, dataInicial, podeEditar, onFechar
   const [recorrenciaAte, setRecorrenciaAte] = useState(
     evento?.recorrencia_ate ? String(evento.recorrencia_ate).slice(0, 10) : '',
   );
+  // Sprint 24 — cor opcional + múltiplos responsáveis
+  const [cor, setCor] = useState(evento?.cor || '');
+  const [responsavelIds, setResponsavelIds] = useState(
+    (evento?.responsaveis || []).map((p) => p.id),
+  );
+  const [pessoas, setPessoas] = useState([]);
 
   const [carregandoMestre, setCarregandoMestre] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+
+  // Sprint 24 — carrega pessoas ativas (responsáveis podem ser de equipes diferentes)
+  useEffect(() => {
+    api.get('/pessoas')
+      .then((r) => setPessoas((r.data || []).filter((p) => p.ativo)))
+      .catch(() => { /* sem permissão — deixa vazio */ });
+  }, []);
 
   const ehRecorrente = !!recorrenciaTipo;
   const visualizando = modo === 'editar' && !podeEditar;
@@ -228,6 +401,9 @@ function ModalEvento({ quadroId, modo, evento, dataInicial, podeEditar, onFechar
           setObservacao(m.observacao || '');
           setRecorrenciaTipo(m.recorrencia_tipo || '');
           setRecorrenciaAte(m.recorrencia_ate ? String(m.recorrencia_ate).slice(0, 10) : '');
+          // Sprint 24
+          setCor(m.cor || '');
+          setResponsavelIds((m.responsaveis || []).map((p) => p.id));
         })
         .catch((err) => setErro(mensagemDeErro(err, 'Não consegui carregar os dados originais.')))
         .finally(() => setCarregandoMestre(false));
@@ -252,14 +428,22 @@ function ModalEvento({ quadroId, modo, evento, dataInicial, podeEditar, onFechar
         observacao: observacao || null,
         recorrencia_tipo: recorrenciaTipo || null,
         recorrencia_ate: recorrenciaTipo && recorrenciaAte ? recorrenciaAte : null,
+        // Sprint 24
+        cor: cor || null,
+        responsavel_ids: responsavelIds,
       };
+      // TEMP DIAG — remover após investigação do bug "calendário do quadro não cria"
+      console.log('[DIAG-cal] →', modo === 'criar' ? 'POST' : 'PUT', `/quadros/${quadroId}/eventos`, 'body:', body);
+      let r;
       if (modo === 'criar') {
-        await api.post(`/quadros/${quadroId}/eventos`, body);
+        r = await api.post(`/quadros/${quadroId}/eventos`, body);
       } else {
-        await api.put(`/quadros/${quadroId}/eventos/${evento.id}`, body);
+        r = await api.put(`/quadros/${quadroId}/eventos/${evento.id}`, body);
       }
+      console.log('[DIAG-cal] ← resposta status', r.status, 'data:', r.data);
       onSalvo();
     } catch (err) {
+      console.error('[DIAG-cal] ✗ erro no save:', err.response?.status, err.response?.data, err);
       setErro(mensagemDeErro(err, 'Não consegui salvar.'));
     } finally {
       setSalvando(false);
@@ -421,6 +605,56 @@ function ModalEvento({ quadroId, modo, evento, dataInicial, podeEditar, onFechar
           <label className="block text-sm font-medium text-slate-900 mb-1">Link (opcional)</label>
           <input className={inputCls} type="url" value={link} onChange={(e) => setLink(e.target.value)}
             maxLength={2048} placeholder="https://meet.google.com/..." />
+        </div>
+
+        {/* Sprint 24 — Múltiplos responsáveis */}
+        <div>
+          <label className="block text-sm font-medium text-slate-900 mb-1">
+            Responsáveis
+            {responsavelIds.length > 0 && (
+              <span className="ml-1 text-xs font-normal text-slate-500">
+                ({responsavelIds.length} selecionado{responsavelIds.length === 1 ? '' : 's'})
+              </span>
+            )}
+          </label>
+          <MultiSelectPessoas
+            pessoas={pessoas}
+            selecionadosIds={responsavelIds}
+            onChange={setResponsavelIds}
+          />
+        </div>
+
+        {/* Sprint 24 — Cor opcional */}
+        <div>
+          <label className="block text-sm font-medium text-slate-900 mb-1">
+            Cor <span className="text-xs font-normal text-slate-500">(opcional — se não escolher, usa cor por tipo)</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCor('')}
+              className={[
+                'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] border',
+                !cor ? 'border-nexus-500 bg-nexus-50 text-nexus-800 font-medium' : 'border-slate-300 bg-white text-slate-600',
+              ].join(' ')}
+              title="Usar cor padrão do tipo"
+            >
+              Padrão do tipo
+            </button>
+            {CORES.map((c) => (
+              <button
+                key={c.token}
+                type="button"
+                onClick={() => setCor(c.token)}
+                className={[
+                  'h-6 w-6 rounded-full transition-transform',
+                  c.classe,
+                  cor === c.token ? 'ring-2 ring-offset-1 ring-nexus-700 scale-110' : 'hover:scale-105',
+                ].join(' ')}
+                title={c.token}
+              />
+            ))}
+          </div>
         </div>
 
         <div>
