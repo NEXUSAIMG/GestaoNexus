@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Globe, Lock, Users2, X, Calendar,
   AlertCircle, Trash2, Archive, Settings, Tag as TagIcon, KanbanSquare,
   Workflow, GitBranch, ListChecks, CheckCircle2, GripVertical, Pencil,
+  Building2,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -79,6 +80,16 @@ export default function Quadro() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 24 — item 1.5: cartórios vinculados a este quadro (com coluna atual)
+  const [cartoriosDoQuadro, setCartoriosDoQuadro] = useState([]);
+
+  // Item 11 — gate de versão pra resolver race condition entre múltiplos
+  // carregar() em paralelo (ex: drag dispara um, save de modal dispara outro).
+  // Sem isso, o response do request mais ANTIGO pode chegar depois e
+  // sobrescrever o quadro com dados "velhos" — sintoma clássico
+  // do bug "card volta ao estado antigo".
+  const carregaIdRef = useRef(0);
+
   // Filtros
   const [filtroResponsavel, setFiltroResponsavel] = useState('');
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
@@ -103,20 +114,35 @@ export default function Quadro() {
   const [modalDecisao, setModalDecisao] = useState(null); // { instancia_no_id, rotulo, saidas }
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const r = await api.get(`/quadros/${id}`);
+      // Item 11 — se outro carregar() começou enquanto este estava em flight,
+      // descarta este response. O mais recente sempre vence.
+      if (meuId !== carregaIdRef.current) {
+        console.log('[DIAG-card] ⚠ carregar() #' + meuId + ' descartado (#' + carregaIdRef.current + ' em flight)');
+        return;
+      }
       // TEMP DIAG — remover após investigação do bug "card volta ao estado antigo"
-      console.log('[DIAG-card] ← GET /quadros recarregou', r.data.cards.length, 'cards:',
+      console.log('[DIAG-card] ← GET /quadros #' + meuId + ' recarregou', r.data.cards.length, 'cards:',
         r.data.cards.map((c) => `${c.id.slice(0, 8)} "${c.titulo}" prazo=${c.data_prazo || '∅'} resp=${c.responsavel_id?.slice(0, 8) || '∅'} etqs=${(c.etiqueta_ids || []).length}`));
       setQuadro(r.data);
       // Em paralelo, descobre se este quadro é de uma instância de processo
       carregarInstancia();
+      // Sprint 24 — carrega cartórios vinculados a este quadro
+      carregarCartorios();
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar o quadro.'));
+      // Só mostra erro se este é o request mais recente
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar o quadro.'));
+      }
     } finally {
-      setCarregando(false);
+      // Só desliga loading se este é o request mais recente
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
@@ -131,6 +157,17 @@ export default function Quadro() {
       setInstancia(r.data);
     } catch {
       setInstancia(null);
+    }
+  }
+
+  // Sprint 24 — item 1.5: lista cartórios vinculados ao quadro com coluna atual.
+  // Falha silenciosa: módulo de cartórios pode não estar disponível.
+  async function carregarCartorios() {
+    try {
+      const r = await api.get(`/quadros/${id}/cartorios`);
+      setCartoriosDoQuadro(r.data || []);
+    } catch {
+      setCartoriosDoQuadro([]);
     }
   }
 
@@ -427,11 +464,14 @@ export default function Quadro() {
               const cardsDaColuna = cardsFiltrados
                 .filter((c) => c.coluna_id === col.id)
                 .sort((a, b) => a.ordem - b.ordem);
+              // Sprint 24 — cartórios posicionados nesta fase
+              const cartoriosNestaFase = cartoriosDoQuadro.filter((c) => c.coluna_id === col.id);
               return (
                 <Coluna
                   key={col.id}
                   coluna={col}
                   cards={cardsDaColuna}
+                  cartoriosNestaFase={cartoriosNestaFase}
                   podeEditar={quadro.pode_editar}
                   etiquetas={quadro.etiquetas}
                   aoClicarCard={(c) => setCardAberto(c.id)}
@@ -714,7 +754,7 @@ function moverCardLocal(quadro, cardId, novaColunaId, novaPosicao) {
 // Coluna
 // =============================================================================
 
-function Coluna({ coluna, cards, podeEditar, etiquetas, aoClicarCard, aoNovoCard, aoArquivarColuna }) {
+function Coluna({ coluna, cards, cartoriosNestaFase = [], podeEditar, etiquetas, aoClicarCard, aoNovoCard, aoArquivarColuna }) {
   // Sprint 19: useSortable pro próprio drag da coluna (handle no header)
   const sortable = useSortable({ id: 'col-' + coluna.id });
   // Mantido: useDroppable pra coluna ser zona de drop de cards (mesmo quando vazia)
@@ -793,6 +833,28 @@ function Coluna({ coluna, cards, podeEditar, etiquetas, aoClicarCard, aoNovoCard
           </div>
         )}
       </header>
+
+      {/* Sprint 24 — item 1.5: cartórios posicionados nesta fase do kanban */}
+      {cartoriosNestaFase.length > 0 && (
+        <div className="mx-2 mb-1 rounded-lg border border-amber-200 bg-amber-50/60 p-1.5">
+          <div className="flex items-center gap-1 px-1 pb-1 text-[9px] uppercase tracking-wider font-semibold text-amber-700">
+            <Building2 size={9} /> Cartórios ({cartoriosNestaFase.length})
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {cartoriosNestaFase.map((c) => (
+              <Link
+                key={c.id}
+                to={`/cartorios/${c.id}`}
+                className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-300 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 hover:bg-amber-100 hover:border-amber-400 transition-colors"
+                title={`${c.nome}${c.cidade ? ' · ' + c.cidade : ''}${c.uf ? '/' + c.uf : ''}`}
+              >
+                <Building2 size={8} />
+                <span className="truncate max-w-[140px]">{c.nome}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div ref={drop.setNodeRef} className="flex-1 space-y-2 overflow-y-auto px-2 pb-2 pt-1">
         <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>

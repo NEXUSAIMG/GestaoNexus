@@ -633,6 +633,34 @@ export async function listarAtualizacoes(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// =============================================================================
+// Sprint 24 — Item 1.5: listar cartórios de um quadro específico
+// =============================================================================
+
+/**
+ * GET /api/quadros/:id/cartorios
+ *
+ * Lista cartórios vinculados a um quadro, com a coluna atual onde
+ * cada um está posicionado. Pra renderizar na UI do kanban como uma
+ * faixa de chips no topo de cada coluna.
+ *
+ * Retorna apenas cartórios não arquivados.
+ */
+export async function listarPorQuadro(req, res, next) {
+  try {
+    const { rows } = await query(
+      `SELECT c.id, c.nome, c.tipo, c.status, c.cidade, c.uf,
+              cq.coluna_id, cq.vinculado_em
+         FROM cartorios_quadros cq
+         JOIN cartorios c ON c.id = cq.cartorio_id
+        WHERE cq.quadro_id = $1 AND c.arquivado_em IS NULL
+        ORDER BY c.nome`,
+      [req.params.id],
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+}
+
 /**
  * POST /api/cartorios/:id/atualizacoes
  * Apenas 'nota' e 'contato' aceitos via API.

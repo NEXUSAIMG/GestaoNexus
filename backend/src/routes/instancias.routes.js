@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import {
-  obter, escolherSaidaDecisao, cancelar, obterPorQuadro,
+  obter, escolherSaidaDecisao, cancelar, obterPorQuadro, listarGeral,
 } from '../controllers/instancias.controller.js';
 import { autenticar } from '../middleware/auth.middleware.js';
 
 const router = Router();
 router.use(autenticar);
+
+// Sprint 22 — listagem geral cross-processo (deve vir ANTES das rotas com :id)
+router.get('/', listarGeral);
 
 // GET /api/instancias/:id
 router.get('/:id', obter);

@@ -11,6 +11,7 @@ import {
   listar as listarEventos, obter as obterEvento,
   criar as criarEvento, atualizar as atualizarEvento, excluir as excluirEvento,
 } from '../controllers/eventos-quadro.controller.js';
+import { listarPorQuadro as listarCartoriosPorQuadro } from '../controllers/cartorios.controller.js';
 import { autenticar } from '../middleware/auth.middleware.js';
 
 const router = Router();
@@ -37,5 +38,8 @@ router.get('/:id/eventos/:eventoId', obterEvento);
 router.post('/:id/eventos', criarEvento);
 router.put('/:id/eventos/:eventoId', atualizarEvento);
 router.delete('/:id/eventos/:eventoId', excluirEvento);
+
+// Sprint 24 — Item 1.5: cartórios vinculados a este quadro (com fase atual)
+router.get('/:id/cartorios', listarCartoriosPorQuadro);
 
 export default router;

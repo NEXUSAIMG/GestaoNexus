@@ -473,3 +473,78 @@ function secaoTabela({ titulo, corTitulo, colunas, linhas, rodape = null }) {
       ${rodapeHtml}
     </div>`;
 }
+
+// =============================================================================
+// Sprint 26 — Aviso de contratos vencendo / vencidos
+// =============================================================================
+
+/**
+ * Aviso para administradores sobre contratos próximos do vencimento
+ * ou já vencidos. Separa em duas seções — vencidos em vermelho
+ * (urgente), vencendo em amarelo (planejamento).
+ *
+ * Entrada: array de contratos com
+ *   { id, titulo, contraparte_nome, data_fim, valor, dias_para_vencer }
+ * onde dias_para_vencer pode ser negativo (já venceu).
+ */
+export function tplContratoVencendo({ contratos = [] } = {}) {
+  const vencidos = contratos.filter((c) => c.dias_para_vencer < 0);
+  const vencendo = contratos.filter((c) => c.dias_para_vencer >= 0);
+
+  const totalUrgentes = vencidos.length;
+  const total = contratos.length;
+
+  const tituloEmail = totalUrgentes > 0
+    ? `${totalUrgentes} contrato${totalUrgentes === 1 ? '' : 's'} vencido${totalUrgentes === 1 ? '' : 's'}`
+      + (vencendo.length > 0 ? ` (+ ${vencendo.length} próximo${vencendo.length === 1 ? '' : 's'} do vencimento)` : '')
+    : `${total} contrato${total === 1 ? '' : 's'} próximo${total === 1 ? '' : 's'} do vencimento`;
+
+  const linhasVencidos = vencidos.map((c) => [
+    escapar(c.titulo) + (c.contraparte_nome ? `<br/><span style="color: ${CORES.texto_secundario}; font-size: 12px;">${escapar(c.contraparte_nome)}</span>` : ''),
+    formatarData(c.data_fim) + `<br/><span style="color: ${CORES.vermelho}; font-size: 11px; font-weight: 600;">venceu há ${Math.abs(c.dias_para_vencer)} dia${Math.abs(c.dias_para_vencer) === 1 ? '' : 's'}</span>`,
+    formatarBRL(c.valor),
+  ]);
+
+  const linhasVencendo = vencendo.map((c) => [
+    escapar(c.titulo) + (c.contraparte_nome ? `<br/><span style="color: ${CORES.texto_secundario}; font-size: 12px;">${escapar(c.contraparte_nome)}</span>` : ''),
+    formatarData(c.data_fim) + `<br/><span style="color: ${CORES.amarelo}; font-size: 11px; font-weight: 600;">${c.dias_para_vencer === 0 ? 'vence hoje' : 'em ' + c.dias_para_vencer + ' dia' + (c.dias_para_vencer === 1 ? '' : 's')}</span>`,
+    formatarBRL(c.valor),
+  ]);
+
+  return {
+    assunto: `[Gestão Nexus] ${tituloEmail}`,
+    html: moldura({
+      titulo: tituloEmail,
+      paragrafos: [
+        totalUrgentes > 0
+          ? {
+              texto: `<strong>${totalUrgentes} contrato${totalUrgentes === 1 ? '' : 's'}</strong> já venceu sem renovação registrada. Confira se foi renovado, encerrado ou se precisa de ação.`,
+              fundo: CORES.vermelho_fundo,
+              cor: CORES.vermelho,
+            }
+          : 'Os contratos abaixo estão próximos do vencimento. Renove, encerre ou atualize o status conforme a situação real.',
+
+        vencidos.length > 0
+          ? secaoTabela({
+              titulo: '⚠ Contratos vencidos',
+              corTitulo: CORES.vermelho,
+              colunas: ['Contrato / Contraparte', 'Data fim', 'Valor'],
+              linhas: linhasVencidos,
+            })
+          : null,
+
+        vencendo.length > 0
+          ? secaoTabela({
+              titulo: 'Próximos do vencimento',
+              corTitulo: CORES.amarelo,
+              colunas: ['Contrato / Contraparte', 'Data fim', 'Valor'],
+              linhas: linhasVencendo,
+            })
+          : null,
+      ].filter(Boolean),
+      botao: { texto: 'Abrir contratos', url: url('/governanca/contratos') },
+      rodape: 'Os contratos só aparecem aqui uma vez por semana enquanto continuarem na janela de alerta. Para parar de receber, mude o status do contrato ou altere a configuração de notificações.',
+    }),
+  };
+}
+

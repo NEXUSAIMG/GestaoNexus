@@ -25,6 +25,8 @@ import instanciasRoutes from './instancias.routes.js';
 import produtosRoutes from './produtos.routes.js';
 import inventarioRoutes from './inventario.routes.js';
 import cartoriosRoutes from './cartorios.routes.js';
+import documentosEmpresaRoutes from './documentos-empresa.routes.js';
+import contratosRoutes from './contratos.routes.js';
 
 const router = Router();
 
@@ -92,5 +94,9 @@ router.use('/inventario', inventarioRoutes);
 
 // Sprint 20 — Cartórios
 router.use('/cartorios', cartoriosRoutes);
+
+// Sprint 21 — Documentos da empresa + Contratos
+router.use('/documentos-empresa', documentosEmpresaRoutes);
+router.use('/contratos', contratosRoutes);
 
 export default router;

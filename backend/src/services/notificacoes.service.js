@@ -17,7 +17,7 @@
 
 import { query } from '../config/database.js';
 import { enviarEmail } from './email.service.js';
-import { tplResumoDiarioAdmin, tplCardsPrazoHoje } from './email-templates.js';
+import { tplResumoDiarioAdmin, tplCardsPrazoHoje, tplContratoVencendo } from './email-templates.js';
 
 /**
  * Cria uma notificação in-app para uma pessoa.
@@ -76,6 +76,7 @@ function configPadrao() {
     email_resumo_diario_admin: true,
     email_card_atribuido: true,
     email_card_prazo_amanha: true,
+    email_contrato_vencendo: true,
     dias_aviso_conta_vencendo: 3,
     dias_aviso_movimento_socio_vencendo: 1,
   };
@@ -426,4 +427,91 @@ export async function enviarAvisosCardsPrazoHoje() {
   }
 
   return { enviados };
+}
+
+// =============================================================================
+// Sprint 26 — Aviso de contratos vencendo / vencidos (cron diário).
+// =============================================================================
+
+/**
+ * Verifica contratos vigentes que estão:
+ *   - dentro da janela `alerta_antes_dias` (vencendo)
+ *   - OU já vencidos (data_fim < hoje)
+ * e ainda não foram alertados nos últimos 7 dias.
+ *
+ * Notifica TODOS os admins ativos via in-app + e-mail (se flag
+ * `email_contrato_vencendo` estiver ligada). Depois marca
+ * `ultimo_alerta_em = NOW()` em cada contrato pra não re-alertar
+ * antes de 7 dias.
+ *
+ * Idempotência: rodar várias vezes no mesmo dia é inofensivo — a partir
+ * do 2º disparo no mesmo dia nenhum contrato passa pelo filtro de
+ * `ultimo_alerta_em < CURRENT_TIMESTAMP - INTERVAL '7 days'`.
+ */
+export async function enviarAvisosContratosVencendo() {
+  const config = await lerConfig();
+
+  // Query: contratos vigentes com data_fim que entra na janela de alerta
+  // OU já venceu. "Em janela" = data_fim <= hoje + alerta_antes_dias.
+  // (Como hoje <= hoje + alerta_antes_dias, isso pega tanto próximos quanto vencidos.)
+  const { rows: contratos } = await query(
+    `SELECT c.id, c.titulo, c.contraparte_nome, c.data_fim, c.valor,
+            (c.data_fim - CURRENT_DATE)::int AS dias_para_vencer
+       FROM contratos c
+      WHERE c.status = 'vigente'
+        AND c.data_fim IS NOT NULL
+        AND c.data_fim <= CURRENT_DATE + (c.alerta_antes_dias || ' days')::interval
+        AND (
+          c.ultimo_alerta_em IS NULL
+          OR c.ultimo_alerta_em < CURRENT_TIMESTAMP - INTERVAL '7 days'
+        )
+      ORDER BY c.data_fim ASC`,
+  );
+
+  if (contratos.length === 0) {
+    console.log('[notificacoes] Nenhum contrato em janela de alerta.');
+    return { enviados: 0, contratos: 0 };
+  }
+
+  const adminsAtivos = await admins();
+  if (adminsAtivos.length === 0) {
+    console.log('[notificacoes] Contratos vencendo: nenhum admin com e-mail.');
+    return { enviados: 0, contratos: contratos.length, motivo: 'sem_admin' };
+  }
+
+  const tpl = tplContratoVencendo({ contratos });
+  const vencidos = contratos.filter((c) => c.dias_para_vencer < 0).length;
+  const vencendo = contratos.length - vencidos;
+
+  const titulo = vencidos > 0
+    ? `${vencidos} contrato${vencidos === 1 ? '' : 's'} vencido${vencidos === 1 ? '' : 's'}`
+      + (vencendo > 0 ? ` (+ ${vencendo} próximo${vencendo === 1 ? '' : 's'})` : '')
+    : `${vencendo} contrato${vencendo === 1 ? '' : 's'} próximo${vencendo === 1 ? '' : 's'} do vencimento`;
+
+  await notificarPessoas({
+    pessoas: adminsAtivos,
+    tipo: 'governanca.contrato_vencendo',
+    titulo,
+    descricao: contratos.slice(0, 3).map((c) => c.titulo).join(' · ')
+      + (contratos.length > 3 ? ` · +${contratos.length - 3}` : ''),
+    link: '/governanca/contratos',
+    contexto: {
+      qtd_vencidos: vencidos,
+      qtd_vencendo: vencendo,
+      ids: contratos.map((c) => c.id),
+    },
+    email: config.email_contrato_vencendo
+      ? { assunto: tpl.assunto, html: tpl.html, template: 'contrato_vencendo' }
+      : null,
+  });
+
+  // Marca como alertado pra não repetir antes de 7 dias.
+  // Única query com ANY pra evitar N updates seriais.
+  await query(
+    `UPDATE contratos SET ultimo_alerta_em = NOW()
+      WHERE id = ANY($1::uuid[])`,
+    [contratos.map((c) => c.id)],
+  );
+
+  return { enviados: adminsAtivos.length, contratos: contratos.length };
 }

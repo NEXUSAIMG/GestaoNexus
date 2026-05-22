@@ -7,11 +7,15 @@ import {
 } from '../services/instancias.service.js';
 
 /**
- * Controller de instâncias de processos — Sprint 15.
+ * Controller de instâncias de processos — Sprint 15 + Sprint 22 (item 3 da spec).
  *
  * Visibilidade alinha com o processo (ver processos.controller.js):
  * admin vê tudo; não-admin vê processos publicados ou de equipes que
  * é membro. Aqui, mesma regra — derivada via JOIN.
+ *
+ * Sprint 22: novo endpoint `listarGeral` cross-processo com filtros
+ * (meu, processo, status, responsável, dias parada) + cálculo de
+ * `dias_sem_movimentacao` baseado na última atualização dos cards.
  *
  * Iniciar instância: admin ou membro de alguma equipe associada ao
  * processo. Cancelar: só admin (ou quem iniciou).
@@ -30,6 +34,12 @@ const escolherSaidaSchema = z.object({
 const cancelarSchema = z.object({
   motivo_cancelamento: z.string().min(3).max(2000),
 });
+
+// Helper pra montar placeholders SQL ($1, $2, ...) sem usar o caractere
+// "$" literal em concatenação — algumas ferramentas de edição corrompem
+// strings tipo "'$' + var". String.fromCharCode(36) é o caractere $.
+const CIFRAO = String.fromCharCode(36);
+const PH = (n) => CIFRAO + n;
 
 // =============================================================================
 // Helpers
@@ -89,7 +99,6 @@ export async function listarPorProcesso(req, res, next) {
     const isAdmin = !!req.pessoa?.administrador;
     const processoId = req.params.id;
 
-    // Confere visibilidade do processo (mesmo padrão de processos.controller#listar)
     const params = [processoId];
     let filtroVisib;
     if (isAdmin) {
@@ -180,8 +189,6 @@ export async function criar(req, res, next) {
     res.status(201).json({ id: r.instanciaId, quadro_id: r.quadroId });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    // Erros do service (ex: "processo precisa estar publicado") são strings;
-    // converte pra AppError 400
     if (err.message && !err.statusCode) {
       next(new AppError(err.message, 400));
     } else {
@@ -199,10 +206,9 @@ export async function criar(req, res, next) {
 export async function obter(req, res, next) {
   try {
     const isAdmin = !!req.pessoa?.administrador;
-    const { pode, instancia } = await podeVerInstancia(req.pessoa.id, isAdmin, req.params.id);
+    const { pode } = await podeVerInstancia(req.pessoa.id, isAdmin, req.params.id);
     if (!pode) throw new NaoEncontradoError('Instância não encontrada');
 
-    // Recarrega completo (podeVerInstancia retorna parcial)
     const { rows: ins } = await query(
       `SELECT i.*, p.nome AS processo_nome, p.cor AS processo_cor,
               pa.nome AS iniciada_por_nome
@@ -214,7 +220,6 @@ export async function obter(req, res, next) {
     );
     if (!ins[0]) throw new NaoEncontradoError('Instância não encontrada');
 
-    // Estado de cada nó
     const { rows: nos } = await query(
       `SELECT inn.*, n.tipo AS no_tipo, n.rotulo AS no_rotulo,
               n.descricao AS no_descricao, n.posicao_x, n.posicao_y,
@@ -230,12 +235,9 @@ export async function obter(req, res, next) {
       [req.params.id],
     );
 
-    // Decisões pendentes: nós tipo 'decisao' que estão concluidos
-    // mas SEM saida_escolhida_aresta_id
     const decisoesPendentes = nos
       .filter((n) => n.no_tipo === 'decisao' && n.status === 'concluido' && !n.saida_escolhida_aresta_id);
 
-    // Pra cada decisão pendente, busca as saídas possíveis
     const saidasPorNo = {};
     for (const dec of decisoesPendentes) {
       const { rows: saidas } = await query(
@@ -266,7 +268,6 @@ export async function obter(req, res, next) {
 /**
  * GET /api/quadros/:id/instancia
  * Atalho: dado um quadro, retorna a instância vinculada (se houver).
- * Útil pro frontend do Quadro.jsx detectar e renderizar header de processo.
  */
 export async function obterPorQuadro(req, res, next) {
   try {
@@ -298,11 +299,9 @@ export async function obterPorQuadro(req, res, next) {
     );
 
     if (!rows[0]) {
-      // Não é quadro de instância — retorna 204 (sem conteúdo)
       return res.status(204).send();
     }
 
-    // Reusa o obter
     req.params.id = rows[0].id;
     return obter(req, res, next);
   } catch (err) { next(err); }
@@ -317,7 +316,6 @@ export async function escolherSaidaDecisao(req, res, next) {
   try {
     const d = escolherSaidaSchema.parse(req.body);
 
-    // Valida que o nó da instância existe e que a pessoa pode operar o processo
     const { rows: ins } = await query(
       `SELECT i.id, i.processo_id, inn.id AS instancia_no_id
          FROM processos_instancias_nos inn
@@ -409,4 +407,168 @@ export async function cancelar(req, res, next) {
   } finally {
     client.release();
   }
+}
+
+// =============================================================================
+// Sprint 22 — Listagem geral cross-processo com filtros (item 3 da spec)
+// =============================================================================
+
+/**
+ * GET /api/instancias
+ *
+ * Lista instâncias de QUALQUER processo (que a pessoa tem visibilidade).
+ * Pra dashboards do tipo "em andamento" e "minhas".
+ *
+ * Query params (todos opcionais):
+ *   ?meu=true              — só instâncias onde sou iniciador OU
+ *                            responsável por algum card ativo
+ *   ?status=em_andamento   — default: 'em_andamento'. 'todas' não filtra
+ *   ?processo_id=uuid      — limita a um processo específico
+ *   ?responsavel_id=uuid   — instâncias com card ativo dessa pessoa
+ *   ?paradas_dias=7        — só instâncias sem movimentação há N dias
+ *   ?busca=texto           — ILIKE em nome da instância ou nome do processo
+ *
+ * Retorna por instância:
+ *   - cabeçalho (id, nome, status, processo_nome, etc.)
+ *   - progresso (total_nos, nos_concluidos, nos_ativos)
+ *   - dias_sem_movimentacao (calculado: hoje - ultima_movimentacao)
+ *   - flag `parada` (true se em_andamento E dias_sem_movimentacao >= 7)
+ *   - responsaveis_ativos: [{id, nome}] pessoas atribuídas a cards ativos
+ */
+export async function listarGeral(req, res, next) {
+  try {
+    const isAdmin = !!req.pessoa?.administrador;
+    const pessoaId = req.pessoa.id;
+
+    const filtros = [];
+    const params = [];
+
+    // Permissão: admin vê tudo; demais só processos publicados ou de equipes que é membro
+    if (!isAdmin) {
+      params.push(pessoaId);
+      filtros.push(
+        '(proc.status = ' + "'publicado'" + ' OR EXISTS (' +
+          'SELECT 1 FROM processos_equipes pe ' +
+          'JOIN equipes_membros em ON em.equipe_id = pe.equipe_id ' +
+          'WHERE pe.processo_id = proc.id AND em.pessoa_id = ' + PH(params.length) +
+        '))'
+      );
+    }
+
+    // Status (default: em_andamento; 'todas' não filtra)
+    const status = req.query.status || 'em_andamento';
+    if (status !== 'todas') {
+      params.push(status);
+      filtros.push('i.status = ' + PH(params.length));
+    }
+
+    // Processo específico
+    if (req.query.processo_id) {
+      params.push(req.query.processo_id);
+      filtros.push('i.processo_id = ' + PH(params.length));
+    }
+
+    // "Minhas" — sou criadora OU responsável por card ativo
+    if (req.query.meu === 'true') {
+      params.push(pessoaId);
+      const ph = PH(params.length);
+      filtros.push(
+        '(i.iniciada_por_id = ' + ph + ' OR EXISTS (' +
+          'SELECT 1 FROM processos_instancias_nos inn ' +
+          'JOIN cards_responsaveis cr ON cr.card_id = inn.card_id ' +
+          'WHERE inn.instancia_id = i.id AND inn.status = ' + "'ativo'" +
+          ' AND cr.pessoa_id = ' + ph +
+        '))'
+      );
+    }
+
+    // Responsável específico (independente de "meu")
+    if (req.query.responsavel_id) {
+      params.push(req.query.responsavel_id);
+      filtros.push(
+        'EXISTS (' +
+          'SELECT 1 FROM processos_instancias_nos inn ' +
+          'JOIN cards_responsaveis cr ON cr.card_id = inn.card_id ' +
+          'WHERE inn.instancia_id = i.id AND inn.status = ' + "'ativo'" +
+          ' AND cr.pessoa_id = ' + PH(params.length) +
+        ')'
+      );
+    }
+
+    // Paradas há X dias
+    if (req.query.paradas_dias) {
+      const dias = parseInt(req.query.paradas_dias, 10);
+      if (Number.isFinite(dias) && dias > 0) {
+        params.push(dias);
+        filtros.push(
+          '(SELECT COALESCE(MAX(c.atualizado_em), i.iniciada_em) ' +
+             'FROM processos_instancias_nos inn ' +
+             'LEFT JOIN cards c ON c.id = inn.card_id ' +
+            'WHERE inn.instancia_id = i.id' +
+          ') < now() - (' + PH(params.length) + ' || ' + "' days'" + ')::interval'
+        );
+      }
+    }
+
+    // Busca textual
+    if (req.query.busca) {
+      params.push('%' + req.query.busca + '%');
+      const ph = PH(params.length);
+      filtros.push('(i.nome ILIKE ' + ph + ' OR proc.nome ILIKE ' + ph + ')');
+    }
+
+    const where = filtros.length > 0 ? 'WHERE ' + filtros.join(' AND ') : '';
+
+    // SELECT principal com subqueries de agregação. O CIFRAO aqui não
+    // entra na string (são placeholders pgsql).
+    const sql =
+      'SELECT ' +
+        'i.id, i.nome, i.descricao, i.status, i.versao_processo, ' +
+        'i.data_inicio, i.iniciada_em, i.concluida_em, i.cancelada_em, ' +
+        'i.quadro_id, i.iniciada_por_id, ' +
+        'p.nome AS iniciada_por_nome, ' +
+        'proc.id AS processo_id, proc.nome AS processo_nome, proc.cor AS processo_cor, ' +
+        '(SELECT COUNT(*)::int FROM processos_instancias_nos inn WHERE inn.instancia_id = i.id) AS total_nos, ' +
+        "(SELECT COUNT(*)::int FROM processos_instancias_nos inn WHERE inn.instancia_id = i.id AND inn.status = 'concluido') AS nos_concluidos, " +
+        "(SELECT COUNT(*)::int FROM processos_instancias_nos inn WHERE inn.instancia_id = i.id AND inn.status = 'ativo') AS nos_ativos, " +
+        '(SELECT COALESCE(MAX(c.atualizado_em), i.iniciada_em) ' +
+           'FROM processos_instancias_nos inn ' +
+           'LEFT JOIN cards c ON c.id = inn.card_id ' +
+          'WHERE inn.instancia_id = i.id) AS ultima_movimentacao, ' +
+        'COALESCE(' +
+          "(SELECT json_agg(DISTINCT jsonb_build_object('id', pa3.id, 'nome', pa3.nome)) " +
+             'FROM processos_instancias_nos inn ' +
+             'JOIN cards_responsaveis cr ON cr.card_id = inn.card_id ' +
+             'JOIN pessoas_acesso pa3 ON pa3.id = cr.pessoa_id ' +
+            "WHERE inn.instancia_id = i.id AND inn.status = 'ativo'), " +
+          "'[]'::json" +
+        ') AS responsaveis_ativos ' +
+      'FROM processos_instancias i ' +
+      'JOIN processos proc ON proc.id = i.processo_id ' +
+      'LEFT JOIN pessoas_acesso p ON p.id = i.iniciada_por_id ' +
+      where + ' ' +
+      "ORDER BY (i.status = 'em_andamento') DESC, ultima_movimentacao ASC NULLS LAST, i.iniciada_em DESC " +
+      'LIMIT 200';
+
+    const { rows } = await query(sql, params);
+
+    // Calcula dias_sem_movimentacao + flag parada
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const formatadas = rows.map((r) => {
+      let dias = null;
+      if (r.ultima_movimentacao) {
+        const m = new Date(r.ultima_movimentacao);
+        m.setHours(0, 0, 0, 0);
+        dias = Math.floor((hoje - m) / (1000 * 60 * 60 * 24));
+      }
+      return {
+        ...r,
+        dias_sem_movimentacao: dias,
+        parada: r.status === 'em_andamento' && dias !== null && dias >= 7,
+      };
+    });
+
+    res.json(formatadas);
+  } catch (err) { next(err); }
 }

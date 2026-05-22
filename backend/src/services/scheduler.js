@@ -2,7 +2,11 @@ import cron from 'node-cron';
 import { env, asaasConfigurado, seuCartorioConfigurado } from '../config/env.js';
 import { pool } from '../config/database.js';
 import { sincronizar } from './asaas.sync.js';
-import { enviarResumoDiarioParaAdmins, enviarAvisosCardsPrazoHoje } from './notificacoes.service.js';
+import {
+  enviarResumoDiarioParaAdmins,
+  enviarAvisosCardsPrazoHoje,
+  enviarAvisosContratosVencendo,
+} from './notificacoes.service.js';
 import { estenderSeriesInfinitas } from './recorrencia-contas.service.js';
 import { sincronizarTodos as sincronizarTodosProdutos } from './portfolio-sync.service.js';
 
@@ -111,6 +115,9 @@ export function iniciarAgendadorNotificacoes() {
         // Sprint 10 — avisos de cards com prazo hoje
         const r2 = await enviarAvisosCardsPrazoHoje();
         console.log(`[cron] Cards com prazo hoje: ${JSON.stringify(r2)}`);
+        // Sprint 26 — avisos de contratos vencendo / vencidos
+        const r3 = await enviarAvisosContratosVencendo();
+        console.log(`[cron] Contratos vencendo: ${JSON.stringify(r3)}`);
       } catch (err) {
         console.error('[cron] Erro ao enviar resumo diário:', err?.message || err);
       } finally {

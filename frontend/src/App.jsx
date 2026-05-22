@@ -18,6 +18,8 @@ import Atas from './pages/Atas.jsx';
 import Decisoes from './pages/Decisoes.jsx';
 import ContratoSocial from './pages/ContratoSocial.jsx';
 import CalendarioGov from './pages/CalendarioGov.jsx';
+import DocumentosEmpresa from './pages/DocumentosEmpresa.jsx';
+import Contratos from './pages/Contratos.jsx';
 import Configuracoes from './pages/Configuracoes.jsx';
 import Equipes from './pages/Equipes.jsx';
 import Tarefas from './pages/Tarefas.jsx';
@@ -25,10 +27,13 @@ import Quadro from './pages/Quadro.jsx';
 import Processos from './pages/Processos.jsx';
 import EditorProcesso from './pages/EditorProcesso.jsx';
 import InstanciasProcesso from './pages/InstanciasProcesso.jsx';
+import Instancias from './pages/Instancias.jsx';
 import Portfolio from './pages/Portfolio.jsx';
 import PortfolioProduto from './pages/PortfolioProduto.jsx';
 import Inventario from './pages/Inventario.jsx';
 import InventarioItem from './pages/InventarioItem.jsx';
+import Cartorios from './pages/Cartorios.jsx';
+import Cartorio from './pages/Cartorio.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -75,6 +80,9 @@ export default function App() {
           <Route path="atas" element={<Atas />} />
           <Route path="decisoes" element={<Decisoes />} />
           <Route path="contrato" element={<ContratoSocial />} />
+          {/* Sprint 21 — Documentos da empresa + Contratos */}
+          <Route path="documentos" element={<DocumentosEmpresa />} />
+          <Route path="contratos" element={<Contratos />} />
           <Route path="calendario" element={<CalendarioGov />} />
         </Route>
 
@@ -94,6 +102,9 @@ export default function App() {
         {/* Sprint 15 — Instâncias / execuções do processo */}
         <Route path="/processos/:id/instancias" element={<InstanciasProcesso />} />
 
+        {/* Sprint 22 — Dashboard cross-processo de instâncias em andamento */}
+        <Route path="/instancias" element={<Instancias />} />
+
         {/* Sprint 16 — Portfólio de produtos */}
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/portfolio/:id" element={<PortfolioProduto />} />
@@ -101,6 +112,10 @@ export default function App() {
         {/* Sprint 17 — Inventário / Patrimônio */}
         <Route path="/inventario" element={<Inventario />} />
         <Route path="/inventario/:id" element={<InventarioItem />} />
+
+        {/* Sprint 20 — Cartórios */}
+        <Route path="/cartorios" element={<Cartorios />} />
+        <Route path="/cartorios/:id" element={<Cartorio />} />
 
         {/* Sprint 7 — Configurações de notificações (admin-only) */}
         <Route

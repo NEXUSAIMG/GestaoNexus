@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { ScrollText, Vote, FileText, Calendar } from 'lucide-react';
+import { ScrollText, Vote, FileText, Calendar, Folder, FileSignature } from 'lucide-react';
 
 /**
  * Hub da Governança — Sprint 6.
@@ -10,10 +10,12 @@ import { ScrollText, Vote, FileText, Calendar } from 'lucide-react';
  */
 
 const abas = [
-  { to: '/governanca/atas',       rotulo: 'Atas',            icone: ScrollText },
-  { to: '/governanca/decisoes',   rotulo: 'Decisões',        icone: Vote },
-  { to: '/governanca/contrato',   rotulo: 'Contrato Social', icone: FileText },
-  { to: '/governanca/calendario', rotulo: 'Calendário',      icone: Calendar },
+  { to: '/governanca/atas',        rotulo: 'Atas',             icone: ScrollText },
+  { to: '/governanca/decisoes',    rotulo: 'Decisões',         icone: Vote },
+  { to: '/governanca/contrato',    rotulo: 'Contrato Social',  icone: FileText },
+  { to: '/governanca/documentos',  rotulo: 'Documentos',       icone: Folder },
+  { to: '/governanca/contratos',   rotulo: 'Contratos',        icone: FileSignature },
+  { to: '/governanca/calendario',  rotulo: 'Calendário',       icone: Calendar },
 ];
 
 export default function Governanca() {
