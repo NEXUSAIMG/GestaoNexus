@@ -76,7 +76,7 @@ export async function login(req, res, next) {
     const { email, senha } = loginSchema.parse(req.body);
 
     const { rows } = await query(
-      `SELECT id, nome, email, senha_hash, administrador, ativo
+      `SELECT id, nome, email, senha_hash, administrador, ativo, acesso_restrito
          FROM pessoas_acesso
         WHERE lower(email) = lower($1)`,
       [email],
@@ -143,6 +143,7 @@ export async function login(req, res, next) {
         nome: pessoa.nome,
         email: pessoa.email,
         administrador: pessoa.administrador,
+        acesso_restrito: pessoa.acesso_restrito,
       },
       representacoes: representacoes.map(serializarRepresentacao),
       // Operacional não tem socio_id (e nem precisa) — entra direto.
@@ -204,6 +205,7 @@ export async function eu(req, res, next) {
         nome: req.pessoa.nome,
         email: req.pessoa.email,
         administrador: req.pessoa.administrador,
+        acesso_restrito: req.pessoa.acesso_restrito,
       },
       representacoes: representacoes.map(serializarRepresentacao),
       contexto_socio_id: req.contextoSocioId,

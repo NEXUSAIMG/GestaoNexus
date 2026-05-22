@@ -9,7 +9,10 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "migrate": "node db/scripts/migrate.js",
-    "seed": "node db/scripts/seed.js"
+    "seed": "node db/scripts/seed.js",
+    "pessoas": "node db/scripts/listar-pessoas.js",
+    "resetar-senha": "node db/scripts/resetar-senha.js",
+    "acesso-restrito": "node db/scripts/definir-acesso-restrito.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

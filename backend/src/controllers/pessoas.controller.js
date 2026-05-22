@@ -16,6 +16,8 @@ const criarSchema = z.object({
   telefone: z.string().max(50).optional().nullable(),
   cpf: z.string().max(14).optional().nullable(),
   administrador: z.boolean().default(false),
+  // Sprint 31 — acesso restrito
+  acesso_restrito: z.boolean().default(false),
 });
 
 const atualizarSchema = z.object({
@@ -25,6 +27,8 @@ const atualizarSchema = z.object({
   cpf: z.string().max(14).nullable().optional(),
   administrador: z.boolean().optional(),
   ativo: z.boolean().optional(),
+  // Sprint 31 — acesso restrito
+  acesso_restrito: z.boolean().optional(),
 });
 
 const alterarSenhaSchema = z.object({
@@ -41,6 +45,7 @@ function serializar(row) {
     cpf: row.cpf,
     administrador: row.administrador,
     ativo: row.ativo,
+    acesso_restrito: row.acesso_restrito,
     ultimo_login_em: row.ultimo_login_em,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -51,7 +56,7 @@ export async function listar(_req, res, next) {
   try {
     const { rows } = await query(
       `SELECT p.id, p.nome, p.email, p.telefone, p.cpf,
-              p.administrador, p.ativo, p.ultimo_login_em,
+              p.administrador, p.ativo, p.acesso_restrito, p.ultimo_login_em,
               p.created_at, p.updated_at,
               COUNT(r.id) FILTER (WHERE r.ativo = TRUE) AS qtd_representacoes
          FROM pessoas_acesso p
@@ -84,16 +89,16 @@ export async function criar(req, res, next) {
 
     const { rows } = await query(
       `INSERT INTO pessoas_acesso
-         (nome, email, senha_hash, telefone, cpf, administrador)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (nome, email, senha_hash, telefone, cpf, administrador, acesso_restrito)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [d.nome, d.email, senha_hash, d.telefone ?? null, d.cpf ?? null, d.administrador],
+      [d.nome, d.email, senha_hash, d.telefone ?? null, d.cpf ?? null, d.administrador, d.acesso_restrito],
     );
 
     await registrarAcao({
       pessoa_acesso_id: req.pessoa.id,
       acao: 'pessoa_acesso.criar',
-      detalhes: { criado_id: rows[0].id, email: d.email },
+      detalhes: { criado_id: rows[0].id, email: d.email, acesso_restrito: d.acesso_restrito },
       req,
     });
 

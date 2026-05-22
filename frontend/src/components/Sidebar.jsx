@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
+// Sprint 31 — itens marcados com `liberadoRestrito: true` aparecem mesmo
+// para pessoas com acesso restrito. Os demais ficam invisíveis nesse caso.
 const itensBase = [
   { to: '/visao-geral',   rotulo: 'Visão geral',     icone: Eye },
   { to: '/',              rotulo: 'Painel',          icone: LayoutDashboard },
@@ -31,10 +33,10 @@ const itensBase = [
   { to: '/mensal',        rotulo: 'Mês a mês',       icone: CalendarDays },
   { to: '/lucros',        rotulo: 'Sócios & Lucros', icone: PieChart },
   { to: '/governanca',    rotulo: 'Governança',      icone: FileText },
-  { to: '/tarefas',       rotulo: 'Tarefas',         icone: KanbanSquare },
-  { to: '/processos',     rotulo: 'Processos',       icone: Workflow },
-  { to: '/instancias',    rotulo: 'Em andamento',    icone: Activity },
-  { to: '/cartorios',     rotulo: 'Cartórios',       icone: Building2 },
+  { to: '/tarefas',       rotulo: 'Tarefas',         icone: KanbanSquare, liberadoRestrito: true },
+  { to: '/processos',     rotulo: 'Processos',       icone: Workflow,     liberadoRestrito: true },
+  { to: '/instancias',    rotulo: 'Em andamento',    icone: Activity,     liberadoRestrito: true },
+  { to: '/cartorios',     rotulo: 'Cartórios',       icone: Building2,    liberadoRestrito: true },
   { to: '/portfolio',     rotulo: 'Portfólio',        icone: Package },
   { to: '/inventario',    rotulo: 'Inventário',       icone: Boxes },
 ];
@@ -52,12 +54,23 @@ const itensCadastro = [
 export default function Sidebar({ aoClicar }) {
   const { pessoa } = useAuth();
   const admin = !!pessoa?.administrador;
+  // Sprint 31 — acesso restrito: só vê itens com liberadoRestrito.
+  // Admin sempre vê tudo (a flag não se aplica a admin).
+  const restrito = !!pessoa?.acesso_restrito && !admin;
 
-  const cadastrosVisiveis = itensCadastro.filter((i) => !i.adminOnly || admin);
+  const baseVisivel = restrito
+    ? itensBase.filter((i) => i.liberadoRestrito)
+    : itensBase;
+
+  // Cadastros não aparecem pra acesso restrito — todos os itens são
+  // administrativos ou financeiros.
+  const cadastrosVisiveis = restrito
+    ? []
+    : itensCadastro.filter((i) => !i.adminOnly || admin);
 
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {itensBase.map((item) => (
+      {baseVisivel.map((item) => (
         <ItemMenu key={item.to} {...item} aoClicar={aoClicar} />
       ))}
 

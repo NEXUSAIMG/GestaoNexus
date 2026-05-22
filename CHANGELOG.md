@@ -11,6 +11,93 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 31 — Acesso restrito por pessoa
+
+Feature de controle granular: permite marcar pessoas como **"acesso restrito"**
+que só vêem 4 módulos operacionais (Tarefas, Processos, Em andamento e
+Cartórios). Todo o resto (Caixa, Contas a Pagar, Governança, Sócios &
+Lucros, Cadastros, Configurações) fica invisível no menu e retorna 403 se
+acessado via URL direta.
+
+**Caso de uso:** atendentes / assistentes operacionais que precisam tocar
+tarefas e cartórios mas não deveriam ver financeiro / governança societária.
+
+**Defesa em 3 camadas:**
+1. **Backend:** middleware `exigirAcessoCompleto` aplicado nas rotas
+   bloqueadas. Retorna 403. Segurança real.
+2. **Frontend menu:** Sidebar filtra os itens, mostrando só os 4 liberados.
+3. **Frontend rotas:** wrapper `AcessoCompletoRoute` redireciona pra
+   `/tarefas` se pessoa restrita tentar acessar URL bloqueada.
+
+**Admin sempre passa**, independente da flag — marcar admin como restrito
+seria contraditório. Pra restringir um admin, primeiro desmarque admin.
+
+### Backend (5 arquivos)
+
+- **Migration 023**: `pessoas_acesso.acesso_restrito BOOLEAN DEFAULT FALSE`
+- `backend/src/middleware/auth.middleware.js`:
+  - SELECT inclui `acesso_restrito`
+  - Novo middleware `exigirAcessoCompleto(req, res, next)`
+- `backend/src/controllers/auth.controller.js`: SELECT do login + retorno
+  do `/auth/eu` incluem `acesso_restrito`
+- `backend/src/controllers/pessoas.controller.js`: schema Zod (criar e
+  atualizar) + serializer + INSERT com campo novo
+- `backend/src/routes/index.js`: **reescrito** — separa rotas
+  liberadas (pessoas, tarefas, processos, instancias, cartorios,
+  notificacoes) das bloqueadas (resto), aplicando
+  `[autenticar, exigirAcessoCompleto]` antes das bloqueadas
+
+### Frontend (4 arquivos)
+
+- `frontend/src/components/AcessoCompletoRoute.jsx` (NOVO): redireciona
+  pessoa restrita pra `/tarefas` em rotas bloqueadas
+- `frontend/src/components/Sidebar.jsx`: itens com flag
+  `liberadoRestrito: true` aparecem mesmo pra restritos; cadastros
+  inteiros somem
+- `frontend/src/App.jsx`: reescrito, envolve rotas bloqueadas com
+  helper local `<Bloqueado>` (que aplica `AcessoCompletoRoute`).
+  Liberadas (tarefas/processos/instancias/cartorios) ficam sem o wrapper.
+- `frontend/src/pages/Pessoas.jsx`:
+  - Modal de criar/editar: checkbox amber **"Acesso restrito"** com
+    descrição do que muda (só visível se a pessoa não for admin)
+  - Marcar admin desliga automaticamente acesso restrito
+  - Tabela de listagem: badge amber com cadeado pra pessoas restritas
+
+### Scripts CLI (2 arquivos + 1 atualização)
+
+- `backend/db/scripts/definir-acesso-restrito.js` (NOVO): marca/desmarca
+  a flag interativamente. Recusa rodar em admins. Mostra preview com
+  estado antes/depois e pede confirmação.
+- `backend/db/scripts/listar-pessoas.js`: coluna nova **"Restr"** com
+  cadeado pra restritos + resumo conta quantas são
+- `backend/package.json`: novo comando `acesso-restrito`
+
+### Como usar
+
+```bash
+cd backend
+npm run migrate                                              # aplica 023
+npm run pessoas nestor                                       # confere e-mail
+npm run acesso-restrito -- nestor@email.com.br --restringir  # restringe
+
+# Pra desfazer depois:
+npm run acesso-restrito -- nestor@email.com.br --liberar
+```
+
+Ou via UI: login admin → Cadastros → Pessoas de acesso → editar pessoa →
+checkbox **"Acesso restrito"**.
+
+### Decisões
+
+- **/pessoas continua liberada pra leitura** porque é necessária pra
+  autocomplete de responsáveis em cards e cartórios. Escrita já era admin.
+- **/notificacoes continua liberada** — sininho funciona pra todos os
+  autenticados (só mostra notificações relevantes à pessoa).
+- **Comando manual no CLI** garante que vai funcionar mesmo se a UI
+  estiver indisponível. Útil pra resetar acesso em emergência.
+
+---
+
 ## Sprint 30 — Debounce isolado + gate de versão total
 
 Duas frentes em paralelo:

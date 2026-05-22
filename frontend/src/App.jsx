@@ -37,6 +37,14 @@ import Cartorio from './pages/Cartorio.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
+import AcessoCompletoRoute from './components/AcessoCompletoRoute.jsx';
+
+// Sprint 31 — Helper local: marca uma rota como "bloqueada pra acesso restrito".
+// Pessoa restrita acessando uma dessas é redirecionada pra /tarefas.
+// Admin sempre passa.
+function Bloqueado({ children }) {
+  return <AcessoCompletoRoute>{children}</AcessoCompletoRoute>;
+}
 
 export default function App() {
   return (
@@ -63,19 +71,19 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Dashboard />} />
+        {/* ===== Sprint 31 — BLOQUEADAS pra acesso restrito ===== */}
+        {/* Painel principal — acesso restrito é redirecionado pra /tarefas */}
+        <Route path="/" element={<Bloqueado><Dashboard /></Bloqueado>} />
+        <Route path="/visao-geral" element={<Bloqueado><VisaoGeral /></Bloqueado>} />
 
-        {/* Sprint 12 — Visão geral / dashboard agregado (todos os autenticados) */}
-        <Route path="/visao-geral" element={<VisaoGeral />} />
-
-        <Route path="/caixa" element={<Caixa />} />
-        <Route path="/contas-bancarias" element={<ContasBancarias />} />
-        <Route path="/mensal" element={<Mensal />} />
-        <Route path="/lucros" element={<Lucros />} />
-        <Route path="/socios/:id/extrato" element={<ExtratoSocio />} />
+        <Route path="/caixa"            element={<Bloqueado><Caixa /></Bloqueado>} />
+        <Route path="/contas-bancarias" element={<Bloqueado><ContasBancarias /></Bloqueado>} />
+        <Route path="/mensal"           element={<Bloqueado><Mensal /></Bloqueado>} />
+        <Route path="/lucros"           element={<Bloqueado><Lucros /></Bloqueado>} />
+        <Route path="/socios/:id/extrato" element={<Bloqueado><ExtratoSocio /></Bloqueado>} />
 
         {/* Sprint 6 — Governança com sub-rotas */}
-        <Route path="/governanca" element={<Governanca />}>
+        <Route path="/governanca" element={<Bloqueado><Governanca /></Bloqueado>}>
           <Route index element={<Navigate to="atas" replace />} />
           <Route path="atas" element={<Atas />} />
           <Route path="decisoes" element={<Decisoes />} />
@@ -86,15 +94,30 @@ export default function App() {
           <Route path="calendario" element={<CalendarioGov />} />
         </Route>
 
-        <Route path="/socios" element={<Socios />} />
+        <Route path="/socios" element={<Bloqueado><Socios /></Bloqueado>} />
 
+        {/* Sprint 16 — Portfólio de produtos */}
+        <Route path="/portfolio"     element={<Bloqueado><Portfolio /></Bloqueado>} />
+        <Route path="/portfolio/:id" element={<Bloqueado><PortfolioProduto /></Bloqueado>} />
+
+        {/* Sprint 17 — Inventário / Patrimônio */}
+        <Route path="/inventario"     element={<Bloqueado><Inventario /></Bloqueado>} />
+        <Route path="/inventario/:id" element={<Bloqueado><InventarioItem /></Bloqueado>} />
+
+        {/* Sprint 3 — Contas a pagar */}
+        <Route path="/contas-pagar"       element={<Bloqueado><ContasPagar /></Bloqueado>} />
+        <Route path="/categorias-despesa" element={<Bloqueado><CategoriasDespesa /></Bloqueado>} />
+
+        {/* Admin-only: já redobra a proteção. Acesso restrito também é redirecionado. */}
+        <Route path="/configuracoes"  element={<AdminRoute><Configuracoes /></AdminRoute>} />
+        <Route path="/equipes"        element={<AdminRoute><Equipes /></AdminRoute>} />
+        <Route path="/pessoas"        element={<AdminRoute><Pessoas /></AdminRoute>} />
+        <Route path="/representacoes" element={<AdminRoute><Representacoes /></AdminRoute>} />
+
+        {/* ===== Sprint 31 — LIBERADAS pra acesso restrito ===== */}
         {/* Sprint 10 — Tarefas (Trello interno) */}
         <Route path="/tarefas" element={<Tarefas />} />
         <Route path="/tarefas/:id" element={<Quadro />} />
-        <Route
-          path="/equipes"
-          element={<AdminRoute><Equipes /></AdminRoute>}
-        />
 
         {/* Sprint 14 — Processos / Workflows (BPMN) */}
         <Route path="/processos" element={<Processos />} />
@@ -105,38 +128,9 @@ export default function App() {
         {/* Sprint 22 — Dashboard cross-processo de instâncias em andamento */}
         <Route path="/instancias" element={<Instancias />} />
 
-        {/* Sprint 16 — Portfólio de produtos */}
-        <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/portfolio/:id" element={<PortfolioProduto />} />
-
-        {/* Sprint 17 — Inventário / Patrimônio */}
-        <Route path="/inventario" element={<Inventario />} />
-        <Route path="/inventario/:id" element={<InventarioItem />} />
-
         {/* Sprint 20 — Cartórios */}
         <Route path="/cartorios" element={<Cartorios />} />
         <Route path="/cartorios/:id" element={<Cartorio />} />
-
-        {/* Sprint 7 — Configurações de notificações (admin-only) */}
-        <Route
-          path="/configuracoes"
-          element={<AdminRoute><Configuracoes /></AdminRoute>}
-        />
-
-        {/* Sprint 3 — todos os sócios podem ver (transparência);
-            ações de escrita são barradas pelo backend via exigirAdmin. */}
-        <Route path="/contas-pagar"       element={<ContasPagar />} />
-        <Route path="/categorias-despesa" element={<CategoriasDespesa />} />
-
-        {/* Rotas admin-only: pessoas e representações */}
-        <Route
-          path="/pessoas"
-          element={<AdminRoute><Pessoas /></AdminRoute>}
-        />
-        <Route
-          path="/representacoes"
-          element={<AdminRoute><Representacoes /></AdminRoute>}
-        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

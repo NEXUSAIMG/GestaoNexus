@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   UserPlus, Edit2, KeyRound, Shield, CheckCircle2, XCircle, X, Mail, Link2,
-  Eye, EyeOff,
+  Eye, EyeOff, Lock,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -150,6 +150,11 @@ export default function Pessoas() {
                       <Shield size={12} />
                       Administrador
                     </span>
+                  ) : p.acesso_restrito ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700" title="Só vê Tarefas, Processos, Em andamento e Cartórios">
+                      <Lock size={12} />
+                      Acesso restrito
+                    </span>
                   ) : (
                     <span className="text-xs text-slate-500">Pessoa de acesso</span>
                   )}
@@ -260,6 +265,7 @@ function ModalPessoa({ pessoa, aoFechar, aoSalvar }) {
     telefone: pessoa?.telefone ?? '',
     cpf: pessoa?.cpf ?? '',
     administrador: pessoa?.administrador ?? false,
+    acesso_restrito: pessoa?.acesso_restrito ?? false,
     ativo: pessoa?.ativo ?? true,
   });
   const [erro, setErro] = useState('');
@@ -280,6 +286,9 @@ function ModalPessoa({ pessoa, aoFechar, aoSalvar }) {
         telefone: form.telefone?.trim() || null,
         cpf: form.cpf?.trim() || null,
         administrador: !!form.administrador,
+        // Sprint 31 — acesso restrito (só aplica se não for admin; backend
+        // também valida, mas garantimos consistência aqui)
+        acesso_restrito: !!form.administrador ? false : !!form.acesso_restrito,
       };
       if (ehNovo) payload.senha = form.senha;
       else payload.ativo = !!form.ativo;
@@ -359,7 +368,11 @@ function ModalPessoa({ pessoa, aoFechar, aoSalvar }) {
             <input
               type="checkbox"
               checked={form.administrador}
-              onChange={(e) => atualizar('administrador', e.target.checked)}
+              onChange={(e) => {
+                atualizar('administrador', e.target.checked);
+                // Se virou admin, automaticamente desliga acesso restrito
+                if (e.target.checked) atualizar('acesso_restrito', false);
+              }}
               className="h-4 w-4 rounded border-slate-300 text-nexus-700 focus:ring-nexus-500"
             />
             <Shield size={14} className="text-slate-500" />
@@ -378,6 +391,31 @@ function ModalPessoa({ pessoa, aoFechar, aoSalvar }) {
             </label>
           )}
         </div>
+
+        {/* Sprint 31 — Acesso restrito */}
+        {!form.administrador && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+            <label className="flex items-start gap-2 text-sm text-amber-900">
+              <input
+                type="checkbox"
+                checked={form.acesso_restrito}
+                onChange={(e) => atualizar('acesso_restrito', e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              />
+              <div>
+                <span className="font-medium inline-flex items-center gap-1.5">
+                  <Lock size={13} /> Acesso restrito
+                </span>
+                <div className="mt-0.5 text-xs text-amber-800">
+                  Quando ligado, a pessoa só vê <strong>Tarefas</strong>, <strong>Processos</strong>,{' '}
+                  <strong>Em andamento</strong> e <strong>Cartórios</strong>. Não aparecem os módulos
+                  financeiros, de governança, cadastros nem configurações.
+                  Reversivél a qualquer momento.
+                </div>
+              </div>
+            </label>
+          </div>
+        )}
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <strong className="text-slate-700">Vínculo com sócios:</strong> esta tela só

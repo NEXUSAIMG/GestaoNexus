@@ -29,7 +29,7 @@ export async function autenticar(req, _res, next) {
     }
 
     const { rows: pessoas } = await query(
-      `SELECT id, nome, email, administrador, ativo
+      `SELECT id, nome, email, administrador, ativo, acesso_restrito
          FROM pessoas_acesso
         WHERE id = $1`,
       [payload.sub],
@@ -88,6 +88,27 @@ export async function autenticar(req, _res, next) {
 export function exigirAdmin(req, _res, next) {
   if (!req.pessoa?.administrador) {
     return next(new NaoAutorizadoError('Ação permitida apenas a administradores'));
+  }
+  next();
+}
+
+/**
+ * Sprint 31 — bloqueia pessoas com acesso restrito (não-admin).
+ *
+ * Pessoas com `acesso_restrito = TRUE` só podem acessar 4 módulos
+ * operacionais: tarefas, processos, instancias (em andamento) e cartórios.
+ * Esta função é aplicada ANTES das rotas dos demais módulos no
+ * routes/index.js — então pessoas restritas recebem 403 ao tentar
+ * acessar caixa, governança, contas a pagar etc.
+ *
+ * Admin SEMPRE passa, independente da flag.
+ */
+export function exigirAcessoCompleto(req, _res, next) {
+  if (req.pessoa?.administrador) return next();
+  if (req.pessoa?.acesso_restrito) {
+    return next(new NaoAutorizadoError(
+      'Você não tem acesso a este módulo. Fale com um administrador.',
+    ));
   }
   next();
 }
