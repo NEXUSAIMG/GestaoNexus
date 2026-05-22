@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   UserPlus, Edit2, KeyRound, Shield, CheckCircle2, XCircle, X, Mail, Link2,
   Eye, EyeOff,
@@ -35,16 +35,25 @@ export default function Pessoas() {
   const [modal, setModal] = useState(null);
   // modal = { tipo: 'novo' | 'editar' | 'senha', pessoa?: {} }
 
+  // Sprint 30 — gate de versão pra evitar race condition em operações rápidas.
+  const carregaIdRef = useRef(0);
+
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const res = await api.get('/pessoas');
+      if (meuId !== carregaIdRef.current) return;
       setPessoas(res.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não foi possível carregar as pessoas.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não foi possível carregar as pessoas.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Building2, MapPin, Mail, Pencil, Archive, X,
@@ -26,35 +26,51 @@ export default function Cartorios() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 30 — gate de versão + debounce isolado pro campo busca.
+  const carregaIdRef = useRef(0);
+
   // Filtros
   const [filtroBusca, setFiltroBusca] = useState('');
+  // Debounced (350ms) — selects disparam imediato.
+  const [filtroBuscaDebounced, setFiltroBuscaDebounced] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
 
   const [modal, setModal] = useState(null); // null | { modo: 'criar' } | { modo: 'editar', cartorio }
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const params = {};
       if (filtroStatus) params.status = filtroStatus;
       if (filtroTipo) params.tipo = filtroTipo;
-      if (filtroBusca.trim()) params.busca = filtroBusca.trim();
+      if (filtroBuscaDebounced.trim()) params.busca = filtroBuscaDebounced.trim();
       const r = await api.get('/cartorios', { params });
+      // Descarta se outro carregar() começou enquanto este esperava.
+      if (meuId !== carregaIdRef.current) return;
       setCartorios(r.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar os cartórios.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar os cartórios.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
   useEffect(() => {
-    const id = setTimeout(carregar, 250); // debounce na busca
+    const id = setTimeout(() => setFiltroBuscaDebounced(filtroBusca), 350);
     return () => clearTimeout(id);
+  }, [filtroBusca]);
+
+  useEffect(() => {
+    carregar();
     // eslint-disable-next-line
-  }, [filtroBusca, filtroStatus, filtroTipo]);
+  }, [filtroBuscaDebounced, filtroStatus, filtroTipo]);
 
   async function arquivar(c) {
     if (!confirm(`Arquivar o cartório "${c.nome}"?\nEle some da listagem mas pode ser desarquivado depois (via banco).`)) return;

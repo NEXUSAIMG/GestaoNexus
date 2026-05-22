@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, Clock, ExternalLink, Search, X, AlertTriangle,
@@ -42,9 +42,18 @@ export default function Instancias() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 28 — gate de versão pra resolver race condition entre múltiplos
+  // carregar() em paralelo. Como o useEffect dispara carregar() a cada
+  // mudança de filtro (incluindo digitação no campo busca), múltiplos
+  // requests podem voar em paralelo. O response mais recente sempre vence.
+  const carregaIdRef = useRef(0);
+
   // Filtros
   const [meu, setMeu] = useState(true); // default: só minhas
   const [busca, setBusca] = useState('');
+  // Sprint 29 — debounce isolado do campo busca (350ms). Selects disparam
+  // imediato (não passam por aqui). Reduz N requests durante digitação.
+  const [buscaDebounced, setBuscaDebounced] = useState('');
   const [processoId, setProcessoId] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('em_andamento');
@@ -61,29 +70,40 @@ export default function Instancias() {
   }, []);
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const params = { status: statusFiltro };
       if (meu) params.meu = 'true';
-      if (busca.trim()) params.busca = busca.trim();
+      if (buscaDebounced.trim()) params.busca = buscaDebounced.trim();
       if (processoId) params.processo_id = processoId;
       if (responsavelId) params.responsavel_id = responsavelId;
       if (soParadas) params.paradas_dias = 7;
       const r = await api.get('/instancias', { params });
+      // Descarta response se outro carregar() começou enquanto este esperava.
+      if (meuId !== carregaIdRef.current) return;
       setInstancias(r.data || []);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar as instâncias.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar as instâncias.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
   useEffect(() => {
-    const id = setTimeout(carregar, 200);
+    const id = setTimeout(() => setBuscaDebounced(busca), 350);
     return () => clearTimeout(id);
+  }, [busca]);
+
+  useEffect(() => {
+    carregar();
     // eslint-disable-next-line
-  }, [meu, busca, processoId, responsavelId, statusFiltro, soParadas]);
+  }, [meu, buscaDebounced, processoId, responsavelId, statusFiltro, soParadas]);
 
   // Estatísticas do topo (calculadas sobre o resultado atual)
   const stats = useMemo(() => {

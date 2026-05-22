@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Edit2, CheckCircle2, Ban, X, Search, AlertTriangle,
   Calendar, Clock, FileText, ExternalLink, CircleDollarSign, Receipt, Filter,
@@ -76,6 +76,11 @@ export default function ContasPagar() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 28 — gate de versão pra resolver race condition entre múltiplos
+  // carregarContas() em paralelo (ex: salvar conta + recarregar enquanto
+  // mudança de filtro dispara outro carregar). O mais recente sempre vence.
+  const carregaIdRef = useRef(0);
+
   const [statusFiltro, setStatusFiltro] = useState('pendentes');
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [busca, setBusca] = useState('');
@@ -84,6 +89,7 @@ export default function ContasPagar() {
   const [modal, setModal] = useState(null);
 
   async function carregarContas() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
@@ -97,12 +103,18 @@ export default function ContasPagar() {
         }),
         api.get('/contas-pagar/resumo'),
       ]);
+      // Descarta se outro carregarContas() começou enquanto este esperava.
+      if (meuId !== carregaIdRef.current) return;
       setContas(resC.data);
       setResumo(resR.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não foi possível carregar as contas.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não foi possível carregar as contas.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

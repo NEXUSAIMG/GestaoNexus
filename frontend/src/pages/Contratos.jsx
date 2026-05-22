@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, Search, FileSignature, Download, Pencil, Trash2, Upload, X,
   AlertTriangle, Clock, CheckCircle2, Calendar, DollarSign, Building,
@@ -61,33 +61,50 @@ export default function Contratos() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 30 — gate de versão + debounce isolado pro campo busca.
+  // Gate protege de race condition entre múltiplos carregar() em paralelo.
+  const carregaIdRef = useRef(0);
+
   const [filtroBusca, setFiltroBusca] = useState('');
+  // Debounced (350ms) — só o campo busca passa por aqui; selects disparam imediato.
+  const [filtroBuscaDebounced, setFiltroBuscaDebounced] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [filtroAlertas, setFiltroAlertas] = useState(false); // só vencendo/vencidos
 
   const [modal, setModal] = useState(null);
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const params = {};
-      if (filtroBusca.trim()) params.busca = filtroBusca.trim();
+      if (filtroBuscaDebounced.trim()) params.busca = filtroBuscaDebounced.trim();
       if (filtroStatus) params.status = filtroStatus;
       const r = await api.get('/contratos', { params });
+      // Descarta se outro carregar() começou enquanto este estava em flight.
+      if (meuId !== carregaIdRef.current) return;
       setContratos(r.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar os contratos.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar os contratos.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
   useEffect(() => {
-    const id = setTimeout(carregar, 250);
+    const id = setTimeout(() => setFiltroBuscaDebounced(filtroBusca), 350);
     return () => clearTimeout(id);
+  }, [filtroBusca]);
+
+  useEffect(() => {
+    carregar();
     // eslint-disable-next-line
-  }, [filtroBusca, filtroStatus]);
+  }, [filtroBuscaDebounced, filtroStatus]);
 
   // Estatísticas pra os cards do topo
   const stats = useMemo(() => {

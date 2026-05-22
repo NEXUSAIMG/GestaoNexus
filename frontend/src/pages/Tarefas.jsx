@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, KanbanSquare, Globe, Lock, X, Archive,
@@ -33,7 +33,12 @@ export default function Tarefas() {
   const [erro, setErro] = useState('');
   const [modalNovo, setModalNovo] = useState(false);
 
+  // Sprint 30 — gate de versão pra evitar race condition em operações rápidas
+  // (criar quadro / arquivar / refresh em sequência).
+  const carregaIdRef = useRef(0);
+
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
@@ -41,12 +46,17 @@ export default function Tarefas() {
         api.get('/quadros'),
         api.get('/equipes'),
       ]);
+      if (meuId !== carregaIdRef.current) return;
       setQuadros(qR.data);
       setEquipes(eR.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

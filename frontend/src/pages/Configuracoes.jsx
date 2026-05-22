@@ -131,6 +131,13 @@ export default function Configuracoes() {
             onChange={(v) => alterar('email_card_prazo_amanha', v)}
             disabled={!admin}
           />
+          <Toggle
+            label="Contrato vencendo / vencido (Governança)"
+            descricao="Aviso semanal aos admins sobre contratos vigentes próximos do vencimento ou já vencidos. Cada contrato re-alerta a cada 7 dias enquanto continuar na janela."
+            valor={config.email_contrato_vencendo}
+            onChange={(v) => alterar('email_contrato_vencendo', v)}
+            disabled={!admin}
+          />
         </div>
       </section>
 

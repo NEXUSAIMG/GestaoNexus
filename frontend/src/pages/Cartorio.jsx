@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Building2, Pencil, Archive, Users2, KanbanSquare, History,
@@ -43,19 +43,31 @@ export default function Cartorio() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 28 — gate de versão pra resolver race condition entre múltiplos
+  // carregar() em paralelo (ex: usuário salva no modal e desvincula quadro em
+  // sequência rápida). O response mais recente sempre vence.
+  const carregaIdRef = useRef(0);
+
   // modal pode ser: null | 'editar' | 'responsaveis' | 'vincular' | 'nota' | { tipo: 'mudarFase', vinculo }
   const [modal, setModal] = useState(null);
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const r = await api.get(`/cartorios/${id}`);
+      // Se outro carregar() começou enquanto este estava em flight, descarta.
+      if (meuId !== carregaIdRef.current) return;
       setCartorio(r.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar o cartório.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar o cartório.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

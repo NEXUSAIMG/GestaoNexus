@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   UserPlus, Edit2, CheckCircle2, XCircle, X, Building2, User as UserIcon, AlertCircle,
 } from 'lucide-react';
@@ -35,16 +35,25 @@ export default function Socios() {
   const [erro, setErro] = useState('');
   const [modal, setModal] = useState(null); // { tipo: 'novo' | 'editar', socio?: {} }
 
+  // Sprint 30 — gate de versão pra evitar race condition em operações rápidas.
+  const carregaIdRef = useRef(0);
+
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const res = await api.get('/socios');
+      if (meuId !== carregaIdRef.current) return;
       setSocios(res.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não foi possível carregar os sócios.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não foi possível carregar os sócios.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

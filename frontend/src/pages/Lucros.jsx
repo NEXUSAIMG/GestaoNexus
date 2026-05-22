@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   TrendingDown, TrendingUp, Users, Wallet, PieChart as PieIcon,
@@ -71,6 +71,10 @@ export default function Lucros() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 30 — gate de versão pra evitar race condition em mudanças rápidas
+  // de ano + operações (efetivar/cancelar movimento).
+  const carregaIdRef = useRef(0);
+
   // Estado dos modais
   const [modal, setModal] = useState(null);
   // modal: { tipo: 'novo_prolabore' | 'novo_aporte' | 'nova_distribuicao'
@@ -79,6 +83,7 @@ export default function Lucros() {
   //          contexto: {...} }
 
   async function carregarTudo() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
@@ -90,6 +95,7 @@ export default function Lucros() {
         api.get('/socios'),
         api.get('/contas-bancarias'),
       ]);
+      if (meuId !== carregaIdRef.current) return;
       setResumo(resumoR.data);
       setDistribuicoes(distR.data);
       setProLabores(proLR.data);
@@ -97,9 +103,13 @@ export default function Lucros() {
       setSocios(sociosR.data.filter((s) => s.ativo));
       setContas(contasR.data.filter((c) => c.ativo));
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não foi possível carregar a página de sócios & lucros.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não foi possível carregar a página de sócios & lucros.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

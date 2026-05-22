@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Plus, X, Trash2, UserPlus, Crown, User as UserIcon, Archive, ArchiveRestore, Edit2,
 } from 'lucide-react';
@@ -46,16 +46,26 @@ export default function Equipes() {
   const [modalCriar, setModalCriar] = useState(false);
   const [modalDetalhes, setModalDetalhes] = useState(null); // equipeId
 
+  // Sprint 30 — gate de versão (defesa em profundidade contra race condition
+  // se usuário fizer múltiplas operações — criar/arquivar/excluir — rápido).
+  const carregaIdRef = useRef(0);
+
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const r = await api.get('/equipes', { params: { incluir_arquivadas: 'true' } });
+      if (meuId !== carregaIdRef.current) return;
       setEquipes(r.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar as equipes.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar as equipes.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 

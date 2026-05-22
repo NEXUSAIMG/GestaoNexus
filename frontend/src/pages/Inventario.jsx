@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Boxes, Plus, Search, Filter, Package, AlertCircle, Pencil,
@@ -82,8 +82,15 @@ export default function Inventario() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 30 — gate de versão pra evitar race entre múltiplos carregar()
+  // (filtros + debounce do busca + operações de criar/excluir item).
+  const carregaIdRef = useRef(0);
+
   // Filtros
   const [busca, setBusca] = useState('');
+  // Sprint 30 — debounce isolado (350ms). Selects disparam imediato; só a
+  // digitação no busca passa por aqui pra evitar N requests por tecla.
+  const [buscaDebounced, setBuscaDebounced] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
 
@@ -91,13 +98,14 @@ export default function Inventario() {
   const [modalNovo, setModalNovo] = useState(false);
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const params = new URLSearchParams();
       if (filtroCategoria) params.set('categoria_id', filtroCategoria);
       if (filtroStatus) params.set('status', filtroStatus);
-      if (busca.trim()) params.set('busca', busca.trim());
+      if (buscaDebounced.trim()) params.set('busca', buscaDebounced.trim());
       const q = params.toString() ? `?${params}` : '';
 
       const [r1, r2, r3] = await Promise.all([
@@ -105,27 +113,32 @@ export default function Inventario() {
         api.get('/inventario/categorias'),
         api.get('/inventario/resumo'),
       ]);
+      if (meuId !== carregaIdRef.current) return;
       setItens(r1.data);
       setCategorias(r2.data);
       setResumo(r3.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar o inventário.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar o inventário.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
+  // Debounce isolado: só o campo busca passa por aqui.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  // Trigger principal: dispara quando qualquer filtro estabilizado muda.
   useEffect(() => {
     carregar();
     /* eslint-disable-next-line */
-  }, [filtroCategoria, filtroStatus]);
-
-  // Busca tem debounce simples
-  useEffect(() => {
-    const t = setTimeout(carregar, 400);
-    return () => clearTimeout(t);
-    /* eslint-disable-next-line */
-  }, [busca]);
+  }, [filtroCategoria, filtroStatus, buscaDebounced]);
 
   return (
     <div className="max-w-7xl">

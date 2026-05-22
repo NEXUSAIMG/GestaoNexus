@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Wallet, TrendingUp, TrendingDown, RefreshCw, AlertCircle, CheckCircle2, Clock,
   Link2Off, Search, ExternalLink, Calendar, Info, DollarSign, Settings, AlertTriangle,
@@ -84,38 +84,69 @@ export default function Caixa() {
 
   const [modalConfig, setModalConfig] = useState(false);
 
+  // Sprint 30 — gate de versão pra cada uma das 3 funções de carregar.
+  // Cobre race condition em sincronizar() que dispara as 3 em paralelo +
+  // mudança de filtro disparando carregarLista() simultaneamente.
+  const carregaResumoIdRef = useRef(0);
+  const carregaFluxoIdRef = useRef(0);
+  const carregaListaIdRef = useRef(0);
+
   async function carregarResumo() {
+    const meuId = ++carregaResumoIdRef.current;
     setCarregandoResumo(true);
     setErro('');
     try {
       const res = await api.get('/caixa/resumo');
+      if (meuId !== carregaResumoIdRef.current) return;
       setResumo(res.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não foi possível carregar o resumo do caixa.'));
-    } finally { setCarregandoResumo(false); }
+      if (meuId === carregaResumoIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não foi possível carregar o resumo do caixa.'));
+      }
+    } finally {
+      if (meuId === carregaResumoIdRef.current) {
+        setCarregandoResumo(false);
+      }
+    }
   }
 
   async function carregarFluxo() {
+    const meuId = ++carregaFluxoIdRef.current;
     setCarregandoFluxo(true);
     try {
       const res = await api.get('/caixa/fluxo', { params: { dias: 90 } });
+      if (meuId !== carregaFluxoIdRef.current) return;
       setFluxoDados(res.data);
     } catch {
-      // sem fluxo ainda não é bloqueante
-      setFluxoDados(null);
-    } finally { setCarregandoFluxo(false); }
+      if (meuId === carregaFluxoIdRef.current) {
+        // sem fluxo ainda não é bloqueante
+        setFluxoDados(null);
+      }
+    } finally {
+      if (meuId === carregaFluxoIdRef.current) {
+        setCarregandoFluxo(false);
+      }
+    }
   }
 
   async function carregarLista() {
+    const meuId = ++carregaListaIdRef.current;
     setCarregandoLista(true);
     try {
       const res = await api.get('/caixa/entradas', {
         params: { status: statusFiltro, q: buscaAtiva || undefined, dias: 90 },
       });
+      if (meuId !== carregaListaIdRef.current) return;
       setCobrancas(res.data);
     } catch (err) {
-      if (!erro) setErro(mensagemDeErro(err, 'Não foi possível carregar as cobranças.'));
-    } finally { setCarregandoLista(false); }
+      if (meuId === carregaListaIdRef.current) {
+        if (!erro) setErro(mensagemDeErro(err, 'Não foi possível carregar as cobranças.'));
+      }
+    } finally {
+      if (meuId === carregaListaIdRef.current) {
+        setCarregandoLista(false);
+      }
+    }
   }
 
   useEffect(() => { carregarResumo(); carregarFluxo(); }, []);

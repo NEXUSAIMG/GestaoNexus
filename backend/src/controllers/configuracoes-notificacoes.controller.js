@@ -18,6 +18,8 @@ const atualizarSchema = z.object({
   email_resumo_diario_admin:             z.boolean().optional(),
   email_card_atribuido:                  z.boolean().optional(),
   email_card_prazo_amanha:               z.boolean().optional(),
+  // Sprint 26 — aviso de vencimento de contratos
+  email_contrato_vencendo:               z.boolean().optional(),
   dias_aviso_conta_vencendo:             z.number().int().min(1).max(30).optional(),
   dias_aviso_movimento_socio_vencendo:   z.number().int().min(1).max(30).optional(),
 });
@@ -31,6 +33,7 @@ function serializar(r) {
     email_resumo_diario_admin: r.email_resumo_diario_admin,
     email_card_atribuido: r.email_card_atribuido,
     email_card_prazo_amanha: r.email_card_prazo_amanha,
+    email_contrato_vencendo: r.email_contrato_vencendo,
     dias_aviso_conta_vencendo: r.dias_aviso_conta_vencendo,
     dias_aviso_movimento_socio_vencendo: r.dias_aviso_movimento_socio_vencendo,
     atualizado_em: r.atualizado_em,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Plus, Search, FileText, Download, Pencil, Trash2, Upload, X,
 } from 'lucide-react';
@@ -42,32 +42,48 @@ export default function DocumentosEmpresa() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Sprint 30 — gate de versão + debounce isolado pro campo busca.
+  const carregaIdRef = useRef(0);
+
   const [filtroBusca, setFiltroBusca] = useState('');
+  // Debounced (350ms) — select de categoria dispara imediato.
+  const [filtroBuscaDebounced, setFiltroBuscaDebounced] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
 
   const [modal, setModal] = useState(null); // null | { modo: 'criar' } | { modo: 'editar', documento }
 
   async function carregar() {
+    const meuId = ++carregaIdRef.current;
     setCarregando(true);
     setErro('');
     try {
       const params = {};
-      if (filtroBusca.trim()) params.busca = filtroBusca.trim();
+      if (filtroBuscaDebounced.trim()) params.busca = filtroBuscaDebounced.trim();
       if (filtroCategoria) params.categoria = filtroCategoria;
       const r = await api.get('/documentos-empresa', { params });
+      // Descarta se outro carregar() começou enquanto este esperava.
+      if (meuId !== carregaIdRef.current) return;
       setDocumentos(r.data);
     } catch (err) {
-      setErro(mensagemDeErro(err, 'Não consegui carregar os documentos.'));
+      if (meuId === carregaIdRef.current) {
+        setErro(mensagemDeErro(err, 'Não consegui carregar os documentos.'));
+      }
     } finally {
-      setCarregando(false);
+      if (meuId === carregaIdRef.current) {
+        setCarregando(false);
+      }
     }
   }
 
   useEffect(() => {
-    const id = setTimeout(carregar, 250);
+    const id = setTimeout(() => setFiltroBuscaDebounced(filtroBusca), 350);
     return () => clearTimeout(id);
+  }, [filtroBusca]);
+
+  useEffect(() => {
+    carregar();
     // eslint-disable-next-line
-  }, [filtroBusca, filtroCategoria]);
+  }, [filtroBuscaDebounced, filtroCategoria]);
 
   async function baixar(doc) {
     try {
