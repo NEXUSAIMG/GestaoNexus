@@ -11,6 +11,8 @@
     "migrate": "node db/scripts/migrate.js",
     "seed": "node db/scripts/seed.js",
     "pessoas": "node db/scripts/listar-pessoas.js",
+    "exportar-despesas": "node db/scripts/exportar-despesas.js",
+    "relatorio-mensal": "node db/scripts/relatorio-mensal.js",
     "resetar-senha": "node db/scripts/resetar-senha.js",
     "acesso-restrito": "node db/scripts/definir-acesso-restrito.js"
   },

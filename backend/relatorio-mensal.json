@@ -1,0 +1,652 @@
+{
+  "gerado_em": "2026-06-05T22:04:25.482Z",
+  "base": "despesas por competencia (data_vencimento), valor pago quando houver; investimento = aportes de socios efetivados (data_efetivada)",
+  "meses": [
+    {
+      "mes": "2000-05",
+      "despesas_total": 245.25,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Fornecedores",
+          "total": 245.25,
+          "qtd": 1
+        }
+      ],
+      "resultado": -245.25
+    },
+    {
+      "mes": "2025-05",
+      "despesas_total": 3500,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Aluguel",
+          "total": 3500,
+          "qtd": 1
+        }
+      ],
+      "resultado": -3500
+    },
+    {
+      "mes": "2026-03",
+      "despesas_total": 20830.08,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 9141.32,
+          "qtd": 3
+        },
+        {
+          "categoria": "Aluguel",
+          "total": 4500,
+          "qtd": 2
+        },
+        {
+          "categoria": "Software e assinaturas",
+          "total": 2800,
+          "qtd": 2
+        },
+        {
+          "categoria": "Outras despesas",
+          "total": 2704.01,
+          "qtd": 5
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 1684.75,
+          "qtd": 3
+        }
+      ],
+      "resultado": -20830.08
+    },
+    {
+      "mes": "2026-04",
+      "despesas_total": 25222.870000000003,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Sem categoria",
+          "total": 5432.71,
+          "qtd": 6
+        },
+        {
+          "categoria": "Outras despesas",
+          "total": 4881.26,
+          "qtd": 17
+        },
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 4188.9,
+          "qtd": 6
+        },
+        {
+          "categoria": "Aluguel",
+          "total": 3500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2600,
+          "qtd": 3
+        },
+        {
+          "categoria": "Software e assinaturas",
+          "total": 120,
+          "qtd": 3
+        }
+      ],
+      "resultado": -25222.870000000003
+    },
+    {
+      "mes": "2026-05",
+      "despesas_total": 22811.94,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 9630.4,
+          "qtd": 6
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 5113.67,
+          "qtd": 8
+        },
+        {
+          "categoria": "Aluguel",
+          "total": 3500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Outras despesas",
+          "total": 2371.87,
+          "qtd": 6
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Sem categoria",
+          "total": 196,
+          "qtd": 1
+        }
+      ],
+      "resultado": -22811.94
+    },
+    {
+      "mes": "2026-06",
+      "despesas_total": 8025,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 1329,
+          "qtd": 2
+        },
+        {
+          "categoria": "Outras despesas",
+          "total": 196,
+          "qtd": 1
+        }
+      ],
+      "resultado": -8025
+    },
+    {
+      "mes": "2026-07",
+      "despesas_total": 7829,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 1329,
+          "qtd": 2
+        }
+      ],
+      "resultado": -7829
+    },
+    {
+      "mes": "2026-08",
+      "despesas_total": 7829,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 1329,
+          "qtd": 2
+        }
+      ],
+      "resultado": -7829
+    },
+    {
+      "mes": "2026-09",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2026-10",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2026-11",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2026-12",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-01",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-02",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-03",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-04",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-05",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-06",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-07",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-08",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-09",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-10",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-11",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2027-12",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2028-01",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2028-02",
+      "despesas_total": 6929,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Folha de pagamento",
+          "total": 4500,
+          "qtd": 1
+        },
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        },
+        {
+          "categoria": "Fornecedores",
+          "total": 429,
+          "qtd": 1
+        }
+      ],
+      "resultado": -6929
+    },
+    {
+      "mes": "2028-03",
+      "despesas_total": 2000,
+      "investimento_total": 0,
+      "categorias": [
+        {
+          "categoria": "Marketing",
+          "total": 2000,
+          "qtd": 2
+        }
+      ],
+      "resultado": -2000
+    }
+  ],
+  "totais": {
+    "despesas": 223015.14,
+    "investimento": 0,
+    "resultado": -223015.14
+  }
+}

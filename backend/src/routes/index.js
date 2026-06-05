@@ -28,6 +28,7 @@ import inventarioRoutes from './inventario.routes.js';
 import cartoriosRoutes from './cartorios.routes.js';
 import documentosEmpresaRoutes from './documentos-empresa.routes.js';
 import contratosRoutes from './contratos.routes.js';
+import relatoriosRoutes from './relatorios.routes.js';
 
 const router = Router();
 
@@ -108,7 +109,6 @@ router.use('/configuracoes-financeiras',       restritoBloqueado, configuracoesR
 
 // Sprint 4
 router.use('/mensal',                          restritoBloqueado, mensalRoutes);
-
 // Sprint 5
 router.use('/movimentos-socios',               restritoBloqueado, movimentosSociosRoutes);
 router.use('/distribuicoes',                   restritoBloqueado, distribuicoesRoutes);
@@ -134,5 +134,8 @@ router.use('/inventario',                      restritoBloqueado, inventarioRout
 // Sprint 21 — Documentos da empresa + Contratos
 router.use('/documentos-empresa',              restritoBloqueado, documentosEmpresaRoutes);
 router.use('/contratos',                       restritoBloqueado, contratosRoutes);
+
+// Relatórios (custos mês a mês — realizado + projetado)
+router.use('/relatorios',                      restritoBloqueado, relatoriosRoutes);
 
 export default router;
