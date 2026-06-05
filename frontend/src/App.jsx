@@ -34,6 +34,7 @@ import Inventario from './pages/Inventario.jsx';
 import InventarioItem from './pages/InventarioItem.jsx';
 import Cartorios from './pages/Cartorios.jsx';
 import Cartorio from './pages/Cartorio.jsx';
+import Apresentacao from './pages/Apresentacao.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -60,6 +61,21 @@ export default function App() {
         element={
           <ProtectedRoute>
             <EscolherContexto />
+          </ProtectedRoute>
+        }
+      />
+
+      {/*
+        /apresentacao — Modo Apresentação (estrutura de custos), tela cheia
+        sem o Layout/menu lateral. Pensada pra projetar em reunião.
+      */}
+      <Route
+        path="/apresentacao"
+        element={
+          <ProtectedRoute>
+            <Bloqueado>
+              <Apresentacao />
+            </Bloqueado>
           </ProtectedRoute>
         }
       />
