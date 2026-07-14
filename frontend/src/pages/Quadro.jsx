@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Globe, Lock, Users2, Calendar, Settings, KanbanSquare, Gauge, X,
-  BarChart3,
+  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, rectIntersection,
@@ -18,6 +18,10 @@ import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
 import Metricas from '../components/quadro/Metricas.jsx';
+import VistaTabela from '../components/quadro/VistaTabela.jsx';
+import VistaTimeline from '../components/quadro/VistaTimeline.jsx';
+import VistaCarga from '../components/quadro/VistaCarga.jsx';
+import VistaAgrupada from '../components/quadro/VistaAgrupada.jsx';
 import { moverCardLocal } from '../components/quadro/ui.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -355,6 +359,46 @@ export default function Quadro() {
             </button>
             <button
               type="button"
+              onClick={() => setAba('tabela')}
+              className={[
+                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                aba === 'tabela' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              <Table2 size={12} /> Tabela
+            </button>
+            <button
+              type="button"
+              onClick={() => setAba('timeline')}
+              className={[
+                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                aba === 'timeline' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              <GanttChartSquare size={12} /> Timeline
+            </button>
+            <button
+              type="button"
+              onClick={() => setAba('carga')}
+              className={[
+                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                aba === 'carga' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              <UsersRound size={12} /> Carga
+            </button>
+            <button
+              type="button"
+              onClick={() => setAba('agrupada')}
+              className={[
+                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                aba === 'agrupada' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              <Rows3 size={12} /> Swimlanes
+            </button>
+            <button
+              type="button"
               onClick={() => setAba('metricas')}
               className={[
                 'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
@@ -398,6 +442,22 @@ export default function Quadro() {
       {aba === 'metricas' ? (
         <div className="flex-1 overflow-y-auto">
           <Metricas quadroId={quadro.id} ehAdmin={ehAdmin} />
+        </div>
+      ) : aba === 'tabela' ? (
+        <div className="flex-1 overflow-y-auto">
+          <VistaTabela quadro={quadro} onAbrirCard={setCardAberto} onMudou={carregar} />
+        </div>
+      ) : aba === 'timeline' ? (
+        <div className="flex-1 overflow-y-auto">
+          <VistaTimeline quadro={quadro} onAbrirCard={setCardAberto} />
+        </div>
+      ) : aba === 'carga' ? (
+        <div className="flex-1 overflow-y-auto">
+          <VistaCarga quadro={quadro} onAbrirCard={setCardAberto} />
+        </div>
+      ) : aba === 'agrupada' ? (
+        <div className="flex-1 overflow-hidden">
+          <VistaAgrupada quadro={quadro} onAbrirCard={setCardAberto} />
         </div>
       ) : aba === 'calendario' ? (
         <div className="flex-1 overflow-y-auto">

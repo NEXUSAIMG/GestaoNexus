@@ -21,6 +21,7 @@ const SUBPASTAS = {
   governanca: 'governanca',
   comprovantes: 'comprovantes',
   inventario: 'inventario',
+  cards: 'cards',
 };
 
 /**
@@ -145,6 +146,18 @@ const MIME_PERMITIDOS_INVENTARIO = new Set([
 export function uploaderInventario() {
   return criarUploader({
     subpasta: SUBPASTAS.inventario,
+    mimesPermitidos: MIME_PERMITIDOS_INVENTARIO,
+    descricaoTipos: 'PDF, imagens (PNG/JPG/WebP) e Word',
+  });
+}
+
+/**
+ * Cria um multer pré-configurado para anexos de cards do Kanban (Sprint 32).
+ * Aceita o mesmo conjunto amplo do inventário (PDF, imagens e Word).
+ */
+export function uploaderCards() {
+  return criarUploader({
+    subpasta: SUBPASTAS.cards,
     mimesPermitidos: MIME_PERMITIDOS_INVENTARIO,
     descricaoTipos: 'PDF, imagens (PNG/JPG/WebP) e Word',
   });

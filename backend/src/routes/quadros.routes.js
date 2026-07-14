@@ -12,6 +12,15 @@ import {
   criar as criarEvento, atualizar as atualizarEvento, excluir as excluirEvento,
 } from '../controllers/eventos-quadro.controller.js';
 import { listarPorQuadro as listarCartoriosPorQuadro } from '../controllers/cartorios.controller.js';
+import {
+  listarCampos, criarCampo, atualizarCampo, excluirCampo,
+} from '../controllers/projetos.controller.js';
+import { metricasDoQuadro, forcarSnapshot } from '../controllers/metricas.controller.js';
+import {
+  listar as listarAutomacoes, criar as criarAutomacao,
+  atualizar as atualizarAutomacao, excluir as excluirAutomacao,
+  execucoes as execucoesAutomacao,
+} from '../controllers/automacoes.controller.js';
 import { autenticar } from '../middleware/auth.middleware.js';
 
 const router = Router();
@@ -41,5 +50,22 @@ router.delete('/:id/eventos/:eventoId', excluirEvento);
 
 // Sprint 24 — Item 1.5: cartórios vinculados a este quadro (com fase atual)
 router.get('/:id/cartorios', listarCartoriosPorQuadro);
+
+// Sprint 37 — Métricas de fluxo
+router.get('/:id/metricas', metricasDoQuadro);
+router.post('/:id/metricas/snapshot', forcarSnapshot);
+
+// Sprint 36 — Automações
+router.get('/:id/automacoes', listarAutomacoes);
+router.post('/:id/automacoes', criarAutomacao);
+router.put('/:id/automacoes/:automacaoId', atualizarAutomacao);
+router.delete('/:id/automacoes/:automacaoId', excluirAutomacao);
+router.get('/:id/automacoes/:automacaoId/execucoes', execucoesAutomacao);
+
+// Sprint 34 — Campos personalizados do quadro (definição)
+router.get('/:id/campos', listarCampos);
+router.post('/:id/campos', criarCampo);
+router.put('/:id/campos/:campoId', atualizarCampo);
+router.delete('/:id/campos/:campoId', excluirCampo);
 
 export default router;

@@ -9,6 +9,8 @@ import {
 } from './notificacoes.service.js';
 import { estenderSeriesInfinitas } from './recorrencia-contas.service.js';
 import { sincronizarTodos as sincronizarTodosProdutos } from './portfolio-sync.service.js';
+import { tirarSnapshotDiario } from './metricas.service.js';
+import { rodarGatilhosDePrazo, rodarAutomacoesAgendadas } from './automacoes.service.js';
 
 /**
  * Agenda a sincronização automática do ASAAS no processo do Express.
@@ -245,5 +247,102 @@ export function pararAgendadorPortfolio() {
   if (tarefaPortfolio) {
     tarefaPortfolio.stop();
     tarefaPortfolio = null;
+  }
+}
+
+// =============================================================================
+// Sprint 37 — Snapshot diário do board (base do CFD).
+// =============================================================================
+//
+// Roda todo dia às 23:50, no fim do dia útil: a foto registra onde os cards
+// PARARAM, não onde estavam de manhã.
+//
+// Idempotente (ON CONFLICT DO UPDATE) — rodar duas vezes no mesmo dia
+// sobrescreve, não duplica. Um deploy no meio do dia não corrompe a série.
+
+let rodandoSnapshot = false;
+let tarefaSnapshot = null;
+
+export function iniciarAgendadorMetricas() {
+  const expr = '50 23 * * *';
+  const tz = env.NOTIFICACOES_TIMEZONE;
+
+  tarefaSnapshot = cron.schedule(
+    expr,
+    async () => {
+      if (rodandoSnapshot) {
+        console.warn('[cron] Snapshot de métricas já em execução — pulando.');
+        return;
+      }
+      rodandoSnapshot = true;
+      try {
+        const n = await tirarSnapshotDiario();
+        console.log('[cron] Snapshot diário: ' + n + ' cards fotografados.');
+      } catch (err) {
+        console.error('[cron] Erro no snapshot diário:', err?.message || err);
+      } finally {
+        rodandoSnapshot = false;
+      }
+    },
+    { timezone: tz },
+  );
+
+  console.log('[cron] Snapshot de métricas agendado (' + expr + ' · ' + tz + ').');
+}
+
+export function pararAgendadorMetricas() {
+  if (tarefaSnapshot) {
+    tarefaSnapshot.stop();
+    tarefaSnapshot = null;
+  }
+}
+
+// =============================================================================
+// Sprint 36 — Automações temporais.
+// =============================================================================
+//
+// Roda às 07:00, antes do expediente: quem chegar já encontra o board
+// arrumado (cards de prazo escalados, regras semanais aplicadas).
+//
+// Separado do agendador de notificações de propósito: se uma regra de
+// automação entrar em loop ou travar, o resumo diário do admin continua
+// saindo. Um cron não pode ser refém do outro.
+
+let rodandoAutomacoes = false;
+let tarefaAutomacoes = null;
+
+export function iniciarAgendadorAutomacoes() {
+  const expr = '0 7 * * *';
+  const tz = env.NOTIFICACOES_TIMEZONE;
+
+  tarefaAutomacoes = cron.schedule(
+    expr,
+    async () => {
+      if (rodandoAutomacoes) {
+        console.warn('[cron] Automações já em execução — pulando este tick.');
+        return;
+      }
+      rodandoAutomacoes = true;
+      try {
+        const p = await rodarGatilhosDePrazo();
+        console.log('[cron] Automações de prazo: ' + JSON.stringify(p));
+        const a = await rodarAutomacoesAgendadas();
+        console.log('[cron] Automações agendadas: ' + JSON.stringify(a));
+      } catch (err) {
+        console.error('[cron] Erro nas automações:', err?.message || err);
+      } finally {
+        rodandoAutomacoes = false;
+      }
+    },
+    { timezone: tz },
+  );
+
+  console.log('[cron] Automações agendadas (' + expr + ' · ' + tz + ').');
+}
+
+export function pararAgendadorAutomacoes() {
+  if (tarefaAutomacoes) {
+    tarefaAutomacoes.stop();
+    tarefaAutomacoes = null;
   }
 }
