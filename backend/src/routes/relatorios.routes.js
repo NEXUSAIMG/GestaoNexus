@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { custosMensais } from '../controllers/relatorios.controller.js';
+import { custosMensais, detalheMes } from '../controllers/relatorios.controller.js';
 import { autenticar } from '../middleware/auth.middleware.js';
 
 const router = Router();

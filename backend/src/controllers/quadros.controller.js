@@ -134,9 +134,12 @@ export async function obter(req, res, next) {
     const qR = await query(`${SELECT_BASE} WHERE q.id = $1`, [req.params.id]);
     if (!qR.rows[0]) throw new NaoEncontradoError('Quadro não encontrado');
 
-    const [colR, cardsR, etiqR] = await Promise.all([
+    const [colR, cardsR, etiqR, camposR] = await Promise.all([
       query(
-        `SELECT id, nome, ordem, criado_em
+        `SELECT id, nome, ordem, criado_em,
+                tipo, wip_limite,
+                (SELECT COUNT(*)::int FROM cards ca
+                  WHERE ca.coluna_id = colunas.id AND ca.arquivado_em IS NULL) AS n_cards
            FROM colunas
           WHERE quadro_id = $1 AND arquivada_em IS NULL
           ORDER BY ordem, criado_em`,
@@ -144,9 +147,38 @@ export async function obter(req, res, next) {
       ),
       query(
         `SELECT c.id, c.coluna_id, c.titulo, c.descricao, c.data_prazo,
+                c.data_inicio, c.prazo_concluido, c.capa_cor,
                 c.responsavel_id, c.ordem, c.criado_em, c.atualizado_em,
+                c.prioridade, c.estimativa_horas, c.pontos, c.card_pai_id,
+                c.concluido_em,
                 p.nome AS responsavel_nome,
                 p.email AS responsavel_email,
+                (SELECT COUNT(*)::int FROM cards f
+                  WHERE f.card_pai_id = c.id AND f.arquivado_em IS NULL) AS n_subtarefas,
+                (SELECT COUNT(*)::int FROM cards f
+                   JOIN colunas fc ON fc.id = f.coluna_id
+                  WHERE f.card_pai_id = c.id AND f.arquivado_em IS NULL
+                    AND fc.tipo = 'concluida') AS n_subtarefas_ok,
+                (SELECT COUNT(*)::int
+                   FROM cards_dependencias d
+                   JOIN cards b ON b.id = d.depende_de_id
+                   JOIN colunas bc ON bc.id = b.coluna_id
+                  WHERE d.card_id = c.id AND b.arquivado_em IS NULL
+                    AND bc.tipo <> 'concluida') AS n_bloqueadores,
+                (SELECT COUNT(*)::int FROM cards_dependencias d
+                  WHERE d.depende_de_id = c.id) AS n_bloqueia,
+                (SELECT COUNT(*)::int FROM cards_vinculos v WHERE v.card_id = c.id) AS n_vinculos,
+                (SELECT COALESCE(SUM(a.minutos), 0)::int FROM cards_apontamentos a
+                  WHERE a.card_id = c.id) AS minutos_apontados,
+                COALESCE(
+                  (SELECT json_object_agg(cv.campo_id, cv.valor)
+                     FROM cards_campos_valores cv WHERE cv.card_id = c.id),
+                  '{}'::json
+                ) AS campos,
+                (SELECT COUNT(*)::int FROM card_checklist_itens ci WHERE ci.card_id = c.id) AS n_checklist_total,
+                (SELECT COUNT(*)::int FROM card_checklist_itens ci WHERE ci.card_id = c.id AND ci.concluido) AS n_checklist_concluido,
+                (SELECT COUNT(*)::int FROM card_comentarios cm WHERE cm.card_id = c.id) AS n_comentarios,
+                (SELECT COUNT(*)::int FROM card_anexos cax WHERE cax.card_id = c.id) AS n_anexos,
                 COALESCE(
                   (SELECT json_agg(ce.etiqueta_id) FROM cards_etiquetas ce WHERE ce.card_id = c.id),
                   '[]'::json
@@ -174,6 +206,14 @@ export async function obter(req, res, next) {
           ORDER BY ordem, nome`,
         [req.params.id],
       ),
+      // Sprint 34 — definições dos campos personalizados do quadro
+      query(
+        `SELECT id, nome, tipo, opcoes, mostrar_no_card, ordem
+           FROM quadros_campos
+          WHERE quadro_id = $1
+          ORDER BY ordem, nome`,
+        [req.params.id],
+      ),
     ]);
 
     res.json({
@@ -185,8 +225,13 @@ export async function obter(req, res, next) {
         etiqueta_ids: c.etiqueta_ids || [],
         // Sprint 18 — múltiplos responsáveis (array de { id, nome, email })
         responsaveis: c.responsaveis || [],
+        // Sprint 34 — mapa { campo_id: valor } + selos derivados
+        campos: c.campos || {},
+        estimativa_horas: c.estimativa_horas != null ? Number(c.estimativa_horas) : null,
+        bloqueado: (c.n_bloqueadores || 0) > 0,
       })),
       etiquetas: etiqR.rows,
+      campos: camposR.rows,
     });
   } catch (err) { next(err); }
 }
@@ -223,16 +268,18 @@ export async function criar(req, res, next) {
     );
     const quadroId = rows[0].id;
 
-    // Colunas padrão
+    // Colunas padrão — Sprint 34: já nascem com o TIPO certo, pra que as
+    // métricas (cycle time, CFD) e o gate de dependências funcionem sem
+    // nenhuma configuração manual.
     const colunasPadrao = [
-      { nome: 'A fazer', ordem: 1000 },
-      { nome: 'Em andamento', ordem: 2000 },
-      { nome: 'Concluído', ordem: 3000 },
+      { nome: 'A fazer', ordem: 1000, tipo: 'backlog' },
+      { nome: 'Em andamento', ordem: 2000, tipo: 'em_andamento' },
+      { nome: 'Concluído', ordem: 3000, tipo: 'concluida' },
     ];
     for (const c of colunasPadrao) {
       await client.query(
-        `INSERT INTO colunas (quadro_id, nome, ordem) VALUES ($1, $2, $3)`,
-        [quadroId, c.nome, c.ordem],
+        `INSERT INTO colunas (quadro_id, nome, ordem, tipo) VALUES ($1, $2, $3, $4)`,
+        [quadroId, c.nome, c.ordem, c.tipo],
       );
     }
 

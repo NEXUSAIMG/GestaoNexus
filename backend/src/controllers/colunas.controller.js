@@ -12,14 +12,22 @@ import { podeVerQuadro } from './quadros.controller.js';
  * renormalização (reescrevemos as ordens em múltiplos de 1000).
  */
 
+// Sprint 34 — tipo da coluna. É o que habilita métricas (cycle time, CFD)
+// e o gate de dependências: só coluna 'concluida' libera os dependentes.
+const tipoColuna = z.enum(['backlog', 'em_andamento', 'concluida']);
+
 const criarSchema = z.object({
   nome: z.string().min(1).max(80),
   // Posição opcional — se vier, insere ali. Se não, vai pro final.
   posicao: z.number().int().min(0).optional(),
+  tipo: tipoColuna.optional().default('em_andamento'),
+  wip_limite: z.number().int().min(1).max(999).optional().nullable(),
 });
 
 const atualizarSchema = z.object({
   nome: z.string().min(1).max(80).optional(),
+  tipo: tipoColuna.optional(),
+  wip_limite: z.number().int().min(1).max(999).nullable().optional(),
 });
 
 const moverSchema = z.object({
@@ -107,10 +115,10 @@ export async function criar(req, res, next) {
     }
 
     const { rows } = await client.query(
-      `INSERT INTO colunas (quadro_id, nome, ordem)
-       VALUES ($1, $2, $3)
-       RETURNING id, nome, ordem, criado_em`,
-      [req.params.id, d.nome.trim(), ordem],
+      `INSERT INTO colunas (quadro_id, nome, ordem, tipo, wip_limite)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, nome, ordem, tipo, wip_limite, criado_em`,
+      [req.params.id, d.nome.trim(), ordem, d.tipo ?? 'em_andamento', d.wip_limite ?? null],
     );
 
     await client.query('COMMIT');
@@ -145,14 +153,51 @@ export async function atualizar(req, res, next) {
     if (!podeEditar) throw new NaoAutorizadoError('Sem permissão.');
 
     const d = atualizarSchema.parse(req.body);
+
+    // UPDATE dinâmico por concatenação (nunca template literal — bug conhecido).
+    const updates = [];
+    const params = [];
     if (d.nome !== undefined) {
-      await query(`UPDATE colunas SET nome = $1 WHERE id = $2`, [d.nome.trim(), req.params.id]);
+      params.push(d.nome.trim());
+      updates.push('nome = $' + params.length);
+    }
+    if (d.tipo !== undefined) {
+      params.push(d.tipo);
+      updates.push('tipo = $' + params.length);
+    }
+    if (d.wip_limite !== undefined) {
+      params.push(d.wip_limite);
+      updates.push('wip_limite = $' + params.length);
+    }
+
+    if (updates.length > 0) {
+      params.push(req.params.id);
+      await query(
+        'UPDATE colunas SET ' + updates.join(', ') + ' WHERE id = $' + params.length,
+        params,
+      );
+    }
+
+    // Sprint 34 — virar (ou deixar de ser) coluna de conclusão reflete nos
+    // cards que já estão lá: o carimbo `concluido_em` é a base do cycle time.
+    if (d.tipo === 'concluida') {
+      await query(
+        `UPDATE cards SET concluido_em = COALESCE(concluido_em, NOW())
+          WHERE coluna_id = $1 AND arquivado_em IS NULL AND concluido_em IS NULL`,
+        [req.params.id],
+      );
+    } else if (d.tipo !== undefined) {
+      await query(
+        `UPDATE cards SET concluido_em = NULL
+          WHERE coluna_id = $1 AND concluido_em IS NOT NULL`,
+        [req.params.id],
+      );
     }
 
     registrarAcao({
       acao: 'coluna.editou',
       pessoa_acesso_id: req.pessoa.id,
-      detalhes: { coluna_id: req.params.id },
+      detalhes: { coluna_id: req.params.id, campos: Object.keys(d) },
       req,
     });
 

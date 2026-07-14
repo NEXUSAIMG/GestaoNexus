@@ -20,9 +20,13 @@ export function tratadorDeErros(err, _req, res, _next) {
   }
 
   if (err instanceof AppError) {
+    // Sprint 34: erros de negócio podem carregar contexto acionável pra UI
+    // (ex.: 409 do /cards/:id/mover devolve a lista de bloqueadores abertos
+    // e o flag pode_forcar). Só repassamos quando o controller preencheu.
     return res.status(err.status).json({
       erro: err.message,
       codigo: err.codigo,
+      ...(err.detalhes ? { detalhes: err.detalhes } : {}),
     });
   }
 

@@ -87,19 +87,25 @@ export async function obter(req, res, next) {
 export async function criar(req, res, next) {
   try {
     const d = contaSchema.parse(req.body);
+
+    // Sprint 32.1 — carimbo de "saldo atualizado em/por" calculado em JS.
+    // Antes isso era feito com CASE WHEN ... THEN $7 (UUID) dentro do INSERT;
+    // parâmetro UUID dentro de CASE tem inferência de tipo frágil no Postgres
+    // e podia derrubar o cadastro com 500 genérico. Aqui fica explícito.
+    const temSaldoInicial = Number(d.saldo_atual) !== 0;
+    const saldoEm = temSaldoInicial ? new Date() : null;
+    const saldoPor = temSaldoInicial ? req.pessoa.id : null;
+
     const { rows } = await query(
       `INSERT INTO contas_bancarias
          (apelido, banco, agencia, conta, tipo,
           saldo_atual, saldo_atualizado_em, saldo_atualizado_por,
           ordem, observacoes)
-       VALUES ($1, $2, $3, $4, $5, $6,
-               CASE WHEN $6 != 0 THEN NOW() ELSE NULL END,
-               CASE WHEN $6 != 0 THEN $7 ELSE NULL END,
-               $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         d.apelido, d.banco ?? null, d.agencia ?? null, d.conta ?? null, d.tipo,
-        d.saldo_atual, req.pessoa.id, d.ordem, d.observacoes ?? null,
+        d.saldo_atual, saldoEm, saldoPor, d.ordem, d.observacoes ?? null,
       ],
     );
 
@@ -111,7 +117,13 @@ export async function criar(req, res, next) {
     });
 
     res.status(201).json(serializar(rows[0]));
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Sprint 32.1 — log temporário pra diagnosticar "não salva". Mostra o
+    // motivo exato + o payload recebido no log do Railway. Remover depois.
+    console.error('[contas-bancarias.criar] falhou:', err?.code || '', err?.message,
+      '| body:', JSON.stringify(req.body));
+    next(err);
+  }
 }
 
 export async function atualizar(req, res, next) {

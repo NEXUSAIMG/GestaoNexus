@@ -39,8 +39,9 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.6', // bump a cada deploy novo
-    sprints_ativas: 'até 31 (acesso restrito por pessoa)',
+    versao: '1.8', // bump a cada deploy novo
+    sprints_ativas: 'até 34 (Projetos: subtarefas, dependências, campos personalizados, '
+      + 'WIP, tipo de coluna, vínculos de negócio, apontamento de horas)',
   });
 });
 

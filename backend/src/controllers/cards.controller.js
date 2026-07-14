@@ -10,6 +10,10 @@ import {
 } from '../services/notificacoes.service.js';
 import { tplCardAtribuido } from '../services/email-templates.js';
 import { avancarApos } from '../services/instancias.service.js';
+// Sprint 34 — hierarquia e dependencias
+import { bloqueadoresAbertos, criariaCicloHierarquia } from './projetos.controller.js';
+// Sprint 36 — motor de automação
+import { dispararEmBackground } from '../services/automacoes.service.js';
 
 /**
  * Cards — Sprint 10 + Sprint 18 (múltiplos responsáveis).
@@ -30,6 +34,12 @@ import { avancarApos } from '../services/instancias.service.js';
 
 const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data deve estar em YYYY-MM-DD');
 
+// Sprint 32 — token de cor da capa (mesma paleta das etiquetas)
+const corCapa = z.enum([
+  'slate', 'red', 'orange', 'amber', 'yellow', 'lime', 'emerald',
+  'teal', 'cyan', 'blue', 'indigo', 'violet', 'fuchsia', 'pink', 'rose',
+]);
+
 const criarSchema = z.object({
   coluna_id: z.string().uuid(),
   titulo: z.string().min(1).max(255),
@@ -39,6 +49,15 @@ const criarSchema = z.object({
   responsavel_id: z.string().uuid().optional().nullable(),
   responsavel_ids: z.array(z.string().uuid()).optional(),
   data_prazo: dataIso.optional().nullable(),
+  // Sprint 32
+  data_inicio: dataIso.optional().nullable(),
+  prazo_concluido: z.boolean().optional(),
+  capa_cor: corCapa.optional().nullable(),
+  // Sprint 34 — 0=P0 critico ... 3=baixa (2 = normal)
+  prioridade: z.number().int().min(0).max(3).optional(),
+  estimativa_horas: z.number().min(0).max(9999).optional().nullable(),
+  pontos: z.number().int().min(0).max(999).optional().nullable(),
+  card_pai_id: z.string().uuid().optional().nullable(),
   etiqueta_ids: z.array(z.string().uuid()).optional().default([]),
   posicao: z.number().int().min(0).optional(),
 });
@@ -50,12 +69,24 @@ const atualizarSchema = z.object({
   responsavel_id: z.string().uuid().nullable().optional(),
   responsavel_ids: z.array(z.string().uuid()).optional(),
   data_prazo: dataIso.nullable().optional(),
+  // Sprint 32
+  data_inicio: dataIso.nullable().optional(),
+  prazo_concluido: z.boolean().optional(),
+  capa_cor: corCapa.nullable().optional(),
+  // Sprint 34
+  prioridade: z.number().int().min(0).max(3).optional(),
+  estimativa_horas: z.number().min(0).max(9999).nullable().optional(),
+  pontos: z.number().int().min(0).max(999).nullable().optional(),
+  card_pai_id: z.string().uuid().nullable().optional(),
   etiqueta_ids: z.array(z.string().uuid()).optional(),
 });
 
 const moverSchema = z.object({
   coluna_id: z.string().uuid(),
   posicao: z.number().int().min(0),
+  // Sprint 34 — o quadro avisa quando ha bloqueador aberto e devolve 409.
+  // A UI reenvia com forcar=true se a pessoa decidir mover mesmo assim.
+  forcar: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -181,6 +212,16 @@ function serializar(c) {
     // Sprint 18: nova fonte da verdade. Array de { id, nome, email } em ordem.
     responsaveis: c.responsaveis ?? [],
     data_prazo: c.data_prazo,
+    // Sprint 32
+    data_inicio: c.data_inicio,
+    prazo_concluido: !!c.prazo_concluido,
+    capa_cor: c.capa_cor ?? null,
+    // Sprint 34
+    prioridade: c.prioridade ?? 2,
+    estimativa_horas: c.estimativa_horas != null ? Number(c.estimativa_horas) : null,
+    pontos: c.pontos ?? null,
+    card_pai_id: c.card_pai_id ?? null,
+    concluido_em: c.concluido_em ?? null,
     ordem: c.ordem,
     arquivado: !!c.arquivado_em,
     arquivado_em: c.arquivado_em,
@@ -310,13 +351,14 @@ export async function criar(req, res, next) {
   try {
     const d = criarSchema.parse(req.body);
 
-    // Pega o quadro da coluna pra validar permissão
+    // Pega o quadro da coluna pra validar permissão (e o tipo, pra Sprint 37)
     const colR = await query(
-      `SELECT quadro_id FROM colunas WHERE id = $1 AND arquivada_em IS NULL`,
+      `SELECT quadro_id, tipo FROM colunas WHERE id = $1 AND arquivada_em IS NULL`,
       [d.coluna_id],
     );
     if (!colR.rows[0]) throw new NaoEncontradoError('Coluna não encontrada');
     const quadroId = colR.rows[0].quadro_id;
+    const tipoColunaInicial = colR.rows[0].tipo;
 
     const isAdmin = !!req.pessoa?.administrador;
     const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, quadroId);
@@ -336,18 +378,50 @@ export async function criar(req, res, next) {
       ordem = max[0].prox;
     }
 
+    // Sprint 34 — card pai precisa ser do mesmo quadro.
+    if (d.card_pai_id) {
+      const paiR = await client.query(
+        'SELECT quadro_id FROM cards WHERE id = $1 AND arquivado_em IS NULL',
+        [d.card_pai_id],
+      );
+      if (!paiR.rows[0]) throw new NaoEncontradoError('Card pai nao encontrado');
+      if (paiR.rows[0].quadro_id !== quadroId) {
+        throw new AppError('O card pai precisa estar no mesmo quadro.', 400);
+      }
+    }
+
+    // Sprint 37 — o card já nasce carimbado: `coluna_desde` conta o aging
+    // desde o minuto zero, e se ele nasce fora do backlog o cycle time
+    // começa a correr agora (é trabalho que já entrou na esteira).
+    const nasceIniciado = tipoColunaInicial !== 'backlog';
+
     // INSERT do card sem responsavel_id — o trigger preenche a partir da N:N.
     const { rows } = await client.query(
       `INSERT INTO cards (
          coluna_id, quadro_id, titulo, descricao,
-         data_prazo, ordem, criado_por_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+         data_prazo, data_inicio, capa_cor, ordem, criado_por_id,
+         prioridade, estimativa_horas, pontos, card_pai_id,
+         coluna_desde, iniciado_em
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                 NOW(), $14) RETURNING id`,
       [
         d.coluna_id, quadroId, d.titulo.trim(), d.descricao?.trim() || null,
-        d.data_prazo || null, ordem, req.pessoa.id,
+        d.data_prazo || null, d.data_inicio || null, d.capa_cor || null,
+        ordem, req.pessoa.id,
+        d.prioridade ?? 2, d.estimativa_horas ?? null, d.pontos ?? null,
+        d.card_pai_id || null,
+        nasceIniciado ? new Date().toISOString() : null,
       ],
     );
     const cardId = rows[0].id;
+
+    // Movimento de entrada (de_coluna_id = NULL marca a criação).
+    await client.query(
+      `INSERT INTO cards_movimentos
+         (card_id, quadro_id, de_coluna_id, para_coluna_id, de_tipo, para_tipo, pessoa_id)
+       VALUES ($1, $2, NULL, $3, NULL, $4, $5)`,
+      [cardId, quadroId, d.coluna_id, tipoColunaInicial, req.pessoa.id],
+    );
 
     // Sprint 18 — múltiplos responsáveis.
     // Prioridade: responsavel_ids (array) > responsavel_id (singular, back-compat).
@@ -400,6 +474,15 @@ export async function criar(req, res, next) {
       disparar(() => notificarAtribuicao(card, req.pessoa.id));
     }
 
+    // Sprint 36 — gatilho de automação. Em background: se a regra falhar,
+    // quem falhou foi a regra, não a criação do card.
+    dispararEmBackground('card_criado', {
+      quadroId,
+      cardId,
+      colunaId: d.coluna_id,
+      pessoaId: req.pessoa.id,
+    });
+
     res.status(201).json(serializar(card));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -427,6 +510,21 @@ export async function atualizar(req, res, next) {
 
     const d = atualizarSchema.parse(req.body);
     const responsavelAnterior = cAtual.rows[0].responsavel_id;
+
+    // Sprint 34 — mudanca de pai: mesmo quadro e sem ciclo na hierarquia.
+    if (d.card_pai_id) {
+      const paiR = await query(
+        'SELECT quadro_id FROM cards WHERE id = $1 AND arquivado_em IS NULL',
+        [d.card_pai_id],
+      );
+      if (!paiR.rows[0]) throw new NaoEncontradoError('Card pai nao encontrado');
+      if (paiR.rows[0].quadro_id !== cAtual.rows[0].quadro_id) {
+        throw new AppError('O card pai precisa estar no mesmo quadro.', 400);
+      }
+      if (await criariaCicloHierarquia({ query }, req.params.id, d.card_pai_id)) {
+        throw new AppError('Essa hierarquia criaria um ciclo (o card ja e ancestral do pai).', 400);
+      }
+    }
 
     await client.query('BEGIN');
 
@@ -525,8 +623,15 @@ export async function atualizar(req, res, next) {
 export async function mover(req, res, next) {
   const client = await pool.connect();
   try {
+    // Sprint 37 — trazemos o tipo e o carimbo da coluna de ORIGEM: são eles
+    // que alimentam o log de movimentos (e, por consequência, cycle time,
+    // aging e CFD).
     const cAtual = await query(
-      `SELECT id, quadro_id, coluna_id FROM cards WHERE id = $1`,
+      `SELECT c.id, c.quadro_id, c.coluna_id, c.coluna_desde, c.iniciado_em,
+              col.tipo AS coluna_tipo
+         FROM cards c
+         JOIN colunas col ON col.id = c.coluna_id
+        WHERE c.id = $1`,
       [req.params.id],
     );
     if (!cAtual.rows[0]) throw new NaoEncontradoError('Card não encontrado');
@@ -535,11 +640,12 @@ export async function mover(req, res, next) {
     const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, cAtual.rows[0].quadro_id);
     if (!podeEditar) throw new NaoAutorizadoError('Sem permissão.');
 
-    const { coluna_id, posicao } = moverSchema.parse(req.body);
+    const { coluna_id, posicao, forcar } = moverSchema.parse(req.body);
 
     // Confere que a coluna destino é do MESMO quadro
     const colR = await query(
-      `SELECT quadro_id FROM colunas WHERE id = $1 AND arquivada_em IS NULL`,
+      `SELECT quadro_id, tipo, wip_limite, nome
+         FROM colunas WHERE id = $1 AND arquivada_em IS NULL`,
       [coluna_id],
     );
     if (!colR.rows[0]) throw new NaoEncontradoError('Coluna destino não encontrada');
@@ -547,13 +653,100 @@ export async function mover(req, res, next) {
       throw new AppError('Não é possível mover cards entre quadros.', 400);
     }
 
+    const colDestino = colR.rows[0];
+    const mudouDeColuna = coluna_id !== cAtual.rows[0].coluna_id;
+
+    // -----------------------------------------------------------------------
+    // Sprint 34 — Gate de dependências.
+    // Sair do backlog com bloqueador aberto é quase sempre erro. Avisamos
+    // com 409 e a lista de bloqueadores; a UI oferece "mover mesmo assim"
+    // (reenvia com forcar=true). Kanban saudável orienta, não impede.
+    // -----------------------------------------------------------------------
+    let bloqueadores = [];
+    if (mudouDeColuna && colDestino.tipo !== 'backlog' && !forcar) {
+      bloqueadores = await bloqueadoresAbertos({ query }, req.params.id);
+      if (bloqueadores.length > 0) {
+        const err = new AppError('Este card está bloqueado por outro(s) card(s) em aberto.', 409);
+        err.detalhes = { bloqueadores, pode_forcar: true };
+        throw err;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Sprint 34 — WIP limit: avisa, não bloqueia (devolvido no payload).
+    // -----------------------------------------------------------------------
+    let wipEstourado = null;
+    if (mudouDeColuna && colDestino.wip_limite) {
+      const { rows: cnt } = await query(
+        `SELECT COUNT(*)::int AS n FROM cards
+          WHERE coluna_id = $1 AND arquivado_em IS NULL AND id <> $2`,
+        [coluna_id, req.params.id],
+      );
+      if (cnt[0].n + 1 > colDestino.wip_limite) {
+        wipEstourado = {
+          coluna: colDestino.nome,
+          limite: colDestino.wip_limite,
+          atual: cnt[0].n + 1,
+        };
+      }
+    }
+
     await client.query('BEGIN');
 
     const novaOrdem = await calcularOrdemCard(client, coluna_id, posicao, req.params.id);
+
+    // Carimbo de conclusão: entra em coluna 'concluida' → marca; sai → limpa.
+    // É a base de cycle time / lead time (Sprint 37). Resolvido em JS pra
+    // não montar CASE WHEN condicional com uuid no SQL.
+    const concluiAgora = colDestino.tipo === 'concluida';
+
+    // Sprint 37 — carimbos de fluxo.
+    // `iniciado_em` marca a PRIMEIRA saída do backlog (base do cycle time).
+    // Só grava se ainda não existe: voltar pro backlog e sair de novo não
+    // reinicia a contagem — o trabalho já tinha começado.
+    const saiuDoBacklog = colDestino.tipo !== 'backlog';
+    const jaIniciado = !!cAtual.rows[0].iniciado_em;
+    const deveIniciar = saiuDoBacklog && !jaIniciado;
+
+    // SET montado por concatenação. Cuidado central: `coluna_desde` só é
+    // reescrito quando o card MUDA de coluna. Reordenar dentro da mesma
+    // coluna não pode zerar o aging — senão bastava arrastar o card pra
+    // cima pra ele "rejuvenescer" e a métrica viraria ficção.
+    const sets = ['coluna_id = $1', 'ordem = $2'];
+    sets.push(concluiAgora ? 'concluido_em = COALESCE(concluido_em, NOW())' : 'concluido_em = NULL');
+    if (mudouDeColuna) sets.push('coluna_desde = NOW()');
+    if (deveIniciar || (concluiAgora && !jaIniciado)) sets.push('iniciado_em = NOW()');
+
     await client.query(
-      `UPDATE cards SET coluna_id = $1, ordem = $2 WHERE id = $3`,
+      'UPDATE cards SET ' + sets.join(', ') + ' WHERE id = $3',
       [coluna_id, novaOrdem, req.params.id],
     );
+
+    // Log de movimento — só quando muda de coluna de fato (reordenar dentro
+    // da mesma coluna não é evento de fluxo e poluiria as métricas).
+    if (mudouDeColuna) {
+      // Minutos na origem calculados em JS: nada de aritmética condicional
+      // com uuid no SQL.
+      const desde = cAtual.rows[0].coluna_desde
+        ? new Date(cAtual.rows[0].coluna_desde).getTime()
+        : null;
+      const minutosNaOrigem = desde
+        ? Math.max(0, Math.round((Date.now() - desde) / 60000))
+        : null;
+
+      await client.query(
+        `INSERT INTO cards_movimentos
+           (card_id, quadro_id, de_coluna_id, para_coluna_id,
+            de_tipo, para_tipo, minutos_na_origem, pessoa_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          req.params.id, cAtual.rows[0].quadro_id,
+          cAtual.rows[0].coluna_id, coluna_id,
+          cAtual.rows[0].coluna_tipo, colDestino.tipo,
+          minutosNaOrigem, req.pessoa.id,
+        ],
+      );
+    }
 
     // Sprint 15 — Hook de instancia.
     // Se este card pertence a uma instância E foi movido pra a coluna
@@ -590,7 +783,26 @@ export async function mover(req, res, next) {
       req,
     });
 
-    res.json({ ok: true, coluna_id, ordem: novaOrdem, avanco_instancia: avancoInstancia });
+    // Sprint 36 — gatilho de automação. Só quando muda de coluna: reordenar
+    // dentro da mesma coluna não é evento de fluxo.
+    if (mudouDeColuna) {
+      dispararEmBackground('card_movido', {
+        quadroId: cAtual.rows[0].quadro_id,
+        cardId: req.params.id,
+        colunaId: coluna_id,
+        pessoaId: req.pessoa.id,
+      });
+    }
+
+    res.json({
+      ok: true,
+      coluna_id,
+      ordem: novaOrdem,
+      avanco_instancia: avancoInstancia,
+      // Sprint 34 — avisos (nao sao erro; a UI mostra um toast)
+      wip_estourado: wipEstourado,
+      concluido: concluiAgora,
+    });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);

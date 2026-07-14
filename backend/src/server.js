@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs';
 import { env, isProduction } from './config/env.js';
 import apiRoutes from './routes/index.js';
 import { tratadorDeErros } from './middleware/error.middleware.js';
-import { iniciarAgendadorAsaas, pararAgendadorAsaas, iniciarAgendadorNotificacoes, pararAgendadorNotificacoes, iniciarAgendadorRecorrencias, pararAgendadorRecorrencias, iniciarAgendadorPortfolio, pararAgendadorPortfolio } from './services/scheduler.js';
+import { iniciarAgendadorAsaas, pararAgendadorAsaas, iniciarAgendadorNotificacoes, pararAgendadorNotificacoes, iniciarAgendadorRecorrencias, pararAgendadorRecorrencias, iniciarAgendadorPortfolio, pararAgendadorPortfolio, iniciarAgendadorMetricas, pararAgendadorMetricas, iniciarAgendadorAutomacoes, pararAgendadorAutomacoes } from './services/scheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,6 +85,10 @@ const server = app.listen(env.PORT, () => {
   iniciarAgendadorNotificacoes();
   iniciarAgendadorRecorrencias();
   iniciarAgendadorPortfolio();
+  // Sprint 37 — foto diária do board (base do CFD)
+  iniciarAgendadorMetricas();
+  // Sprint 36 — automações temporais (prazo e agendadas)
+  iniciarAgendadorAutomacoes();
 });
 
 // Encerramento gracioso.
@@ -94,6 +98,8 @@ function shutdown(signal) {
   pararAgendadorNotificacoes();
   pararAgendadorRecorrencias();
   pararAgendadorPortfolio();
+  pararAgendadorMetricas();
+  pararAgendadorAutomacoes();
   server.close(() => process.exit(0));
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
