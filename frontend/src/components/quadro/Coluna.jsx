@@ -29,6 +29,7 @@ const PONTO_TIPO = {
 export default function Coluna({
   coluna, cards, cartoriosNestaFase = [], podeEditar, etiquetas,
   aoClicarCard, aoNovoCard, aoArquivarColuna, aoMudarColuna,
+  selecionados, aoSelecionarCard,
 }) {
   const sortable = useSortable({ id: 'col-' + coluna.id });
   const drop = useDroppable({ id: 'coluna-' + coluna.id });
@@ -256,6 +257,8 @@ export default function Coluna({
               card={card}
               etiquetas={etiquetas}
               aoClicar={() => aoClicarCard(card)}
+              marcado={selecionados ? selecionados.has(card.id) : undefined}
+              aoMarcar={aoSelecionarCard ? (e) => aoSelecionarCard(card.id, e) : undefined}
             />
           ))}
         </SortableContext>

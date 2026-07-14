@@ -14,6 +14,8 @@ import { avancarApos } from '../services/instancias.service.js';
 import { bloqueadoresAbertos, criariaCicloHierarquia } from './projetos.controller.js';
 // Sprint 36 — motor de automação
 import { dispararEmBackground } from '../services/automacoes.service.js';
+// Sprint 38.1 — tempo real
+import { publicarMudanca } from '../services/realtime.service.js';
 
 /**
  * Cards — Sprint 10 + Sprint 18 (múltiplos responsáveis).
@@ -483,6 +485,7 @@ export async function criar(req, res, next) {
       pessoaId: req.pessoa.id,
     });
 
+    publicarMudanca(quadroId, 'card_criado');
     res.status(201).json(serializar(card));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -607,6 +610,7 @@ export async function atualizar(req, res, next) {
       disparar(() => notificarAtribuicao(card, req.pessoa.id));
     }
 
+    publicarMudanca(cAtual.rows[0].quadro_id, 'card_editado');
     res.json(serializar(card));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -794,6 +798,7 @@ export async function mover(req, res, next) {
       });
     }
 
+    publicarMudanca(cAtual.rows[0].quadro_id, 'card_movido');
     res.json({
       ok: true,
       coluna_id,
@@ -840,6 +845,7 @@ export async function arquivar(req, res, next) {
       req,
     });
 
+    publicarMudanca(cR.rows[0].quadro_id, 'card_arquivado');
     res.status(204).send();
   } catch (err) { next(err); }
 }

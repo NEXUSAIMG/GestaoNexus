@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   Calendar, CheckCircle2, MessageSquare, Paperclip, CheckSquare, AlignLeft,
-  Ban, GitBranch, Link2, Clock, ListTree,
+  Ban, GitBranch, Link2, Clock, ListTree, Check,
 } from 'lucide-react';
 import {
   COR_CHIP, corForte, formatarPrazo, iniciais, prioridadeDe, formatarMinutos,
@@ -19,7 +19,7 @@ import {
  * "normal, sem nada" continua limpo como era antes.
  */
 
-export function CardSortable({ card, etiquetas, aoClicar }) {
+export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
   } = useSortable({ id: card.id });
@@ -32,12 +32,12 @@ export function CardSortable({ card, etiquetas, aoClicar }) {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card card={card} etiquetas={etiquetas} aoClicar={aoClicar} />
+      <Card card={card} etiquetas={etiquetas} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} />
     </div>
   );
 }
 
-export default function Card({ card, etiquetas, aoClicar, arrastando }) {
+export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, aoMarcar }) {
   const prazo = formatarPrazo(card.data_prazo);
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
@@ -70,22 +70,45 @@ export default function Card({ card, etiquetas, aoClicar, arrastando }) {
   return (
     <div
       onClick={(e) => {
+        // Com seleção ativa, clicar no corpo alterna a marcação em vez de abrir.
+        if (marcado !== undefined && aoMarcar && !arrastando) {
+          e.stopPropagation();
+          aoMarcar(e);
+          return;
+        }
         if (aoClicar && !arrastando) {
           e.stopPropagation();
           aoClicar();
         }
       }}
       className={[
-        'rounded-lg border bg-white p-2.5 shadow-sm transition-shadow',
+        'group relative rounded-lg border bg-white p-2.5 shadow-sm transition-shadow',
         arrastando
           ? 'rotate-1 shadow-lg ring-2 ring-nexus-300 cursor-grabbing'
           : 'cursor-pointer hover:shadow-md hover:border-nexus-200',
+        marcado ? 'ring-2 ring-nexus-500 border-nexus-300' : '',
         // Card bloqueado ganha borda vermelha — é o sinal mais importante
         // do board: alguém vai tentar tocar nisso sem poder.
-        !arrastando && bloqueado ? 'border-red-300' : '',
-        !arrastando && !bloqueado ? 'border-slate-200' : '',
+        !arrastando && bloqueado && !marcado ? 'border-red-300' : '',
+        !arrastando && !bloqueado && !marcado ? 'border-slate-200' : '',
       ].join(' ')}
     >
+      {aoMarcar && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); aoMarcar(e); }}
+          className={[
+            'absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded border text-white transition-opacity',
+            marcado
+              ? 'border-nexus-600 bg-nexus-600 opacity-100'
+              : 'border-slate-300 bg-white opacity-0 group-hover:opacity-100',
+          ].join(' ')}
+          title="Selecionar (Shift+clique para intervalo)"
+          aria-label="Selecionar card"
+        >
+          {marcado && <Check size={11} />}
+        </button>
+      )}
       {card.capa_cor && (
         <div className={'mb-2 -mx-2.5 -mt-2.5 h-2 rounded-t-lg ' + corForte(card.capa_cor)} />
       )}

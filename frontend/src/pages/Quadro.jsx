@@ -22,6 +22,9 @@ import VistaTabela from '../components/quadro/VistaTabela.jsx';
 import VistaTimeline from '../components/quadro/VistaTimeline.jsx';
 import VistaCarga from '../components/quadro/VistaCarga.jsx';
 import VistaAgrupada from '../components/quadro/VistaAgrupada.jsx';
+import BarraSelecao from '../components/quadro/BarraSelecao.jsx';
+import CommandPalette from '../components/quadro/CommandPalette.jsx';
+import { useTempoReal } from '../components/quadro/useTempoReal.js';
 import { moverCardLocal } from '../components/quadro/ui.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -80,13 +83,26 @@ export default function Quadro() {
 
   const [aba, setAba] = useState('kanban');
 
+  // Sprint 38 — seleção múltipla + command palette
+  const [selecionados, setSelecionados] = useState(() => new Set());
+  const [ultimoMarcado, setUltimoMarcado] = useState(null);
+  const [paletaAberta, setPaletaAberta] = useState(false);
+  const [outrosQuadros, setOutrosQuadros] = useState([]);
+
   // Sprint 15 — instância de processo
   const [instancia, setInstancia] = useState(null);
   const [modalDecisao, setModalDecisao] = useState(null);
 
-  async function carregar() {
+  // Sprint 38.1 — tempo real: quando outra pessoa mexe no quadro, recarrega
+  // silenciosamente (sem spinner). `conectado` alimenta o badge "ao vivo".
+  const { conectado } = useTempoReal(id, () => carregar({ silencioso: true }));
+
+  async function carregar({ silencioso = false } = {}) {
     const meuId = ++carregaIdRef.current;
-    setCarregando(true);
+    // Recarregamento silencioso (Sprint 38.1 — tempo real): atualiza o board
+    // sem ligar o spinner. Sem isso, cada mudança de outra pessoa faria a
+    // tela piscar "Carregando…".
+    if (!silencioso) setCarregando(true);
     setErro('');
     try {
       const r = await api.get('/quadros/' + id);
@@ -95,11 +111,11 @@ export default function Quadro() {
       carregarInstancia();
       carregarCartorios();
     } catch (err) {
-      if (meuId === carregaIdRef.current) {
+      if (meuId === carregaIdRef.current && !silencioso) {
         setErro(mensagemDeErro(err, 'Não consegui carregar o quadro.'));
       }
     } finally {
-      if (meuId === carregaIdRef.current) setCarregando(false);
+      if (meuId === carregaIdRef.current && !silencioso) setCarregando(false);
     }
   }
 
@@ -142,6 +158,63 @@ export default function Quadro() {
     const t = setTimeout(() => setAviso(null), 6000);
     return () => clearTimeout(t);
   }, [aviso]);
+
+  // Sprint 38 — atalhos globais: Ctrl/Cmd+K abre a paleta, Esc limpa seleção.
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        carregarOutrosQuadros();
+        setPaletaAberta(true);
+      } else if (e.key === 'Escape' && selecionados.size > 0) {
+        setSelecionados(new Set());
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line
+  }, [selecionados]);
+
+  // Lista de quadros pra paleta (carregada sob demanda, uma vez).
+  async function carregarOutrosQuadros() {
+    if (outrosQuadros.length > 0) return;
+    try {
+      const r = await api.get('/quadros');
+      setOutrosQuadros(r.data || []);
+    } catch { /* silencioso — a paleta ainda serve pro quadro atual */ }
+  }
+
+  // Seleção de card com suporte a Shift (intervalo na coluna visível).
+  function aoSelecionarCard(cardId, ev) {
+    setSelecionados((prev) => {
+      const novo = new Set(prev);
+      if (ev?.shiftKey && ultimoMarcado) {
+        // Intervalo entre o último marcado e este, na ordem visual dos filtrados.
+        const ordenados = cardsFiltrados
+          .slice()
+          .sort((a, b) => {
+            const ca = quadro.colunas.find((c) => c.id === a.coluna_id)?.ordem ?? 0;
+            const cb = quadro.colunas.find((c) => c.id === b.coluna_id)?.ordem ?? 0;
+            return ca - cb || a.ordem - b.ordem;
+          })
+          .map((c) => c.id);
+        const i1 = ordenados.indexOf(ultimoMarcado);
+        const i2 = ordenados.indexOf(cardId);
+        if (i1 >= 0 && i2 >= 0) {
+          const [lo, hi] = i1 < i2 ? [i1, i2] : [i2, i1];
+          for (let i = lo; i <= hi; i += 1) novo.add(ordenados[i]);
+        } else {
+          novo.add(cardId);
+        }
+      } else if (novo.has(cardId)) {
+        novo.delete(cardId);
+      } else {
+        novo.add(cardId);
+      }
+      return novo;
+    });
+    setUltimoMarcado(cardId);
+  }
 
   // ---------------------------------------------------------------------------
   // Drag & drop
@@ -329,8 +402,19 @@ export default function Quadro() {
                 ? <Globe size={14} className="shrink-0 text-emerald-600" />
                 : <Lock size={14} className="shrink-0 text-slate-400" />}
             </div>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <Users2 size={11} /> {quadro.equipe_nome}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1"><Users2 size={11} /> {quadro.equipe_nome}</span>
+              {/* Sprint 38.1 — indicador de tempo real */}
+              <span
+                className={[
+                  'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                  conectado ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400',
+                ].join(' ')}
+                title={conectado ? 'Atualiza em tempo real' : 'Reconectando…'}
+              >
+                <span className={'h-1.5 w-1.5 rounded-full ' + (conectado ? 'bg-emerald-500' : 'bg-slate-300')} />
+                {conectado ? 'ao vivo' : 'offline'}
+              </span>
             </div>
           </div>
         </div>
@@ -494,6 +578,8 @@ export default function Quadro() {
                     aoClicarCard={(c) => setCardAberto(c.id)}
                     aoNovoCard={() => setNovoCardEm(col.id)}
                     aoMudarColuna={carregar}
+                    selecionados={selecionados}
+                    aoSelecionarCard={quadro.pode_editar ? aoSelecionarCard : undefined}
                     aoArquivarColuna={async () => {
                       if (!confirm('Arquivar a coluna "' + col.nome + '"? Os cards ficam no histórico mas saem do board.')) return;
                       try {
@@ -543,6 +629,26 @@ export default function Quadro() {
           </button>
         </div>
       )}
+
+      {/* Sprint 38 — barra de ações em massa */}
+      {selecionados.size > 0 && (
+        <BarraSelecao
+          quadro={quadro}
+          ids={[...selecionados]}
+          onLimpar={() => setSelecionados(new Set())}
+          onConcluido={() => { setSelecionados(new Set()); carregar(); }}
+        />
+      )}
+
+      {/* Sprint 38 — command palette (Ctrl/Cmd+K) */}
+      <CommandPalette
+        aberto={paletaAberta}
+        onFechar={() => setPaletaAberta(false)}
+        quadro={quadro}
+        quadros={outrosQuadros}
+        aoAbrirCard={(cid) => { setAba('kanban'); setCardAberto(cid); }}
+        aoTrocarVista={setAba}
+      />
 
       {/* Modais */}
       {modalConfig && (

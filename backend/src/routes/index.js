@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { autenticar, exigirAcessoCompleto } from '../middleware/auth.middleware.js';
+import { streamQuadro } from '../controllers/stream.controller.js';
 import authRoutes from './auth.routes.js';
 import sociosRoutes from './socios.routes.js';
 import pessoasRoutes from './pessoas.routes.js';
@@ -71,6 +72,10 @@ router.use('/notificacoes', notificacoesRoutes);
 
 // Sprint 10 — Tarefas (Trello interno)
 router.use('/equipes', equipesRoutes);
+// Sprint 38.1 — SSE do quadro. Registrado ANTES de /quadros porque faz a
+// própria autenticação (token na query — EventSource não manda header) e
+// não pode passar pelo `autenticar` global que exige Bearer no header.
+router.get('/quadros/:id/stream', streamQuadro);
 router.use('/quadros', quadrosRoutes);
 router.use('/colunas', colunasRoutes);
 router.use('/cards', cardsRoutes);

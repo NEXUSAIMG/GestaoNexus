@@ -3,6 +3,7 @@ import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { podeVerQuadro } from './quadros.controller.js';
+import { publicarMudanca } from '../services/realtime.service.js';
 
 /**
  * Colunas — Sprint 10.
@@ -130,6 +131,7 @@ export async function criar(req, res, next) {
       req,
     });
 
+    publicarMudanca(req.params.id, 'coluna_criada');
     res.status(201).json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -201,6 +203,7 @@ export async function atualizar(req, res, next) {
       req,
     });
 
+    publicarMudanca(cR.rows[0].quadro_id, 'coluna_editada');
     res.json({ ok: true });
   } catch (err) { next(err); }
 }
@@ -228,6 +231,7 @@ export async function mover(req, res, next) {
     await client.query(`UPDATE colunas SET ordem = $1 WHERE id = $2`, [novaOrdem, req.params.id]);
     await client.query('COMMIT');
 
+    publicarMudanca(cR.rows[0].quadro_id, 'coluna_movida');
     res.json({ ok: true, ordem: novaOrdem });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -265,6 +269,7 @@ export async function arquivar(req, res, next) {
       req,
     });
 
+    publicarMudanca(cR.rows[0].quadro_id, 'coluna_arquivada');
     res.status(204).send();
   } catch (err) { next(err); }
 }

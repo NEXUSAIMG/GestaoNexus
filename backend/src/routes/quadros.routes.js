@@ -16,6 +16,7 @@ import {
   listarCampos, criarCampo, atualizarCampo, excluirCampo,
 } from '../controllers/projetos.controller.js';
 import { metricasDoQuadro, forcarSnapshot } from '../controllers/metricas.controller.js';
+import { importarTrello } from '../controllers/importar-trello.controller.js';
 import {
   listar as listarAutomacoes, criar as criarAutomacao,
   atualizar as atualizarAutomacao, excluir as excluirAutomacao,
@@ -30,6 +31,8 @@ router.use(autenticar);
 router.get('/', listarQuadros);
 router.get('/:id', obterQuadro);
 router.post('/', criarQuadro);
+// Sprint 38 — importador do Trello (rota estatica antes de /:id)
+router.post('/importar-trello', importarTrello);
 router.put('/:id', atualizarQuadro);
 router.post('/:id/arquivar', arquivarQuadro);
 
