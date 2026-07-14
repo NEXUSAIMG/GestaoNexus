@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, AlertTriangle, TrendingUp, Lock, Shuffle, Banknote } from 'lucide-react';
+import { Printer, AlertTriangle, TrendingUp, Lock, Shuffle, Banknote, ChevronRight, Repeat, Loader2 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -14,6 +14,13 @@ function formatarMes(mes) {
   return `${MES_ABREV[i] || '??'}/${a || '????'}`;
 }
 
+function dataCurta(d) {
+  if (!d) return '—';
+  const s = typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+  const [, m, dia] = s.split('-');
+  return `${dia}/${m}`;
+}
+
 const COR_HEX = {
   slate: '#64748b', red: '#ef4444', orange: '#f97316', amber: '#f59e0b',
   yellow: '#eab308', lime: '#84cc16', emerald: '#10b981', teal: '#14b8a6',
@@ -22,7 +29,15 @@ const COR_HEX = {
 };
 const corDe = (nome) => COR_HEX[nome] || COR_HEX.slate;
 
-// Mês cuja "competência" parece erro de digitação (ano muito antigo).
+const STATUS_CLASSE = {
+  paga: 'bg-emerald-100 text-emerald-700',
+  pendente: 'bg-slate-100 text-slate-600',
+  agendada: 'bg-blue-100 text-blue-700',
+  vencida: 'bg-red-100 text-red-700',
+  atrasada: 'bg-red-100 text-red-700',
+};
+const statusClasse = (s) => STATUS_CLASSE[s] || 'bg-slate-100 text-slate-600';
+
 function dataSuspeita(mes) {
   const ano = Number((mes || '').slice(0, 4));
   return ano > 0 && ano < new Date().getFullYear() - 5;
@@ -121,38 +136,20 @@ export default function Relatorios() {
       )}
 
       {/* Realizado */}
-      <Secao titulo="Realizado" subtitulo="Despesas por competência até o mês atual (o mês corrente é parcial).">
+      <Secao titulo="Realizado" subtitulo="Despesas por competência até o mês atual (o mês corrente é parcial). Clique num mês para carregar os lançamentos daquele mês.">
         <TabelaMeses meses={realizado.meses} totais={realizado.totais} mesAtual={mes_atual} />
 
         {realizado.categorias.length > 0 && (
           <div className="mt-6">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700">Despesas por categoria (realizado)</h3>
-            <div className="space-y-2.5">
-              {realizado.categorias.map((c) => (
-                <div key={c.categoria_nome}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2 truncate">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: corDe(c.categoria_cor) }} />
-                      <span className="truncate text-slate-700">{c.categoria_nome}</span>
-                      <span className="shrink-0 text-xs text-slate-400">{c.qtd} lanç.</span>
-                    </span>
-                    <span className="shrink-0 font-medium tabular-nums text-slate-800">
-                      {formatarBRL(c.total)} <span className="text-xs text-slate-400">· {Math.round(c.pct)}%</span>
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full" style={{ width: Math.max(2, c.pct) + '%', background: corDe(c.categoria_cor) }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">Despesas por categoria (todo o período realizado)</h3>
+            <BarrasCategorias categorias={realizado.categorias} />
           </div>
         )}
       </Secao>
 
       {/* Projetado */}
       <Secao titulo="Projetado"
-        subtitulo="Meses futuros — reflete só os compromissos recorrentes já cadastrados. É um piso de custo, não uma previsão completa (despesas variáveis não são projetadas).">
+        subtitulo="Meses futuros — reflete só os compromissos recorrentes já cadastrados. É um piso de custo, não uma previsão completa (despesas variáveis não são projetadas). Clique num mês para os lançamentos.">
         {projetado.meses.length === 0 ? (
           <p className="text-sm text-slate-500">Sem compromissos futuros cadastrados.</p>
         ) : (
@@ -186,7 +183,58 @@ function Secao({ titulo, subtitulo, children }) {
   );
 }
 
+function BarrasCategorias({ categorias }) {
+  return (
+    <div className="space-y-2.5">
+      {categorias.map((c) => (
+        <div key={c.categoria_nome}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2 truncate">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: corDe(c.categoria_cor) }} />
+              <span className="truncate text-slate-700">{c.categoria_nome}</span>
+              <span className="shrink-0 text-xs text-slate-400">{c.qtd} lanç.</span>
+            </span>
+            <span className="shrink-0 font-medium tabular-nums text-slate-800">
+              {formatarBRL(c.total)} <span className="text-xs text-slate-400">· {Math.round(c.pct)}%</span>
+            </span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full" style={{ width: Math.max(2, c.pct) + '%', background: corDe(c.categoria_cor) }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TabelaMeses({ meses, totais, mesAtual, projetado }) {
+  const [abertos, setAbertos] = useState(() => new Set());
+  // mes -> { loading, erro, data }
+  const [detalhes, setDetalhes] = useState({});
+
+  const carregar = async (mes) => {
+    setDetalhes((d) => ({ ...d, [mes]: { loading: true, erro: '', data: d[mes]?.data || null } }));
+    try {
+      const res = await api.get('/relatorios/detalhe-mes', { params: { mes } });
+      setDetalhes((d) => ({ ...d, [mes]: { loading: false, erro: '', data: res.data } }));
+    } catch (err) {
+      setDetalhes((d) => ({ ...d, [mes]: { loading: false, erro: mensagemDeErro(err, 'Falha ao carregar o detalhamento.'), data: null } }));
+    }
+  };
+
+  const alternar = (mes) => {
+    const estavaAberto = abertos.has(mes);
+    setAbertos((s) => {
+      const n = new Set(s);
+      if (n.has(mes)) n.delete(mes); else n.add(mes);
+      return n;
+    });
+    if (!estavaAberto) {
+      const atual = detalhes[mes];
+      if (!atual || (!atual.data && !atual.loading)) carregar(mes);
+    }
+  };
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
       <table className="w-full text-sm">
@@ -199,24 +247,17 @@ function TabelaMeses({ meses, totais, mesAtual, projetado }) {
           </tr>
         </thead>
         <tbody>
-          {meses.map((m) => {
-            const atual = m.mes === mesAtual;
-            const suspeito = dataSuspeita(m.mes);
-            return (
-              <tr key={m.mes} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-2 text-slate-700">
-                  {formatarMes(m.mes)}
-                  {atual && <span className="ml-2 rounded bg-nexus-100 px-1.5 py-0.5 text-[10px] font-medium text-nexus-700">parcial</span>}
-                  {suspeito && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">⚠ data?</span>}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-800">{formatarBRL(m.despesas_total)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-500">{formatarBRL(m.investimento_total)}</td>
-                <td className={'px-4 py-2 text-right tabular-nums font-medium ' + (m.resultado < 0 ? 'text-red-600' : 'text-emerald-600')}>
-                  {formatarBRL(m.resultado)}
-                </td>
-              </tr>
-            );
-          })}
+          {meses.map((m) => (
+            <FragmentoMes
+              key={m.mes}
+              m={m}
+              aberto={abertos.has(m.mes)}
+              atual={m.mes === mesAtual}
+              suspeito={dataSuspeita(m.mes)}
+              detalhe={detalhes[m.mes]}
+              aoAlternar={() => alternar(m.mes)}
+            />
+          ))}
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-800">
@@ -229,6 +270,112 @@ function TabelaMeses({ meses, totais, mesAtual, projetado }) {
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+function FragmentoMes({ m, aberto, atual, suspeito, detalhe, aoAlternar }) {
+  return (
+    <>
+      <tr onClick={aoAlternar}
+        className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 last:border-0">
+        <td className="px-4 py-2 text-slate-700">
+          <span className="inline-flex items-center gap-1.5">
+            <ChevronRight size={14} className={'text-slate-400 transition-transform ' + (aberto ? 'rotate-90' : '')} />
+            {formatarMes(m.mes)}
+          </span>
+          {atual && <span className="ml-2 rounded bg-nexus-100 px-1.5 py-0.5 text-[10px] font-medium text-nexus-700">parcial</span>}
+          {suspeito && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">⚠ data?</span>}
+        </td>
+        <td className="px-4 py-2 text-right tabular-nums text-slate-800">{formatarBRL(m.despesas_total)}</td>
+        <td className="px-4 py-2 text-right tabular-nums text-slate-500">{formatarBRL(m.investimento_total)}</td>
+        <td className={'px-4 py-2 text-right tabular-nums font-medium ' + (m.resultado < 0 ? 'text-red-600' : 'text-emerald-600')}>
+          {formatarBRL(m.resultado)}
+        </td>
+      </tr>
+      {aberto && (
+        <tr className="border-b border-slate-100 bg-slate-50/60">
+          <td colSpan={4} className="px-4 py-4 sm:px-6">
+            {!detalhe || detalhe.loading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 size={15} className="animate-spin" /> Carregando lançamentos…
+              </div>
+            ) : detalhe.erro ? (
+              <span className="text-sm text-red-600">{detalhe.erro}</span>
+            ) : (
+              <DetalheMes mes={m.mes} data={detalhe.data} />
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function DetalheMes({ mes, data }) {
+  const itens = data?.itens || [];
+  const categorias = data?.categorias || [];
+  return (
+    <div>
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Detalhamento de {formatarMes(mes)} — {itens.length} {itens.length === 1 ? 'lançamento' : 'lançamentos'}
+      </div>
+
+      {itens.length === 0 ? (
+        <span className="text-sm text-slate-400">Sem lançamentos de despesa neste mês.</span>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-1.5 font-semibold">Descrição</th>
+                <th className="px-3 py-1.5 font-semibold">Categoria</th>
+                <th className="px-3 py-1.5 text-center font-semibold">Venc.</th>
+                <th className="px-3 py-1.5 text-right font-semibold">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((it) => (
+                <tr key={it.id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-3 py-2 align-top">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-700">{it.descricao}</span>
+                      {it.recorrente && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-nexus-50 px-1 py-0.5 text-[10px] font-medium text-nexus-700">
+                          <Repeat size={10} /> fixo
+                        </span>
+                      )}
+                    </div>
+                    {it.fornecedor && <div className="text-xs text-slate-400">{it.fornecedor}</div>}
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <span className="inline-flex items-center gap-1.5 text-slate-600">
+                      <span className="h-2 w-2 rounded-full" style={{ background: corDe(it.categoria_cor) }} />
+                      {it.categoria_nome}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center align-top text-slate-500">{dataCurta(it.vencimento)}</td>
+                  <td className="px-3 py-2 text-right align-top">
+                    <div className="font-medium tabular-nums text-slate-800">{formatarBRL(it.valor)}</div>
+                    {it.status && (
+                      <span className={'mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ' + statusClasse(it.status)}>
+                        {it.status}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {categorias.length > 1 && (
+        <div className="mt-4">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resumo por categoria</div>
+          <BarrasCategorias categorias={categorias} />
+        </div>
+      )}
     </div>
   );
 }
