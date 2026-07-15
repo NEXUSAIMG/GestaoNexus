@@ -1,5 +1,7 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { pool, query } from '../config/database.js';
+import { hashSenha } from '../utils/password.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { ehMembroDaEquipe } from './equipes.controller.js';
@@ -31,6 +33,7 @@ const COR_TRELLO = {
 const payloadSchema = z.object({
   equipe_id: z.string().uuid(),
   aberto_a_socios: z.boolean().optional().default(true),
+  criar_membros_ausentes: z.boolean().optional().default(false),
   board: z.object({
     name: z.string().optional(),
     lists: z.array(z.any()).optional().default([]),
@@ -38,6 +41,7 @@ const payloadSchema = z.object({
     labels: z.array(z.any()).optional().default([]),
     checklists: z.array(z.any()).optional().default([]),
     actions: z.array(z.any()).optional().default([]),
+    members: z.array(z.any()).optional().default([]),
   }),
 });
 
@@ -88,7 +92,8 @@ export async function importarTrello(req, res, next) {
     );
     const quadroId = qr.rows[0].id;
 
-    const contagem = await importarConteudo(client, quadroId, board, listas, req.pessoa.id);
+    const contagem = await importarConteudo(client, quadroId, board, listas, req.pessoa.id,
+      { equipeId: d.equipe_id, criarMembrosAusentes: d.criar_membros_ausentes });
 
     await client.query('COMMIT');
 
@@ -120,7 +125,8 @@ export async function importarTrello(req, res, next) {
  */
 export { importarConteudo as importarConteudoParaTeste };
 
-async function importarConteudo(client, quadroId, board, listas, pessoaId) {
+async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoes = {}) {
+  const { equipeId = null, criarMembrosAusentes = false } = opcoes;
   // ---- Etiquetas (labels do board) --------------------------------------
   // Trello permite label sem nome (só cor). Damos um nome pela cor pra não
   // criar etiqueta em branco.
@@ -144,6 +150,51 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId) {
       );
       if (rows[0]) mapaEtiqueta[lb.id] = rows[0].id;
     }
+  }
+
+  // ---- Membros do board -> pessoas do sistema ---------------------------
+  // Casa por nome. Se nao existir e criarMembrosAusentes=true, cria conta
+  // INATIVA (nao loga ate um admin ativar) e vincula a equipe como membro.
+  const mapaMembroPessoa = {}; // trelloMemberId -> pessoas_acesso.id
+  const nomeMembro = {};       // trelloMemberId -> fullName
+  let nMembrosCriados = 0;
+  for (const m of (board.members || [])) {
+    const nome = String(m.fullName || m.username || '').trim();
+    if (!nome) continue;
+    nomeMembro[m.id] = nome;
+
+    const porNome = await client.query(
+      'SELECT id FROM pessoas_acesso WHERE lower(nome) = lower($1) LIMIT 1',
+      [nome],
+    );
+    if (porNome.rows[0]) { mapaMembroPessoa[m.id] = porNome.rows[0].id; continue; }
+
+    if (!criarMembrosAusentes || !equipeId) continue;
+
+    const email = (String(m.username || nome.replace(/\s+/g, '.')).toLowerCase() + '@trello.import').slice(0, 255);
+    const jaTem = await client.query(
+      'SELECT id FROM pessoas_acesso WHERE lower(email) = lower($1) LIMIT 1',
+      [email],
+    );
+    let pid;
+    if (jaTem.rows[0]) {
+      pid = jaTem.rows[0].id;
+    } else {
+      const senha = await hashSenha(crypto.randomBytes(24).toString('hex'));
+      const ins = await client.query(
+        `INSERT INTO pessoas_acesso (nome, email, senha_hash, administrador, ativo)
+         VALUES ($1, $2, $3, FALSE, FALSE) RETURNING id`,
+        [nome.slice(0, 255), email, senha],
+      );
+      pid = ins.rows[0].id;
+      nMembrosCriados += 1;
+    }
+    await client.query(
+      `INSERT INTO equipes_membros (equipe_id, pessoa_id, papel, adicionado_por_id)
+       VALUES ($1, $2, 'membro', $3) ON CONFLICT (equipe_id, pessoa_id) DO NOTHING`,
+      [equipeId, pid, pessoaId],
+    );
+    mapaMembroPessoa[m.id] = pid;
   }
 
   // ---- Colunas (lists) ---------------------------------------------------
@@ -176,6 +227,7 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId) {
 
   // ---- Cards -------------------------------------------------------------
   let nCards = 0; let nChecklists = 0; let nComentarios = 0;
+  let nResp = 0; let nAnexos = 0;
   const ordemPorColuna = {};
 
   const cards = (board.cards || [])
@@ -188,20 +240,44 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId) {
     const tipoCol = classificarTipo(listaNome(listas, c.idList));
 
     const prazo = c.due ? String(c.due).slice(0, 10) : null;
-    const concluido = tipoCol === 'concluida';
+    const concluido = tipoCol === 'concluida' || c.dueComplete === true;
+    const iniciado = tipoCol !== 'backlog' || concluido;
+
+    // Responsavel = 1o membro (idMembers) que existe no sistema.
+    const idMembros = c.idMembers || [];
+    let responsavelId = null;
+    for (const mid of idMembros) {
+      if (mapaMembroPessoa[mid]) { responsavelId = mapaMembroPessoa[mid]; break; }
+    }
+    if (responsavelId) nResp += 1;
+
+    // Rodape com o que nao cabe em campo estruturado (nomes + anexos).
+    const extras = [];
+    const nomesResp = idMembros.map((mid) => nomeMembro[mid]).filter(Boolean);
+    if (nomesResp.length) extras.push('Responsaveis (Trello): ' + nomesResp.join(', '));
+    const anexos = (c.attachments || []).filter((a) => a && a.url);
+    if (anexos.length) {
+      extras.push('Anexos (Trello):');
+      for (const a of anexos) extras.push('- ' + (String(a.name || '').trim() || a.url) + ': ' + a.url);
+      nAnexos += anexos.length;
+    }
+    let descricao = c.desc ? String(c.desc) : '';
+    if (extras.length) descricao = (descricao ? descricao + '\n\n' : '') + '---\n' + extras.join('\n');
+    descricao = descricao ? descricao.slice(0, 20000) : null;
 
     const { rows } = await client.query(
       `INSERT INTO cards (coluna_id, quadro_id, titulo, descricao, data_prazo, ordem,
-                          coluna_desde, iniciado_em, concluido_em, criado_por_id)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING id`,
+                          coluna_desde, iniciado_em, concluido_em, criado_por_id, responsavel_id)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10) RETURNING id`,
       [
         colunaId, quadroId,
         String(c.name || 'Card').slice(0, 255),
-        c.desc ? String(c.desc).slice(0, 20000) : null,
+        descricao,
         prazo, ordemPorColuna[colunaId],
-        tipoCol !== 'backlog' ? new Date().toISOString() : null,
+        iniciado ? new Date().toISOString() : null,
         concluido ? new Date().toISOString() : null,
         pessoaId,
+        responsavelId,
       ],
     );
     const cardId = rows[0].id;
@@ -257,6 +333,9 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId) {
     cards: nCards,
     checklists: nChecklists,
     comentarios: nComentarios,
+    responsaveis: nResp,
+    anexos: nAnexos,
+    membros_criados: nMembrosCriados,
   };
 }
 

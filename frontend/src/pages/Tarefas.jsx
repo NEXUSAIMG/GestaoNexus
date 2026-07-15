@@ -205,6 +205,7 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
   const [board, setBoard] = useState(null);
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [criarMembros, setCriarMembros] = useState(true);
   const [resultado, setResultado] = useState(null);
 
   function aoEscolher(e) {
@@ -237,6 +238,7 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
       const r = await api.post('/quadros/importar-trello', {
         equipe_id: equipeId,
         board,
+        criar_membros_ausentes: criarMembros,
       });
       setResultado(r.data);
     } catch (err) {
@@ -273,7 +275,9 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
               <p className="text-sm text-slate-700">
                 Quadro <strong>{resultado.nome}</strong> importado:
                 {' '}{resultado.colunas} colunas, {resultado.cards} cards,
-                {' '}{resultado.etiquetas} etiquetas, {resultado.checklists} checklists.
+                {' '}{resultado.etiquetas} etiquetas, {resultado.checklists} checklists
+                {resultado.responsaveis ? ', ' + resultado.responsaveis + ' responsáveis' : ''}
+                {resultado.membros_criados ? ' (' + resultado.membros_criados + ' contas novas)' : ''}.
               </p>
               <div className="flex justify-center gap-2">
                 <Link
@@ -325,6 +329,19 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
                   {' '}<strong>{previa.cards}</strong> cards, {previa.etiquetas} etiquetas.
                 </div>
               )}
+
+              <label className="flex items-start gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={criarMembros}
+                  onChange={(e) => setCriarMembros(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Criar contas (inativas) para membros do Trello que ainda não existem e
+                  adicioná-los à equipe como responsáveis dos cards.
+                </span>
+              </label>
 
               {erro && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</div>
