@@ -93,12 +93,11 @@ function Dashboard({ mes, admin }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function salvar(servicoId, texto) {
+  async function salvar(servicoId, valor, moeda) {
     if (!admin) return;
-    const valor = texto.trim() === '' ? 0 : Number(texto.replace(',', '.'));
     if (Number.isNaN(valor) || valor < 0) return;
     try {
-      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor });
+      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor, moeda });
       carregar();
     } catch (e) { alert(mensagemDeErro(e)); }
   }
@@ -177,23 +176,15 @@ function Dashboard({ mes, admin }) {
                 <td className="px-4 py-2 font-medium text-slate-800">{s.nome}</td>
                 <td className="px-4 py-2 text-slate-500">{s.tipo}</td>
                 <td className="px-4 py-2 text-right">
-                  {admin ? (
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-xs text-slate-400">{s.moeda === 'USD' ? 'US$' : 'R$'}</span>
-                      <input
-                        key={s.id + ':' + (s.moeda === 'USD' ? s.valor_origem : s.valor_reais)}
-                        type="text"
-                        inputMode="decimal"
-                        defaultValue={(() => { const v = s.moeda === 'USD' ? s.valor_origem : s.valor_reais; return v ? String(v) : ''; })()}
-                        onBlur={(e) => salvar(s.id, e.target.value)}
-                        placeholder="0,00"
-                        className="w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500"
-                      />
-                    </div>
-                  ) : (
-                    <span className="tabular-nums">{s.moeda === 'USD' && s.valor_origem ? 'US$ ' + Number(s.valor_origem).toFixed(2) : fmtBRL(s.valor_reais)}</span>
-                  )}
-                  {s.moeda === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(s.valor_reais)}</div>}
+                  <CustoCell
+                    key={s.id + ':' + s.moeda + ':' + s.valor_reais}
+                    servicoId={s.id}
+                    moeda={s.moeda}
+                    valorOrigem={s.valor_origem}
+                    valorReais={s.valor_reais}
+                    admin={admin}
+                    onSalvar={salvar}
+                  />
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500">
                   {d.custo_total > 0 ? ((s.valor_reais / d.custo_total) * 100).toFixed(0) + '%' : '—'}
@@ -248,12 +239,11 @@ function Fechamento({ mes, admin }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function salvar(servicoId, valorTexto) {
-    const valor = valorTexto.trim() === '' ? 0 : Number(valorTexto.replace(',', '.'));
+  async function salvar(servicoId, valor, moeda) {
     if (Number.isNaN(valor) || valor < 0) return;
     setSalvandoId(servicoId);
     try {
-      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor });
+      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor, moeda });
       carregar();
     } catch (e) {
       alert(mensagemDeErro(e, 'Não consegui salvar o valor.'));
@@ -319,20 +309,15 @@ function Fechamento({ mes, admin }) {
                   {it.teto_reais != null ? fmtBRL(it.teto_reais) : '—'}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <span className="text-xs text-slate-400">{it.moeda === 'USD' ? 'US$' : 'R$'}</span>
-                    <input
-                      key={it.servico_id + ':' + (it.moeda === 'USD' ? it.valor_origem : it.valor_reais)}
-                      type="text"
-                      inputMode="decimal"
-                      disabled={!admin}
-                      defaultValue={(() => { const v = it.moeda === 'USD' ? it.valor_origem : it.valor_reais; return v ? String(v) : ''; })()}
-                      onBlur={(e) => admin && salvar(it.servico_id, e.target.value)}
-                      placeholder="0,00"
-                      className="w-28 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500 disabled:bg-slate-50 disabled:text-slate-400"
-                    />
-                  </div>
-                  {it.moeda === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(it.valor_reais)}</div>}
+                  <CustoCell
+                    key={it.servico_id + ':' + it.moeda + ':' + it.valor_reais}
+                    servicoId={it.servico_id}
+                    moeda={it.moeda}
+                    valorOrigem={it.valor_origem}
+                    valorReais={it.valor_reais}
+                    admin={admin}
+                    onSalvar={salvar}
+                  />
                   {salvandoId === it.servico_id && <span className="text-[10px] text-slate-400">salvando…</span>}
                 </td>
               </tr>
@@ -586,6 +571,56 @@ function Alertas({ mes }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Celula de custo com seletor de moeda (US$/R$) por lancamento.
+function CustoCell({ servicoId, moeda: moedaInicial, valorOrigem, valorReais, admin, onSalvar }) {
+  const [moeda, setMoeda] = useState(moedaInicial === 'USD' ? 'USD' : 'BRL');
+  const [valor, setValor] = useState(valorOrigem != null ? String(valorOrigem) : '');
+
+  function commit(novaMoeda) {
+    if (!admin) return;
+    const mo = novaMoeda || moeda;
+    const v = valor.trim() === '' ? 0 : Number(valor.replace(',', '.'));
+    if (Number.isNaN(v) || v < 0) return;
+    onSalvar(servicoId, v, mo);
+  }
+
+  if (!admin) {
+    return (
+      <div>
+        <span className="tabular-nums">
+          {moedaInicial === 'USD' && valorOrigem ? 'US$ ' + Number(valorOrigem).toFixed(2) : fmtBRL(valorReais)}
+        </span>
+        {moedaInicial === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(valorReais)}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-end gap-1">
+        <select
+          value={moeda}
+          onChange={(e) => { setMoeda(e.target.value); commit(e.target.value); }}
+          className="rounded border border-slate-300 bg-white px-1 py-1 text-xs outline-none focus:border-nexus-500"
+        >
+          <option value="BRL">R$</option>
+          <option value="USD">US$</option>
+        </select>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          onBlur={() => commit()}
+          placeholder="0,00"
+          className="w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500"
+        />
+      </div>
+      {moeda === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(valorReais)}</div>}
     </div>
   );
 }

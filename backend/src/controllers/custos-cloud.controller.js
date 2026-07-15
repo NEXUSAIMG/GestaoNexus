@@ -35,8 +35,9 @@ const servicoSchema = z.object({
 const lancamentoSchema = z.object({
   mes: z.string().regex(mesRegex, 'Mes deve estar em YYYY-MM'),
   servico_id: z.string().uuid(),
-  // valor na MOEDA DO SERVICO (US$ para servicos em USD, R$ para BRL).
   valor: z.number().min(0).max(9999999),
+  // moeda do valor informado; se ausente, usa a moeda padrao do servico.
+  moeda: z.enum(['BRL', 'USD']).optional(),
 });
 
 const cotacaoSchema = z.object({
@@ -148,7 +149,7 @@ export async function fechamento(req, res, next) {
     const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
     const [{ rows }, cotacao] = await Promise.all([
       query(
-        `SELECT s.id AS servico_id, s.nome, s.tipo, s.moeda, s.teto_reais, s.ordem,
+        `SELECT s.id AS servico_id, s.nome, s.tipo, COALESCE(m.moeda, s.moeda) AS moeda, s.teto_reais, s.ordem,
                 COALESCE(m.valor_reais, 0) AS valor_reais, m.valor_origem
            FROM custos_servicos s
            LEFT JOIN custos_mensais m ON m.servico_id = s.id AND m.mes = $1
@@ -180,20 +181,22 @@ export async function lancarValor(req, res, next) {
     const sv = await query('SELECT moeda FROM custos_servicos WHERE id = $1', [d.servico_id]);
     if (!sv.rows[0]) throw new AppError('Servico nao encontrado.', 400);
 
+    const moeda = d.moeda ?? sv.rows[0].moeda;
     let valorReais = d.valor;
-    if (sv.rows[0].moeda === 'USD') {
+    if (moeda === 'USD') {
       const cot = await getCotacao(d.mes);
       valorReais = d.valor * cot; // fica 0 ate a cotacao do mes ser informada
     }
 
     const { rows } = await query(
-      `INSERT INTO custos_mensais (mes, servico_id, valor_origem, valor_reais)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO custos_mensais (mes, servico_id, valor_origem, valor_reais, moeda)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (mes, servico_id)
        DO UPDATE SET valor_origem = EXCLUDED.valor_origem,
-                     valor_reais = EXCLUDED.valor_reais, atualizado_em = NOW()
+                     valor_reais = EXCLUDED.valor_reais,
+                     moeda = EXCLUDED.moeda, atualizado_em = NOW()
        RETURNING valor_reais`,
-      [d.mes, d.servico_id, d.valor, valorReais],
+      [d.mes, d.servico_id, d.valor, valorReais, moeda],
     );
     res.json({ valor_reais: Number(rows[0].valor_reais) });
   } catch (err) {
@@ -219,10 +222,9 @@ export async function salvarCotacao(req, res, next) {
       [d.mes, d.usd_brl],
     );
     await query(
-      `UPDATE custos_mensais m
-          SET valor_reais = COALESCE(m.valor_origem, 0) * $2, atualizado_em = NOW()
-         FROM custos_servicos s
-        WHERE m.servico_id = s.id AND s.moeda = 'USD' AND m.mes = $1`,
+      `UPDATE custos_mensais
+          SET valor_reais = COALESCE(valor_origem, 0) * $2, atualizado_em = NOW()
+        WHERE mes = $1 AND moeda = 'USD'`,
       [d.mes, d.usd_brl],
     );
     res.json({ ok: true });
@@ -240,7 +242,7 @@ export async function dashboard(req, res, next) {
 
     const [porServico, totalAnterior, receitaR, cotacao] = await Promise.all([
       query(
-        `SELECT s.id, s.nome, s.tipo, s.moeda, s.teto_reais,
+        `SELECT s.id, s.nome, s.tipo, COALESCE(m.moeda, s.moeda) AS moeda, s.teto_reais,
                 COALESCE(m.valor_reais, 0) AS valor, m.valor_origem
            FROM custos_servicos s
            LEFT JOIN custos_mensais m ON m.servico_id = s.id AND m.mes = $1
