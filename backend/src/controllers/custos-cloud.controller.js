@@ -35,8 +35,19 @@ const servicoSchema = z.object({
 const lancamentoSchema = z.object({
   mes: z.string().regex(mesRegex, 'Mes deve estar em YYYY-MM'),
   servico_id: z.string().uuid(),
-  valor_reais: z.number().min(0).max(9999999),
+  // valor na MOEDA DO SERVICO (US$ para servicos em USD, R$ para BRL).
+  valor: z.number().min(0).max(9999999),
 });
+
+const cotacaoSchema = z.object({
+  mes: z.string().regex(mesRegex, 'Mes deve estar em YYYY-MM'),
+  usd_brl: z.number().min(0).max(100),
+});
+
+async function getCotacao(mes) {
+  const { rows } = await query('SELECT usd_brl FROM custos_cotacoes WHERE mes = $1', [mes]);
+  return rows[0] ? Number(rows[0].usd_brl) : 0;
+}
 
 function mesAtual() {
   const d = new Date();
@@ -135,17 +146,21 @@ export async function atualizarServico(req, res, next) {
 export async function fechamento(req, res, next) {
   try {
     const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
-    const { rows } = await query(
-      `SELECT s.id AS servico_id, s.nome, s.tipo, s.moeda, s.teto_reais, s.ordem,
-              COALESCE(m.valor_reais, 0) AS valor_reais
-         FROM custos_servicos s
-         LEFT JOIN custos_mensais m ON m.servico_id = s.id AND m.mes = $1
-        WHERE s.ativo = TRUE
-        ORDER BY s.ordem, s.nome`,
-      [mes],
-    );
+    const [{ rows }, cotacao] = await Promise.all([
+      query(
+        `SELECT s.id AS servico_id, s.nome, s.tipo, s.moeda, s.teto_reais, s.ordem,
+                COALESCE(m.valor_reais, 0) AS valor_reais, m.valor_origem
+           FROM custos_servicos s
+           LEFT JOIN custos_mensais m ON m.servico_id = s.id AND m.mes = $1
+          WHERE s.ativo = TRUE
+          ORDER BY s.ordem, s.nome`,
+        [mes],
+      ),
+      getCotacao(mes),
+    ]);
     res.json({
       mes,
+      cotacao_usd: cotacao,
       itens: rows.map((r) => ({
         servico_id: r.servico_id,
         nome: r.nome,
@@ -153,6 +168,7 @@ export async function fechamento(req, res, next) {
         moeda: r.moeda,
         teto_reais: r.teto_reais != null ? Number(r.teto_reais) : null,
         valor_reais: Number(r.valor_reais),
+        valor_origem: r.valor_origem != null ? Number(r.valor_origem) : null,
       })),
     });
   } catch (err) { next(err); }
@@ -161,19 +177,56 @@ export async function fechamento(req, res, next) {
 export async function lancarValor(req, res, next) {
   try {
     const d = lancamentoSchema.parse(req.body);
+    const sv = await query('SELECT moeda FROM custos_servicos WHERE id = $1', [d.servico_id]);
+    if (!sv.rows[0]) throw new AppError('Servico nao encontrado.', 400);
+
+    let valorReais = d.valor;
+    if (sv.rows[0].moeda === 'USD') {
+      const cot = await getCotacao(d.mes);
+      valorReais = d.valor * cot; // fica 0 ate a cotacao do mes ser informada
+    }
+
     const { rows } = await query(
-      `INSERT INTO custos_mensais (mes, servico_id, valor_reais)
-       VALUES ($1, $2, $3)
+      `INSERT INTO custos_mensais (mes, servico_id, valor_origem, valor_reais)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (mes, servico_id)
-       DO UPDATE SET valor_reais = EXCLUDED.valor_reais, atualizado_em = NOW()
-       RETURNING id, mes, servico_id, valor_reais`,
-      [d.mes, d.servico_id, d.valor_reais],
+       DO UPDATE SET valor_origem = EXCLUDED.valor_origem,
+                     valor_reais = EXCLUDED.valor_reais, atualizado_em = NOW()
+       RETURNING valor_reais`,
+      [d.mes, d.servico_id, d.valor, valorReais],
     );
-    res.json({ ...rows[0], valor_reais: Number(rows[0].valor_reais) });
+    res.json({ valor_reais: Number(rows[0].valor_reais) });
   } catch (err) {
     if (err?.code === '23503') return next(new AppError('Servico nao encontrado.', 400));
     next(err);
   }
+}
+
+// Cotacao do dolar por mes. Trocar recalcula todos os servicos em USD do mes.
+export async function obterCotacao(req, res, next) {
+  try {
+    const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
+    res.json({ mes, usd_brl: await getCotacao(mes) });
+  } catch (err) { next(err); }
+}
+
+export async function salvarCotacao(req, res, next) {
+  try {
+    const d = cotacaoSchema.parse(req.body);
+    await query(
+      `INSERT INTO custos_cotacoes (mes, usd_brl) VALUES ($1, $2)
+       ON CONFLICT (mes) DO UPDATE SET usd_brl = EXCLUDED.usd_brl, atualizado_em = NOW()`,
+      [d.mes, d.usd_brl],
+    );
+    await query(
+      `UPDATE custos_mensais m
+          SET valor_reais = COALESCE(m.valor_origem, 0) * $2, atualizado_em = NOW()
+         FROM custos_servicos s
+        WHERE m.servico_id = s.id AND s.moeda = 'USD' AND m.mes = $1`,
+      [d.mes, d.usd_brl],
+    );
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +238,10 @@ export async function dashboard(req, res, next) {
     const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
     const anterior = mesAnterior(mes);
 
-    const [porServico, totalAnterior, receitaR] = await Promise.all([
+    const [porServico, totalAnterior, receitaR, cotacao] = await Promise.all([
       query(
-        `SELECT s.id, s.nome, s.tipo, s.teto_reais,
-                COALESCE(m.valor_reais, 0) AS valor
+        `SELECT s.id, s.nome, s.tipo, s.moeda, s.teto_reais,
+                COALESCE(m.valor_reais, 0) AS valor, m.valor_origem
            FROM custos_servicos s
            LEFT JOIN custos_mensais m ON m.servico_id = s.id AND m.mes = $1
           WHERE s.ativo = TRUE
@@ -203,6 +256,7 @@ export async function dashboard(req, res, next) {
             AND to_char(data_pagamento, 'YYYY-MM') = $2`,
         [STATUS_RECEBIDO, mes],
       ),
+      getCotacao(mes),
     ]);
 
     const servicos = porServico.rows.map((r) => {
@@ -212,7 +266,9 @@ export async function dashboard(req, res, next) {
         id: r.id,
         nome: r.nome,
         tipo: r.tipo,
+        moeda: r.moeda,
         valor_reais: valor,
+        valor_origem: r.valor_origem != null ? Number(r.valor_origem) : null,
         teto_reais: teto,
         estourou_teto: teto != null && valor > teto,
       };
@@ -231,6 +287,7 @@ export async function dashboard(req, res, next) {
       receita_recebida: receita,
       margem,
       margem_pct: receita > 0 ? margem / receita : null,
+      cotacao_usd: cotacao,
       por_servico: servicos,
     });
   } catch (err) { next(err); }

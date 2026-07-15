@@ -98,7 +98,17 @@ function Dashboard({ mes, admin }) {
     const valor = texto.trim() === '' ? 0 : Number(texto.replace(',', '.'));
     if (Number.isNaN(valor) || valor < 0) return;
     try {
-      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor_reais: valor });
+      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor });
+      carregar();
+    } catch (e) { alert(mensagemDeErro(e)); }
+  }
+
+  async function salvarCotacao(texto) {
+    if (!admin) return;
+    const v = texto.trim() === '' ? 0 : Number(texto.replace(',', '.'));
+    if (Number.isNaN(v) || v < 0) return;
+    try {
+      await api.put('/custos-cloud/cotacao', { mes, usd_brl: v });
       carregar();
     } catch (e) { alert(mensagemDeErro(e)); }
   }
@@ -122,6 +132,24 @@ function Dashboard({ mes, admin }) {
           cor={varCor}
           sub={d.variacao_pct != null ? fmtPct(d.variacao_pct) : 'sem base anterior'}
         />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+        <span className="font-medium text-amber-900">Cotação do dólar (US$ → R$) neste mês:</span>
+        {admin ? (
+          <input
+            key={'cot:' + d.cotacao_usd}
+            type="text"
+            inputMode="decimal"
+            defaultValue={d.cotacao_usd ? String(d.cotacao_usd) : ''}
+            onBlur={(e) => salvarCotacao(e.target.value)}
+            placeholder="ex: 5,40"
+            className="w-24 rounded-md border border-amber-300 bg-white px-2 py-1 text-right text-sm outline-none focus:border-amber-500"
+          />
+        ) : (
+          <span className="font-semibold text-amber-900">{d.cotacao_usd ? Number(d.cotacao_usd).toFixed(4) : '—'}</span>
+        )}
+        <span className="text-xs text-amber-700">Serviços em US$ são convertidos por esta cotação.</span>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -150,18 +178,22 @@ function Dashboard({ mes, admin }) {
                 <td className="px-4 py-2 text-slate-500">{s.tipo}</td>
                 <td className="px-4 py-2 text-right">
                   {admin ? (
-                    <input
-                      key={s.id + ':' + s.valor_reais}
-                      type="text"
-                      inputMode="decimal"
-                      defaultValue={s.valor_reais ? String(s.valor_reais) : ''}
-                      onBlur={(e) => salvar(s.id, e.target.value)}
-                      placeholder="0,00"
-                      className="w-28 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500"
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-xs text-slate-400">{s.moeda === 'USD' ? 'US$' : 'R$'}</span>
+                      <input
+                        key={s.id + ':' + (s.moeda === 'USD' ? s.valor_origem : s.valor_reais)}
+                        type="text"
+                        inputMode="decimal"
+                        defaultValue={(() => { const v = s.moeda === 'USD' ? s.valor_origem : s.valor_reais; return v ? String(v) : ''; })()}
+                        onBlur={(e) => salvar(s.id, e.target.value)}
+                        placeholder="0,00"
+                        className="w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500"
+                      />
+                    </div>
                   ) : (
-                    <span className="tabular-nums">{fmtBRL(s.valor_reais)}</span>
+                    <span className="tabular-nums">{s.moeda === 'USD' && s.valor_origem ? 'US$ ' + Number(s.valor_origem).toFixed(2) : fmtBRL(s.valor_reais)}</span>
                   )}
+                  {s.moeda === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(s.valor_reais)}</div>}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500">
                   {d.custo_total > 0 ? ((s.valor_reais / d.custo_total) * 100).toFixed(0) + '%' : '—'}
@@ -221,12 +253,23 @@ function Fechamento({ mes, admin }) {
     if (Number.isNaN(valor) || valor < 0) return;
     setSalvandoId(servicoId);
     try {
-      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor_reais: valor });
+      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor });
+      carregar();
     } catch (e) {
       alert(mensagemDeErro(e, 'Não consegui salvar o valor.'));
     } finally {
       setSalvandoId(null);
     }
+  }
+
+  async function salvarCotacao(texto) {
+    if (!admin) return;
+    const v = texto.trim() === '' ? 0 : Number(texto.replace(',', '.'));
+    if (Number.isNaN(v) || v < 0) return;
+    try {
+      await api.put('/custos-cloud/cotacao', { mes, usd_brl: v });
+      carregar();
+    } catch (e) { alert(mensagemDeErro(e)); }
   }
 
   if (carregando) return <p className="text-sm text-slate-500">Carregando…</p>;
@@ -238,9 +281,25 @@ function Fechamento({ mes, admin }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Digite o valor da fatura de cada serviço (em R$). Converta faturas em dólar pela cotação do dia do débito.
-        {!admin && ' (Somente administradores podem editar.)'}
+        Digite a fatura de cada serviço na sua moeda (US$ para serviços em dólar, R$ para os demais) e informe a cotação do mês para converter os que são em dólar.
+        {!admin && ' Somente administradores editam.'}
       </p>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+        <span className="font-medium text-amber-900">Cotação do dólar (US$ → R$) neste mês:</span>
+        {admin ? (
+          <input
+            key={'cotf:' + dados.cotacao_usd}
+            type="text"
+            inputMode="decimal"
+            defaultValue={dados.cotacao_usd ? String(dados.cotacao_usd) : ''}
+            onBlur={(e) => salvarCotacao(e.target.value)}
+            placeholder="ex: 5,40"
+            className="w-24 rounded-md border border-amber-300 bg-white px-2 py-1 text-right text-sm outline-none focus:border-amber-500"
+          />
+        ) : (
+          <span className="font-semibold text-amber-900">{dados.cotacao_usd ? Number(dados.cotacao_usd).toFixed(4) : '—'}</span>
+        )}
+      </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead>
@@ -248,7 +307,7 @@ function Fechamento({ mes, admin }) {
               <th className="px-4 py-2 font-medium">Serviço</th>
               <th className="px-4 py-2 font-medium">Tipo</th>
               <th className="px-4 py-2 text-right font-medium">Teto</th>
-              <th className="px-4 py-2 text-right font-medium">Valor no mês (R$)</th>
+              <th className="px-4 py-2 text-right font-medium">Valor no mês</th>
             </tr>
           </thead>
           <tbody>
@@ -260,16 +319,21 @@ function Fechamento({ mes, admin }) {
                   {it.teto_reais != null ? fmtBRL(it.teto_reais) : '—'}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    disabled={!admin}
-                    defaultValue={it.valor_reais ? String(it.valor_reais) : ''}
-                    onBlur={(e) => admin && salvar(it.servico_id, e.target.value)}
-                    placeholder="0,00"
-                    className="w-32 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500 disabled:bg-slate-50 disabled:text-slate-400"
-                  />
-                  {salvandoId === it.servico_id && <span className="ml-1 text-[10px] text-slate-400">salvando…</span>}
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="text-xs text-slate-400">{it.moeda === 'USD' ? 'US$' : 'R$'}</span>
+                    <input
+                      key={it.servico_id + ':' + (it.moeda === 'USD' ? it.valor_origem : it.valor_reais)}
+                      type="text"
+                      inputMode="decimal"
+                      disabled={!admin}
+                      defaultValue={(() => { const v = it.moeda === 'USD' ? it.valor_origem : it.valor_reais; return v ? String(v) : ''; })()}
+                      onBlur={(e) => admin && salvar(it.servico_id, e.target.value)}
+                      placeholder="0,00"
+                      className="w-28 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500 disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                  </div>
+                  {it.moeda === 'USD' && <div className="text-[10px] text-slate-400">= {fmtBRL(it.valor_reais)}</div>}
+                  {salvandoId === it.servico_id && <span className="text-[10px] text-slate-400">salvando…</span>}
                 </td>
               </tr>
             ))}
