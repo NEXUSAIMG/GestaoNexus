@@ -587,6 +587,7 @@ export default function Quadro() {
                     aoNovoCard={() => setNovoCardEm(col.id)}
                     aoMudarColuna={carregar}
                     selecionados={selecionados}
+                    selecaoAtiva={selecionados.size > 0}
                     aoSelecionarCard={quadro.pode_editar ? aoSelecionarCard : undefined}
                     aoArquivarColuna={async () => {
                       if (!confirm('Arquivar a coluna "' + col.nome + '"? Os cards ficam no histórico mas saem do board.')) return;

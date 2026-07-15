@@ -20,7 +20,7 @@ import { estiloCapaCard } from '../../constants/kanbanVisual.js';
  * "normal, sem nada" continua limpo como era antes.
  */
 
-export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar }) {
+export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar, selecaoAtiva }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
   } = useSortable({ id: card.id });
@@ -33,12 +33,12 @@ export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar }) {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card card={card} etiquetas={etiquetas} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} />
+      <Card card={card} etiquetas={etiquetas} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} selecaoAtiva={selecaoAtiva} />
     </div>
   );
 }
 
-export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, aoMarcar }) {
+export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva }) {
   const prazo = formatarPrazo(card.data_prazo);
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
@@ -71,13 +71,15 @@ export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, a
   return (
     <div
       onClick={(e) => {
-        // Com seleção ativa, clicar no corpo alterna a marcação em vez de abrir.
-        if (marcado !== undefined && aoMarcar && !arrastando) {
+        if (arrastando) return;
+        // Só quando JÁ há seleção ativa o clique no corpo alterna a marcação.
+        // Sem nada selecionado, clicar abre o card (para editar).
+        if (selecaoAtiva && aoMarcar) {
           e.stopPropagation();
           aoMarcar(e);
           return;
         }
-        if (aoClicar && !arrastando) {
+        if (aoClicar) {
           e.stopPropagation();
           aoClicar();
         }
