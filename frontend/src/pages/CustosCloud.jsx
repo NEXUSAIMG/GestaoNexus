@@ -65,7 +65,7 @@ export default function CustosCloud() {
         ))}
       </div>
 
-      {aba === 'dashboard' && <Dashboard mes={mes} />}
+      {aba === 'dashboard' && <Dashboard mes={mes} admin={admin} />}
       {aba === 'fechamento' && <Fechamento mes={mes} admin={admin} />}
       {aba === 'rateio' && <Rateio mes={mes} admin={admin} />}
       {aba === 'alertas' && <Alertas mes={mes} />}
@@ -78,7 +78,7 @@ export default function CustosCloud() {
 // Dashboard
 // ---------------------------------------------------------------------------
 
-function Dashboard({ mes }) {
+function Dashboard({ mes, admin }) {
   const [d, setD] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -92,6 +92,16 @@ function Dashboard({ mes }) {
   }, [mes]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  async function salvar(servicoId, texto) {
+    if (!admin) return;
+    const valor = texto.trim() === '' ? 0 : Number(texto.replace(',', '.'));
+    if (Number.isNaN(valor) || valor < 0) return;
+    try {
+      await api.put('/custos-cloud/mensal', { mes, servico_id: servicoId, valor_reais: valor });
+      carregar();
+    } catch (e) { alert(mensagemDeErro(e)); }
+  }
 
   if (carregando) return <p className="text-sm text-slate-500">Carregando…</p>;
   if (erro) return <ErroBox texto={erro} />;
@@ -115,8 +125,13 @@ function Dashboard({ mes }) {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
-          Custo por serviço no mês
+        <div className="border-b border-slate-200 px-4 py-2">
+          <span className="text-sm font-semibold text-slate-800">Custo por serviço no mês</span>
+          {admin && (
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              digite o valor da fatura de cada serviço na coluna &quot;Custo&quot; — salva ao sair do campo
+            </span>
+          )}
         </div>
         <table className="w-full text-sm">
           <thead>
@@ -133,7 +148,21 @@ function Dashboard({ mes }) {
               <tr key={s.id} className="border-t border-slate-100">
                 <td className="px-4 py-2 font-medium text-slate-800">{s.nome}</td>
                 <td className="px-4 py-2 text-slate-500">{s.tipo}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{fmtBRL(s.valor_reais)}</td>
+                <td className="px-4 py-2 text-right">
+                  {admin ? (
+                    <input
+                      key={s.id + ':' + s.valor_reais}
+                      type="text"
+                      inputMode="decimal"
+                      defaultValue={s.valor_reais ? String(s.valor_reais) : ''}
+                      onBlur={(e) => salvar(s.id, e.target.value)}
+                      placeholder="0,00"
+                      className="w-28 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500"
+                    />
+                  ) : (
+                    <span className="tabular-nums">{fmtBRL(s.valor_reais)}</span>
+                  )}
+                </td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500">
                   {d.custo_total > 0 ? ((s.valor_reais / d.custo_total) * 100).toFixed(0) + '%' : '—'}
                 </td>
