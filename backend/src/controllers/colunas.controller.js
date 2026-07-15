@@ -4,6 +4,7 @@ import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/error
 import { registrarAcao } from '../utils/audit.js';
 import { podeVerQuadro } from './quadros.controller.js';
 import { publicarMudanca } from '../services/realtime.service.js';
+import { corSchema } from '../utils/kanban-visual.js';
 
 /**
  * Colunas — Sprint 10.
@@ -29,6 +30,7 @@ const atualizarSchema = z.object({
   nome: z.string().min(1).max(80).optional(),
   tipo: tipoColuna.optional(),
   wip_limite: z.number().int().min(1).max(999).nullable().optional(),
+  cor: corSchema,
 });
 
 const moverSchema = z.object({
@@ -170,6 +172,10 @@ export async function atualizar(req, res, next) {
     if (d.wip_limite !== undefined) {
       params.push(d.wip_limite);
       updates.push('wip_limite = $' + params.length);
+    }
+    if (d.cor !== undefined) {
+      params.push(d.cor);
+      updates.push('cor = $' + params.length);
     }
 
     if (updates.length > 0) {

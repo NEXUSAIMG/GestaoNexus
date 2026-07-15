@@ -3,6 +3,7 @@ import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { podeVerQuadro } from './quadros.controller.js';
+import { presetSchema } from '../utils/kanban-visual.js';
 import {
   disparar,
   notificarPessoas,
@@ -75,6 +76,8 @@ const atualizarSchema = z.object({
   data_inicio: dataIso.nullable().optional(),
   prazo_concluido: z.boolean().optional(),
   capa_cor: corCapa.nullable().optional(),
+  // Sprint 39 — capa por preset de gradiente (alternativa a capa_cor)
+  capa_preset: presetSchema,
   // Sprint 34
   prioridade: z.number().int().min(0).max(3).optional(),
   estimativa_horas: z.number().min(0).max(9999).nullable().optional(),
@@ -218,6 +221,7 @@ function serializar(c) {
     data_inicio: c.data_inicio,
     prazo_concluido: !!c.prazo_concluido,
     capa_cor: c.capa_cor ?? null,
+    capa_preset: c.capa_preset ?? null,
     // Sprint 34
     prioridade: c.prioridade ?? 2,
     estimativa_horas: c.estimativa_horas != null ? Number(c.estimativa_horas) : null,

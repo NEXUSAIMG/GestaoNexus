@@ -7,6 +7,7 @@ import {
 import {
   COR_CHIP, corForte, formatarPrazo, iniciais, prioridadeDe, formatarMinutos,
 } from './ui.js';
+import { estiloCapaCard } from '../../constants/kanbanVisual.js';
 
 /**
  * Card do board.
@@ -109,8 +110,11 @@ export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, a
           {marcado && <Check size={11} />}
         </button>
       )}
-      {card.capa_cor && (
-        <div className={'mb-2 -mx-2.5 -mt-2.5 h-2 rounded-t-lg ' + corForte(card.capa_cor)} />
+      {(card.capa_cor || card.capa_preset) && (
+        <div
+          className="mb-2 -mx-2.5 -mt-2.5 h-2 rounded-t-lg"
+          style={estiloCapaCard(card.capa_cor, card.capa_preset) || undefined}
+        />
       )}
 
       {(etqs.length > 0 || mostraPrio || bloqueado || ehSubtarefa) && (

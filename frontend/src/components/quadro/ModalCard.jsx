@@ -16,6 +16,7 @@ import CardVinculos from './CardVinculos.jsx';
 import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
 import { COR_CHIP, CORES, corForte, inputCls, PRIORIDADES } from './ui.js';
+import { PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
 /**
  * Modal do card (criar/editar).
@@ -52,6 +53,7 @@ export default function ModalCard({
   const [dataInicio, setDataInicio] = useState('');
   const [prazoConcluido, setPrazoConcluido] = useState(false);
   const [capaCor, setCapaCor] = useState(null);
+  const [capaPreset, setCapaPreset] = useState(null);
   const [etiquetaIds, setEtiquetaIds] = useState([]);
   // Sprint 34
   const [prioridade, setPrioridade] = useState(2);
@@ -78,6 +80,7 @@ export default function ModalCard({
         setDataInicio(c.data_inicio ? String(c.data_inicio).slice(0, 10) : '');
         setPrazoConcluido(!!c.prazo_concluido);
         setCapaCor(c.capa_cor || null);
+        setCapaPreset(c.capa_preset || null);
         setEtiquetaIds(c.etiqueta_ids || []);
         setPrioridade(Number(c.prioridade ?? 2));
         setEstimativa(c.estimativa_horas != null ? String(c.estimativa_horas) : '');
@@ -109,6 +112,7 @@ export default function ModalCard({
         data_inicio: dataInicio || null,
         prazo_concluido: prazoConcluido,
         capa_cor: capaCor || null,
+        capa_preset: capaPreset || null,
         etiqueta_ids: etiquetaIds,
         prioridade: Number(prioridade),
         estimativa_horas: estimativa.trim() === '' ? null : Number(estimativa),
@@ -340,8 +344,8 @@ export default function ModalCard({
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setCapaCor(null)}
-                className={'h-6 w-8 rounded border text-[10px] text-slate-400 ' + (capaCor ? 'border-slate-200 bg-white' : 'border-nexus-500 ring-2 ring-nexus-200 bg-white')}
+                onClick={() => { setCapaCor(null); setCapaPreset(null); }}
+                className={'h-6 w-8 rounded border text-[10px] text-slate-400 ' + (!capaCor && !capaPreset ? 'border-nexus-500 ring-2 ring-nexus-200 bg-white' : 'border-slate-200 bg-white')}
                 title="Sem capa"
               >
                 —
@@ -350,13 +354,23 @@ export default function ModalCard({
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setCapaCor(c)}
+                  onClick={() => { setCapaCor(c); setCapaPreset(null); }}
                   className={[
                     'h-6 w-8 rounded transition-transform',
                     corForte(c),
                     capaCor === c ? 'ring-2 ring-offset-1 ring-nexus-700 scale-105' : '',
                   ].join(' ')}
                   title={c}
+                />
+              ))}
+              {PRESETS_LISTA.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => { setCapaPreset(p); setCapaCor(null); }}
+                  className={'h-6 w-10 rounded transition-transform ' + (capaPreset === p ? 'ring-2 ring-offset-1 ring-nexus-700 scale-105' : '')}
+                  style={{ backgroundImage: PRESETS_VISUAL[p] }}
+                  title={p}
                 />
               ))}
             </div>

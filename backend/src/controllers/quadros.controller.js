@@ -3,6 +3,7 @@ import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { ehMembroDaEquipe } from './equipes.controller.js';
+import { corSchema, presetSchema } from '../utils/kanban-visual.js';
 
 /**
  * Quadros — Sprint 10.
@@ -30,6 +31,9 @@ const atualizarSchema = z.object({
   nome: z.string().min(2).max(100).optional(),
   descricao: z.string().max(2000).optional().nullable(),
   aberto_a_socios: z.boolean().optional(),
+  // Sprint 39 — fundo do quadro (cor solida OU preset de gradiente).
+  fundo_cor: corSchema,
+  fundo_preset: presetSchema,
 });
 
 /**
@@ -63,6 +67,8 @@ function serializar(q) {
     nome: q.nome,
     descricao: q.descricao,
     aberto_a_socios: q.aberto_a_socios,
+    fundo_cor: q.fundo_cor ?? null,
+    fundo_preset: q.fundo_preset ?? null,
     arquivado: !!q.arquivado_em,
     arquivado_em: q.arquivado_em,
     criado_em: q.criado_em,
@@ -137,7 +143,7 @@ export async function obter(req, res, next) {
     const [colR, cardsR, etiqR, camposR] = await Promise.all([
       query(
         `SELECT id, nome, ordem, criado_em,
-                tipo, wip_limite,
+                tipo, wip_limite, cor,
                 (SELECT COUNT(*)::int FROM cards ca
                   WHERE ca.coluna_id = colunas.id AND ca.arquivado_em IS NULL) AS n_cards
            FROM colunas
@@ -147,7 +153,7 @@ export async function obter(req, res, next) {
       ),
       query(
         `SELECT c.id, c.coluna_id, c.titulo, c.descricao, c.data_prazo,
-                c.data_inicio, c.prazo_concluido, c.capa_cor,
+                c.data_inicio, c.prazo_concluido, c.capa_cor, c.capa_preset,
                 c.responsavel_id, c.ordem, c.criado_em, c.atualizado_em,
                 c.prioridade, c.estimativa_horas, c.pontos, c.card_pai_id,
                 c.concluido_em,

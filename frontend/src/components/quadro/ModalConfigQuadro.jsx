@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import {
-  Archive, Tag as TagIcon, Trash2, Pencil, Plus, SlidersHorizontal, Zap,
+  Archive, Tag as TagIcon, Trash2, Pencil, Plus, SlidersHorizontal, Zap, Palette,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import ModalFrame from './ModalFrame.jsx';
 import { GestorCampos } from './CardCampos.jsx';
 import Automacoes from './Automacoes.jsx';
 import { COR_CHIP, CORES, inputCls } from './ui.js';
+import { CORES_KANBAN, COR_HEX, PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
 /**
  * Configurações do quadro: metadados, etiquetas e (Sprint 34) os campos
@@ -16,6 +17,8 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
   const [nome, setNome] = useState(quadro.nome);
   const [descricao, setDescricao] = useState(quadro.descricao || '');
   const [aberto, setAberto] = useState(quadro.aberto_a_socios);
+  const [fundoCor, setFundoCor] = useState(quadro.fundo_cor || null);
+  const [fundoPreset, setFundoPreset] = useState(quadro.fundo_preset || null);
   const [etiquetas, setEtiquetas] = useState(quadro.etiquetas);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -28,6 +31,8 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
         nome,
         descricao: descricao || null,
         aberto_a_socios: aberto,
+        fundo_cor: fundoCor,
+        fundo_preset: fundoPreset,
       });
       onAlterado();
     } catch (err) {
@@ -89,6 +94,43 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
               </div>
             </div>
           </label>
+        </div>
+
+        <div>
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+            <Palette size={13} /> Fundo do quadro
+          </h3>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setFundoCor(null); setFundoPreset(null); }}
+              className={'flex h-7 w-9 items-center justify-center rounded border text-[10px] text-slate-400 ' + (!fundoCor && !fundoPreset ? 'border-nexus-500 ring-2 ring-nexus-200 bg-white' : 'border-slate-200 bg-white')}
+              title="Sem fundo"
+            >
+              —
+            </button>
+            {CORES_KANBAN.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { setFundoCor(c); setFundoPreset(null); }}
+                className={'h-7 w-9 rounded ' + (fundoCor === c ? 'ring-2 ring-offset-1 ring-nexus-700' : '')}
+                style={{ backgroundColor: COR_HEX[c] }}
+                title={c}
+              />
+            ))}
+            {PRESETS_LISTA.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => { setFundoPreset(p); setFundoCor(null); }}
+                className={'h-7 w-12 rounded ' + (fundoPreset === p ? 'ring-2 ring-offset-1 ring-nexus-700' : '')}
+                style={{ backgroundImage: PRESETS_VISUAL[p] }}
+                title={p}
+              />
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Clique em &quot;Salvar&quot; (no rodapé) para aplicar o fundo.</p>
         </div>
 
         <div>

@@ -9,6 +9,7 @@ import {
 import { api, mensagemDeErro } from '../../api/client.js';
 import { CardSortable } from './Card.jsx';
 import { TIPOS_COLUNA } from './ui.js';
+import { CORES_KANBAN, COR_HEX, estiloHeaderColuna } from '../../constants/kanbanVisual.js';
 
 /**
  * Coluna do board.
@@ -75,8 +76,9 @@ export default function Coluna({
       className="flex h-full w-72 shrink-0 flex-col rounded-xl bg-slate-100"
     >
       <header
+        style={estourado ? undefined : estiloHeaderColuna(coluna.cor)}
         className={[
-          'flex items-center justify-between gap-2 px-3 pt-3 pb-2 rounded-t-xl',
+          'flex items-center justify-between gap-2 px-3 pt-3 pb-2 rounded-t-xl border-b border-transparent',
           estourado ? 'bg-amber-100' : '',
         ].join(' ')}
       >
@@ -158,6 +160,32 @@ export default function Coluna({
                         </span>
                       </button>
                     ))}
+
+                    <div className="my-1 border-t border-slate-100" />
+
+                    <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Cor da coluna
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1 px-3 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => salvarColuna({ cor: null })}
+                        className={'flex h-5 w-5 items-center justify-center rounded border text-[9px] text-slate-400 ' + (!coluna.cor ? 'border-nexus-500 ring-2 ring-nexus-200' : 'border-slate-200')}
+                        title="Sem cor"
+                      >
+                        —
+                      </button>
+                      {CORES_KANBAN.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => salvarColuna({ cor: c })}
+                          className={'h-5 w-5 rounded ' + (coluna.cor === c ? 'ring-2 ring-offset-1 ring-nexus-700' : '')}
+                          style={{ backgroundColor: COR_HEX[c] }}
+                          title={c}
+                        />
+                      ))}
+                    </div>
 
                     <div className="my-1 border-t border-slate-100" />
 

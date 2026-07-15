@@ -16,6 +16,7 @@ import FiltroBar from '../components/quadro/FiltroBar.jsx';
 import ModalCard from '../components/quadro/ModalCard.jsx';
 import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
+import { estiloFundoQuadro } from '../constants/kanbanVisual.js';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
 import Metricas from '../components/quadro/Metricas.jsx';
 import VistaTabela from '../components/quadro/VistaTabela.jsx';
@@ -318,6 +319,10 @@ export default function Quadro() {
         .findIndex((c) => c.id === cardAlvo.id);
     }
 
+    // Drop sobre o proprio card (ou alvo filtrado) devolve -1 no findIndex.
+    // Garante posicao valida (>= 0) — o backend recusa negativo.
+    if (!Number.isInteger(novaPosicao) || novaPosicao < 0) novaPosicao = 0;
+
     const posAtual = quadro.cards
       .filter((c) => c.coluna_id === novaColunaId)
       .sort((a, b) => a.ordem - b.ordem)
@@ -552,7 +557,10 @@ export default function Quadro() {
           />
         </div>
       ) : (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <div
+          className="flex-1 overflow-x-auto overflow-y-hidden"
+          style={estiloFundoQuadro(quadro.fundo_cor, quadro.fundo_preset)}
+        >
           <DndContext
             sensors={sensors}
             collisionDetection={rectIntersection}
