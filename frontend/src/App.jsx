@@ -12,6 +12,7 @@ import ContasPagar from './pages/ContasPagar.jsx';
 import CategoriasDespesa from './pages/CategoriasDespesa.jsx';
 import Mensal from './pages/Mensal.jsx';
 import Relatorios from './pages/Relatorios.jsx';
+import CustosCloud from './pages/CustosCloud.jsx';
 import Lucros from './pages/Lucros.jsx';
 import ExtratoSocio from './pages/ExtratoSocio.jsx';
 import Governanca from './pages/Governanca.jsx';
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="/contas-bancarias" element={<Bloqueado><ContasBancarias /></Bloqueado>} />
         <Route path="/mensal"           element={<Bloqueado><Mensal /></Bloqueado>} />
         <Route path="/relatorios"       element={<Bloqueado><Relatorios /></Bloqueado>} />
+        <Route path="/custos-cloud"     element={<Bloqueado><CustosCloud /></Bloqueado>} />
         <Route path="/lucros"           element={<Bloqueado><Lucros /></Bloqueado>} />
         <Route path="/socios/:id/extrato" element={<Bloqueado><ExtratoSocio /></Bloqueado>} />
 

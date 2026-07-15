@@ -21,6 +21,7 @@ import {
   Link2,
   Landmark,
   Tag,
+  Cloud,
   Settings,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -34,6 +35,7 @@ const itensBase = [
   { to: '/contas-pagar',  rotulo: 'Contas a pagar',  icone: Receipt },
   { to: '/mensal',        rotulo: 'Mês a mês',       icone: CalendarDays },
   { to: '/relatorios',    rotulo: 'Relatórios',      icone: FileBarChart },
+  { to: '/custos-cloud',  rotulo: 'Custos Cloud',    icone: Cloud },
   { to: '/apresentacao',  rotulo: 'Apresentação',     icone: Presentation },
   { to: '/lucros',        rotulo: 'Sócios & Lucros', icone: PieChart },
   { to: '/governanca',    rotulo: 'Governança',      icone: FileText },

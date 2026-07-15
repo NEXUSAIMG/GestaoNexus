@@ -30,6 +30,7 @@ import cartoriosRoutes from './cartorios.routes.js';
 import documentosEmpresaRoutes from './documentos-empresa.routes.js';
 import contratosRoutes from './contratos.routes.js';
 import relatoriosRoutes from './relatorios.routes.js';
+import custosCloudRoutes from './custos-cloud.routes.js';
 
 const router = Router();
 
@@ -143,5 +144,8 @@ router.use('/contratos',                       restritoBloqueado, contratosRoute
 
 // Relatórios (custos mês a mês — realizado + projetado)
 router.use('/relatorios',                      restritoBloqueado, relatoriosRoutes);
+
+// Sprint 40 — Custos Cloud (catalogo, fechamento mensal, dashboard)
+router.use('/custos-cloud',                    restritoBloqueado, custosCloudRoutes);
 
 export default router;
