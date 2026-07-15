@@ -89,7 +89,8 @@ function criarUploader({ subpasta, mimesPermitidos, descricaoTipos }) {
       files: 1,
     },
     fileFilter: (_req, file, cb) => {
-      if (!mimesPermitidos.has(file.mimetype)) {
+      // mimesPermitidos === null => aceita qualquer tipo de arquivo.
+      if (mimesPermitidos && !mimesPermitidos.has(file.mimetype)) {
         return cb(new AppError(
           `Tipo de arquivo não permitido (${file.mimetype}). Aceitamos ${descricaoTipos}.`,
           400,
@@ -156,10 +157,12 @@ export function uploaderInventario() {
  * Aceita o mesmo conjunto amplo do inventário (PDF, imagens e Word).
  */
 export function uploaderCards() {
+  // Cards aceitam QUALQUER tipo de arquivo (mimesPermitidos: null).
+  // O limite de tamanho (UPLOADS_MAX_MB) continua valendo.
   return criarUploader({
     subpasta: SUBPASTAS.cards,
-    mimesPermitidos: MIME_PERMITIDOS_INVENTARIO,
-    descricaoTipos: 'PDF, imagens (PNG/JPG/WebP) e Word',
+    mimesPermitidos: null,
+    descricaoTipos: 'qualquer arquivo',
   });
 }
 

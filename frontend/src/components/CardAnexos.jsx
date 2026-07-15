@@ -76,8 +76,20 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
         responseType: 'blob',
         timeout: 60_000,
       });
+      const tipo = anexo.mime_type || r.data.type || '';
       const url = URL.createObjectURL(r.data);
-      window.open(url, '_blank', 'noopener');
+      // Imagens e PDF podem abrir em nova aba (preview seguro). Qualquer
+      // outro tipo baixa como arquivo — evita renderizar HTML/SVG malicioso.
+      if (tipo.startsWith('image/') || tipo === 'application/pdf') {
+        window.open(url, '_blank', 'noopener');
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = anexo.nome_original || 'arquivo';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       alert(mensagemDeErro(err, 'Não consegui baixar o arquivo.'));
@@ -104,7 +116,6 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
             type="file"
             className="hidden"
             onChange={(e) => enviar(e.target.files?.[0])}
-            accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
           />
           <button
             type="button"
@@ -115,7 +126,7 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
             {enviando ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
             {enviando ? 'Enviando…' : 'Anexar arquivo'}
           </button>
-          <span className="ml-2 text-[10px] text-slate-400">PDF, imagens ou Word</span>
+          <span className="ml-2 text-[10px] text-slate-400">Qualquer arquivo (até 10 MB)</span>
         </div>
       )}
 

@@ -505,9 +505,12 @@ export async function baixarAnexo(req, res, next) {
     }
 
     res.setHeader('Content-Type', anexo.mime_type || 'application/octet-stream');
+    // Como aceitamos qualquer tipo, forcamos download (nunca render inline)
+    // e desligamos o content-sniffing — evita XSS via HTML/SVG anexado.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader(
       'Content-Disposition',
-      'inline; filename="' + encodeURIComponent(anexo.nome_original) + '"',
+      'attachment; filename="' + encodeURIComponent(anexo.nome_original) + '"',
     );
     const stream = (await import('node:fs')).createReadStream(abs);
     stream.pipe(res);
