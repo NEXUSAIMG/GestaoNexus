@@ -235,3 +235,157 @@ export async function dashboard(req, res, next) {
     });
   } catch (err) { next(err); }
 }
+
+// ---------------------------------------------------------------------------
+// Rateio por cartorio (Fase 2)
+// ---------------------------------------------------------------------------
+
+const rateioSchema = z.object({
+  mes: z.string().regex(mesRegex, 'Mes deve estar em YYYY-MM'),
+  cartorio_id: z.string().uuid(),
+  mensalidade_reais: z.number().min(0).max(9999999),
+  mensagens_mes: z.number().int().min(0).max(99999999),
+});
+
+async function calcularRateio(mes) {
+  const [tot, carts] = await Promise.all([
+    query(
+      `SELECT s.tipo, COALESCE(SUM(m.valor_reais), 0) AS total
+         FROM custos_mensais m
+         JOIN custos_servicos s ON s.id = m.servico_id
+        WHERE m.mes = $1
+        GROUP BY s.tipo`,
+      [mes],
+    ),
+    query(
+      `SELECT c.id, c.nome,
+              COALESCE(r.mensalidade_reais, 0) AS mensalidade,
+              COALESCE(r.mensagens_mes, 0) AS mensagens
+         FROM cartorios c
+         LEFT JOIN custos_rateio r ON r.cartorio_id = c.id AND r.mes = $1
+        WHERE c.arquivado_em IS NULL
+        ORDER BY c.nome`,
+      [mes],
+    ),
+  ]);
+
+  let variavel = 0; let fixo = 0;
+  for (const row of tot.rows) {
+    if (row.tipo === 'variavel') variavel = Number(row.total);
+    else if (row.tipo === 'fixo') fixo = Number(row.total);
+  }
+  const empresas = carts.rows.length;
+  const totalMsgs = carts.rows.reduce((s, c) => s + Number(c.mensagens), 0);
+  const fixoPorEmpresa = empresas > 0 ? fixo / empresas : 0;
+
+  const itens = carts.rows.map((c) => {
+    const mensalidade = Number(c.mensalidade);
+    const mensagens = Number(c.mensagens);
+    const pctMsgs = totalMsgs > 0 ? mensagens / totalMsgs : 0;
+    const custoVar = variavel * pctMsgs;
+    const custoTotal = custoVar + fixoPorEmpresa;
+    const margem = mensalidade - custoTotal;
+    return {
+      cartorio_id: c.id,
+      nome: c.nome,
+      mensalidade_reais: mensalidade,
+      mensagens_mes: mensagens,
+      pct_mensagens: pctMsgs,
+      custo_variavel: custoVar,
+      custo_fixo: fixoPorEmpresa,
+      custo_total: custoTotal,
+      margem,
+      margem_pct: mensalidade > 0 ? margem / mensalidade : null,
+      situacao: margem >= 0 ? 'OK' : 'PREJUIZO',
+    };
+  });
+
+  return { mes, variavel_total: variavel, fixo_total: fixo, empresas, total_mensagens: totalMsgs, itens };
+}
+
+export async function rateio(req, res, next) {
+  try {
+    const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
+    res.json(await calcularRateio(mes));
+  } catch (err) { next(err); }
+}
+
+export async function salvarRateio(req, res, next) {
+  try {
+    const d = rateioSchema.parse(req.body);
+    await query(
+      `INSERT INTO custos_rateio (mes, cartorio_id, mensalidade_reais, mensagens_mes)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (mes, cartorio_id)
+       DO UPDATE SET mensalidade_reais = EXCLUDED.mensalidade_reais,
+                     mensagens_mes = EXCLUDED.mensagens_mes,
+                     atualizado_em = NOW()`,
+      [d.mes, d.cartorio_id, d.mensalidade_reais, d.mensagens_mes],
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    if (err?.code === '23503') return next(new AppError('Cartorio nao encontrado.', 400));
+    next(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Alertas derivados (Fase 2)
+// ---------------------------------------------------------------------------
+
+export async function alertas(req, res, next) {
+  try {
+    const mes = req.query.mes && mesRegex.test(req.query.mes) ? req.query.mes : mesAtual();
+    const lista = [];
+
+    // 1) Servicos que estouraram o teto no mes.
+    const estouros = await query(
+      `SELECT s.nome, s.teto_reais, m.valor_reais
+         FROM custos_mensais m
+         JOIN custos_servicos s ON s.id = m.servico_id
+        WHERE m.mes = $1 AND s.teto_reais IS NOT NULL AND m.valor_reais > s.teto_reais
+        ORDER BY (m.valor_reais - s.teto_reais) DESC`,
+      [mes],
+    );
+    for (const e of estouros.rows) {
+      lista.push({
+        tipo: 'teto',
+        severidade: 'alta',
+        titulo: `${e.nome} passou do teto`,
+        detalhe: `Custou R$ ${Number(e.valor_reais).toFixed(2)} para um teto de R$ ${Number(e.teto_reais).toFixed(2)}.`,
+      });
+    }
+
+    // 2) Cartorios com margem negativa (prejuizo).
+    const r = await calcularRateio(mes);
+    for (const it of r.itens) {
+      if (it.situacao === 'PREJUIZO' && it.mensalidade_reais > 0) {
+        lista.push({
+          tipo: 'prejuizo',
+          severidade: 'alta',
+          titulo: `${it.nome} esta no prejuizo`,
+          detalhe: `Custo R$ ${it.custo_total.toFixed(2)} maior que a mensalidade R$ ${it.mensalidade_reais.toFixed(2)} (margem R$ ${it.margem.toFixed(2)}).`,
+        });
+      }
+    }
+
+    // 3) Custo total subiu mais de 20% vs mes anterior.
+    const anterior = mesAnterior(mes);
+    const [atualR, antR] = await Promise.all([
+      query('SELECT COALESCE(SUM(valor_reais),0) AS t FROM custos_mensais WHERE mes = $1', [mes]),
+      query('SELECT COALESCE(SUM(valor_reais),0) AS t FROM custos_mensais WHERE mes = $1', [anterior]),
+    ]);
+    const atual = Number(atualR.rows[0].t);
+    const ant = Number(antR.rows[0].t);
+    if (ant > 0 && atual > ant * 1.2) {
+      lista.push({
+        tipo: 'variacao',
+        severidade: 'media',
+        titulo: 'Custo total subiu mais de 20%',
+        detalhe: `De R$ ${ant.toFixed(2)} para R$ ${atual.toFixed(2)}. Compare as faturas antes de pagar.`,
+      });
+    }
+
+    res.json({ mes, alertas: lista });
+  } catch (err) { next(err); }
+}

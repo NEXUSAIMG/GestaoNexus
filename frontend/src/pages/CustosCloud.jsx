@@ -19,6 +19,8 @@ function mesAtual() {
 const ABAS = [
   { id: 'dashboard', rotulo: 'Dashboard' },
   { id: 'fechamento', rotulo: 'Fechamento do mês' },
+  { id: 'rateio', rotulo: 'Rateio por cartório' },
+  { id: 'alertas', rotulo: 'Alertas' },
   { id: 'catalogo', rotulo: 'Catálogo de serviços' },
 ];
 
@@ -65,6 +67,8 @@ export default function CustosCloud() {
 
       {aba === 'dashboard' && <Dashboard mes={mes} />}
       {aba === 'fechamento' && <Fechamento mes={mes} admin={admin} />}
+      {aba === 'rateio' && <Rateio mes={mes} admin={admin} />}
+      {aba === 'alertas' && <Alertas mes={mes} />}
       {aba === 'catalogo' && <Catalogo admin={admin} />}
     </div>
   );
@@ -342,6 +346,153 @@ function Catalogo({ admin }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rateio por cartorio
+// ---------------------------------------------------------------------------
+
+function Rateio({ mes, admin }) {
+  const [d, setD] = useState(null);
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  const carregar = useCallback(() => {
+    setCarregando(true);
+    api.get('/custos-cloud/rateio', { params: { mes } })
+      .then((r) => setD(r.data))
+      .catch((e) => setErro(mensagemDeErro(e)))
+      .finally(() => setCarregando(false));
+  }, [mes]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function salvar(cartorioId, mensalidade, mensagens) {
+    try {
+      await api.put('/custos-cloud/rateio', {
+        mes, cartorio_id: cartorioId, mensalidade_reais: mensalidade, mensagens_mes: mensagens,
+      });
+      carregar();
+    } catch (e) { alert(mensagemDeErro(e)); }
+  }
+
+  if (carregando) return <p className="text-sm text-slate-500">Carregando…</p>;
+  if (erro) return <ErroBox texto={erro} />;
+  if (!d) return null;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Custo variável ({fmtBRL(d.variavel_total)}) rateado por % de mensagens; custo fixo ({fmtBRL(d.fixo_total)})
+        {' '}dividido igualmente entre {d.empresas} cartório(s).{!admin && ' Somente administradores editam.'}
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+              <th className="px-3 py-2 font-medium">Cartório</th>
+              <th className="px-3 py-2 text-right font-medium">Mensalidade (R$)</th>
+              <th className="px-3 py-2 text-right font-medium">Mensagens</th>
+              <th className="px-3 py-2 text-right font-medium">Custo total</th>
+              <th className="px-3 py-2 text-right font-medium">Margem</th>
+              <th className="px-3 py-2 text-center font-medium">Situação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.itens.map((it) => (
+              <LinhaRateio key={it.cartorio_id} it={it} admin={admin} onSalvar={salvar} />
+            ))}
+            {d.itens.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-4 text-center text-slate-400">Nenhum cartório ativo cadastrado.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LinhaRateio({ it, admin, onSalvar }) {
+  const [mens, setMens] = useState(it.mensalidade_reais ? String(it.mensalidade_reais) : '');
+  const [msgs, setMsgs] = useState(it.mensagens_mes ? String(it.mensagens_mes) : '');
+
+  function commit() {
+    if (!admin) return;
+    const m = mens.trim() === '' ? 0 : Number(mens.replace(',', '.'));
+    const q = msgs.trim() === '' ? 0 : parseInt(msgs, 10);
+    if (Number.isNaN(m) || Number.isNaN(q)) return;
+    onSalvar(it.cartorio_id, m, q);
+  }
+
+  return (
+    <tr className="border-t border-slate-100">
+      <td className="px-3 py-2 font-medium text-slate-800">{it.nome}</td>
+      <td className="px-3 py-2 text-right">
+        <input
+          type="text" inputMode="decimal" disabled={!admin} value={mens}
+          onChange={(e) => setMens(e.target.value)} onBlur={commit} placeholder="0,00"
+          className="w-24 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500 disabled:bg-slate-50 disabled:text-slate-400"
+        />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <input
+          type="text" inputMode="numeric" disabled={!admin} value={msgs}
+          onChange={(e) => setMsgs(e.target.value)} onBlur={commit} placeholder="0"
+          className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right text-sm outline-none focus:border-nexus-500 disabled:bg-slate-50 disabled:text-slate-400"
+        />
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-600">{fmtBRL(it.custo_total)}</td>
+      <td className={'px-3 py-2 text-right tabular-nums ' + (it.margem >= 0 ? 'text-emerald-600' : 'text-red-600')}>{fmtBRL(it.margem)}</td>
+      <td className="px-3 py-2 text-center">
+        <span className={'rounded-full px-2 py-0.5 text-xs font-medium ' + (it.situacao === 'OK' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+          {it.situacao === 'OK' ? 'OK' : 'Prejuízo'}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Alertas
+// ---------------------------------------------------------------------------
+
+function Alertas({ mes }) {
+  const [lista, setLista] = useState(null);
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    setCarregando(true);
+    api.get('/custos-cloud/alertas', { params: { mes } })
+      .then((r) => setLista(r.data.alertas))
+      .catch((e) => setErro(mensagemDeErro(e)))
+      .finally(() => setCarregando(false));
+  }, [mes]);
+
+  if (carregando) return <p className="text-sm text-slate-500">Carregando…</p>;
+  if (erro) return <ErroBox texto={erro} />;
+  if (!lista || lista.length === 0) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
+        Nenhum alerta neste mês. Tudo dentro dos tetos.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {lista.map((a, i) => (
+        <div
+          key={i}
+          className={'flex items-start gap-2 rounded-lg border px-3 py-2 ' + (a.severidade === 'alta' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50')}
+        >
+          <AlertTriangle size={16} className={'mt-0.5 ' + (a.severidade === 'alta' ? 'text-red-600' : 'text-amber-600')} />
+          <div>
+            <div className={'text-sm font-semibold ' + (a.severidade === 'alta' ? 'text-red-800' : 'text-amber-800')}>{a.titulo}</div>
+            <div className="text-xs text-slate-600">{a.detalhe}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

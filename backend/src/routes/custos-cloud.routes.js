@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listarServicos, criarServico, atualizarServico,
   fechamento, lancarValor, dashboard,
+  rateio, salvarRateio, alertas,
 } from '../controllers/custos-cloud.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
 
@@ -20,5 +21,10 @@ router.put('/mensal', exigirAdmin, lancarValor);
 
 // Dashboard do mes
 router.get('/dashboard', dashboard);
+
+// Fase 2 -- rateio por cartorio e alertas
+router.get('/rateio', rateio);
+router.put('/rateio', exigirAdmin, salvarRateio);
+router.get('/alertas', alertas);
 
 export default router;
