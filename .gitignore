@@ -45,3 +45,7 @@ coverage/
 # Em produção, configurar um Volume persistente.
 backend/uploads/
 uploads/
+
+# Dumps de banco - nunca versionar
+*.dump
+gestaonexus.dump
