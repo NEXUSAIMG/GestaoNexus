@@ -97,7 +97,7 @@ const CARD_BOARD_SELECT = `
          c.data_inicio, c.prazo_concluido, c.capa_cor, c.capa_preset,
          c.responsavel_id, c.ordem, c.criado_em, c.atualizado_em,
          c.prioridade, c.estimativa_horas, c.pontos, c.card_pai_id,
-         c.concluido_em,
+         c.concluido_em, c.sprint_id, c.fluxo,
          p.nome AS responsavel_nome,
          p.email AS responsavel_email,
          (SELECT COUNT(*)::int FROM cards f
