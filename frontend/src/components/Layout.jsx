@@ -4,6 +4,7 @@ import { Menu, X, LogOut, Shield } from 'lucide-react';
 import Sidebar from './Sidebar.jsx';
 import SeletorDeContexto from './SeletorDeContexto.jsx';
 import Sino from './Sino.jsx';
+import ModalTarefasLogin from './ModalTarefasLogin.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Layout() {
@@ -25,6 +26,9 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
+      {/* Modal de boas-vindas: avisa sobre tarefas pendentes ao logar */}
+      <ModalTarefasLogin />
+
       {/* Overlay escuro no mobile quando o menu está aberto */}
       {abertoMobile && (
         <button

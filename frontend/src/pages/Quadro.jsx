@@ -120,6 +120,21 @@ export default function Quadro() {
     }
   }
 
+  // Mescla um card (retornado por criar/editar) no estado local, evitando
+  // refazer GET /quadros/:id a cada acao. O SSE silencioso reconcilia logo
+  // em seguida como rede de seguranca. Sem card -> recarrega em silencio.
+  function mesclarCard(card) {
+    if (!card || !card.id) { carregar({ silencioso: true }); return; }
+    setQuadro((q) => {
+      if (!q) return q;
+      const existe = q.cards.some((c) => c.id === card.id);
+      const cards = existe
+        ? q.cards.map((c) => (c.id === card.id ? card : c))
+        : [...q.cards, card];
+      return { ...q, cards };
+    });
+  }
+
   async function carregarInstancia() {
     try {
       const r = await api.get('/instancias/por-quadro/' + id);
@@ -674,7 +689,7 @@ export default function Quadro() {
           colunaId={novoCardEm}
           quadro={quadro}
           onFechar={() => setNovoCardEm(null)}
-          onSalvo={() => { setNovoCardEm(null); carregar(); }}
+          onSalvo={(card) => { setNovoCardEm(null); mesclarCard(card); }}
         />
       )}
 
@@ -691,7 +706,7 @@ export default function Quadro() {
               setSearchParams(searchParams, { replace: true });
             }
           }}
-          onSalvo={() => { setCardAberto(null); carregar(); }}
+          onSalvo={(card) => { setCardAberto(null); mesclarCard(card); }}
         />
       )}
 

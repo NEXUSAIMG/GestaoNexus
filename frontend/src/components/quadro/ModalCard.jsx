@@ -118,12 +118,16 @@ export default function ModalCard({
         estimativa_horas: estimativa.trim() === '' ? null : Number(estimativa),
         pontos: pontos.trim() === '' ? null : Number(pontos),
       };
+      let salvo;
       if (editando) {
-        await api.put('/cards/' + cardId, body);
+        const r = await api.put('/cards/' + cardId, body);
+        salvo = r.data;
       } else {
-        await api.post('/cards', { ...body, coluna_id: colunaId });
+        const r = await api.post('/cards', { ...body, coluna_id: colunaId });
+        salvo = r.data;
       }
-      onSalvo();
+      // Passa o card salvo pro pai mesclar no estado (evita refazer o quadro).
+      onSalvo(salvo);
     } catch (err) {
       setErro(mensagemDeErro(err));
     } finally {

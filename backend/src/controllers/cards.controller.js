@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
-import { podeVerQuadro } from './quadros.controller.js';
+import { podeVerQuadro, montarCardDoQuadro } from './quadros.controller.js';
 import { presetSchema } from '../utils/kanban-visual.js';
 import {
   disparar,
@@ -434,13 +434,19 @@ export async function criar(req, res, next) {
     const { lista: idsResp } = resolverResponsaveis(d);
     if (idsResp.length > 0) {
       await validarResponsaveisAtivos(client, idsResp);
-      for (let i = 0; i < idsResp.length; i += 1) {
-        await client.query(
-          `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
-           VALUES ($1, $2, $3, $4)`,
-          [cardId, idsResp[i], i, req.pessoa.id],
-        );
-      }
+      // INSERT unico multi-linha (antes: 1 round-trip por responsavel).
+      const vals = [];
+      const params = [];
+      idsResp.forEach((pid, i) => {
+        const base = params.length;
+        params.push(cardId, pid, i, req.pessoa.id);
+        vals.push(`(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4})`);
+      });
+      await client.query(
+        `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
+         VALUES ${vals.join(', ')}`,
+        params,
+      );
     }
 
     if (d.etiqueta_ids && d.etiqueta_ids.length > 0) {
@@ -455,12 +461,18 @@ export async function criar(req, res, next) {
       if (idsInvalidos.length > 0) {
         throw new AppError(`Etiqueta(s) não pertence(m) a este quadro: ${idsInvalidos.join(', ')}`, 400);
       }
-      for (const eid of d.etiqueta_ids) {
-        await client.query(
-          `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ($1, $2)`,
-          [cardId, eid],
-        );
-      }
+      // INSERT unico multi-linha (antes: 1 round-trip por etiqueta).
+      const vals = [];
+      const params = [];
+      d.etiqueta_ids.forEach((eid) => {
+        const base = params.length;
+        params.push(cardId, eid);
+        vals.push(`(${base + 1}, ${base + 2})`);
+      });
+      await client.query(
+        `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ${vals.join(', ')}`,
+        params,
+      );
     }
 
     await client.query('COMMIT');
@@ -472,11 +484,12 @@ export async function criar(req, res, next) {
       req,
     });
 
-    const final = await query(`${SELECT_BASE} WHERE c.id = $1`, [cardId]);
-    const card = final.rows[0];
+    // Card no formato do board: serve tanto pra notificacao quanto pra
+    // resposta que o front mescla localmente (sem refazer o quadro todo).
+    const card = await montarCardDoQuadro(cardId);
 
     // Notifica responsável principal (= primeiro da N:N, espelhado em responsavel_id)
-    if (card.responsavel_id) {
+    if (card?.responsavel_id) {
       disparar(() => notificarAtribuicao(card, req.pessoa.id));
     }
 
@@ -490,7 +503,7 @@ export async function criar(req, res, next) {
     });
 
     publicarMudanca(quadroId, 'card_criado');
-    res.status(201).json(serializar(card));
+    res.status(201).json(card);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
@@ -563,11 +576,19 @@ export async function atualizar(req, res, next) {
     if (veio) {
       await validarResponsaveisAtivos(client, novoConjunto);
       await client.query(`DELETE FROM cards_responsaveis WHERE card_id = $1`, [req.params.id]);
-      for (let i = 0; i < novoConjunto.length; i += 1) {
+      if (novoConjunto.length > 0) {
+        // INSERT unico multi-linha (antes: 1 round-trip por responsavel).
+        const vals = [];
+        const params = [];
+        novoConjunto.forEach((pid, i) => {
+          const base = params.length;
+          params.push(req.params.id, pid, i, req.pessoa.id);
+          vals.push(`(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4})`);
+        });
         await client.query(
           `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
-           VALUES ($1, $2, $3, $4)`,
-          [req.params.id, novoConjunto[i], i, req.pessoa.id],
+           VALUES ${vals.join(', ')}`,
+          params,
         );
       }
     }
@@ -585,10 +606,18 @@ export async function atualizar(req, res, next) {
         }
       }
       await client.query(`DELETE FROM cards_etiquetas WHERE card_id = $1`, [req.params.id]);
-      for (const eid of d.etiqueta_ids) {
+      if (d.etiqueta_ids.length > 0) {
+        // INSERT unico multi-linha (antes: 1 round-trip por etiqueta).
+        const vals = [];
+        const params = [];
+        d.etiqueta_ids.forEach((eid) => {
+          const base = params.length;
+          params.push(req.params.id, eid);
+          vals.push(`(${base + 1}, ${base + 2})`);
+        });
         await client.query(
-          `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ($1, $2)`,
-          [req.params.id, eid],
+          `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ${vals.join(', ')}`,
+          params,
         );
       }
     }
@@ -602,20 +631,21 @@ export async function atualizar(req, res, next) {
       req,
     });
 
-    const final = await query(`${SELECT_BASE} WHERE c.id = $1`, [req.params.id]);
-    const card = final.rows[0];
+    // Card no formato do board: serve pra notificacao e pra resposta que o
+    // front mescla localmente (sem refazer o quadro todo).
+    const card = await montarCardDoQuadro(req.params.id);
 
     // Notifica se o RESPONSÁVEL PRINCIPAL mudou (e veio mudança no payload)
     if (
       veio
-      && card.responsavel_id
+      && card?.responsavel_id
       && card.responsavel_id !== responsavelAnterior
     ) {
       disparar(() => notificarAtribuicao(card, req.pessoa.id));
     }
 
     publicarMudanca(cAtual.rows[0].quadro_id, 'card_editado');
-    res.json(serializar(card));
+    res.json(card);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
