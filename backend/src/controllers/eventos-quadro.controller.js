@@ -182,9 +182,15 @@ function formatar(e, opcoes = {}) {
  * no calendário deve abrir o modal do card no kanban (frontend resolve).
  */
 function cardComoEvento(card) {
-  // data_prazo vem como Date sem hora. Usamos meio-dia pra evitar
-  // problemas de timezone que joguem pro dia anterior.
-  const dataIso = `${String(card.data_prazo).slice(0, 10)}T12:00:00`;
+  // data_prazo vem do pg como objeto Date (sem type parser) OU como string.
+  // String(Date).slice(0,10) daria "Wed Jul 15" (inválido) — por isso
+  // normalizamos para YYYY-MM-DD robustamente antes de montar o ISO.
+  // Usamos meio-dia pra evitar timezone jogando pro dia anterior.
+  const dp = card.data_prazo;
+  const ymd = dp instanceof Date && !Number.isNaN(dp.getTime())
+    ? `${dp.getFullYear()}-${String(dp.getMonth() + 1).padStart(2, '0')}-${String(dp.getDate()).padStart(2, '0')}`
+    : (String(dp).match(/^\d{4}-\d{2}-\d{2}/) || [null])[0];
+  const dataIso = ymd ? `${ymd}T12:00:00` : null;
   return {
     id: `card-${card.id}`,
     card_id: card.id,
@@ -192,7 +198,7 @@ function cardComoEvento(card) {
     titulo: card.titulo,
     descricao: null,
     tipo: 'card',
-    data_inicio: new Date(dataIso).toISOString(),
+    data_inicio: dataIso ? new Date(dataIso).toISOString() : new Date(card.criado_em).toISOString(),
     data_fim: null,
     dia_inteiro: true,
     local: null,
