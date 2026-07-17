@@ -65,6 +65,7 @@ export default function Quadro() {
   const carregaIdRef = useRef(0);
 
   // Filtros
+  const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroResponsavel, setFiltroResponsavel] = useState('');
   const [filtroEtiqueta, setFiltroEtiqueta] = useState('');
   const [filtroAtrasados, setFiltroAtrasados] = useState(false);
@@ -359,8 +360,13 @@ export default function Quadro() {
 
   const cardsFiltrados = useMemo(() => {
     if (!quadro) return [];
+    // Busca por texto (título + descrição), sem diferenciar acento/maiúsculas.
+    const RE_D = new RegExp('[\\u0300-\\u036f]', 'g');
+    const norm = (s) => String(s || '').normalize('NFD').replace(RE_D, '').toLowerCase();
+    const busca = norm(filtroBusca).trim();
     return quadro.cards.filter((c) => {
       const resps = c.responsaveis || [];
+      if (busca && !(norm(c.titulo) + ' ' + norm(c.descricao)).includes(busca)) return false;
       if (filtroResponsavel === '__sem__' && resps.length > 0) return false;
       if (filtroResponsavel && filtroResponsavel !== '__sem__'
         && !resps.some((r) => r.id === filtroResponsavel)) return false;
@@ -374,7 +380,7 @@ export default function Quadro() {
       }
       return true;
     });
-  }, [quadro, filtroResponsavel, filtroEtiqueta, filtroAtrasados, filtroPrioridade, filtroBloqueados]);
+  }, [quadro, filtroBusca, filtroResponsavel, filtroEtiqueta, filtroAtrasados, filtroPrioridade, filtroBloqueados]);
 
   const responsaveisDisponiveis = useMemo(() => {
     if (!quadro) return [];
@@ -525,6 +531,8 @@ export default function Quadro() {
             <FiltroBar
               responsaveis={responsaveisDisponiveis}
               etiquetas={quadro.etiquetas}
+              filtroBusca={filtroBusca}
+              setFiltroBusca={setFiltroBusca}
               filtroResponsavel={filtroResponsavel}
               setFiltroResponsavel={setFiltroResponsavel}
               filtroEtiqueta={filtroEtiqueta}
