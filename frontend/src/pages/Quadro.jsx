@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Globe, Lock, Users2, Calendar, Settings, KanbanSquare, Gauge, X,
-  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3,
+  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3, Flag,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, rectIntersection,
@@ -15,6 +15,7 @@ import Coluna, { BotaoNovaColuna } from '../components/quadro/Coluna.jsx';
 import FiltroBar from '../components/quadro/FiltroBar.jsx';
 import ModalCard from '../components/quadro/ModalCard.jsx';
 import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
+import ModalSprints from '../components/quadro/ModalSprints.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
 import { estiloFundoQuadro } from '../constants/kanbanVisual.js';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
@@ -77,6 +78,7 @@ export default function Quadro() {
 
   // Modais
   const [modalConfig, setModalConfig] = useState(false);
+  const [modalSprints, setModalSprints] = useState(false);
   const [novoCardEm, setNovoCardEm] = useState(null);
   const [cardAberto, setCardAberto] = useState(null);
   const [bloqueio, setBloqueio] = useState(null); // { dados, tentativa, snapshot }
@@ -530,6 +532,15 @@ export default function Quadro() {
             />
           )}
 
+          <button
+            type="button"
+            onClick={() => setModalSprints(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            title="Sprints"
+          >
+            <Flag size={13} /> Sprints
+          </button>
+
           {quadro.pode_editar && (
             <button
               type="button"
@@ -681,6 +692,15 @@ export default function Quadro() {
           onFechar={() => setModalConfig(false)}
           onAlterado={() => { setModalConfig(false); carregar(); }}
           onRecarregar={carregar}
+        />
+      )}
+
+      {modalSprints && (
+        <ModalSprints
+          quadro={quadro}
+          podeEditar={quadro.pode_editar}
+          onFechar={() => setModalSprints(false)}
+          onMudou={carregar}
         />
       )}
 
