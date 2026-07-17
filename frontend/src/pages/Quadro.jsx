@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Globe, Lock, Users2, Calendar, Settings, KanbanSquare, Gauge, X,
-  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3, Flag,
+  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3, Flag, LifeBuoy,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, rectIntersection,
@@ -16,6 +16,7 @@ import FiltroBar from '../components/quadro/FiltroBar.jsx';
 import ModalCard from '../components/quadro/ModalCard.jsx';
 import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
 import ModalSprints from '../components/quadro/ModalSprints.jsx';
+import ModalSustentacao from '../components/quadro/ModalSustentacao.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
 import { estiloFundoQuadro } from '../constants/kanbanVisual.js';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
@@ -79,6 +80,7 @@ export default function Quadro() {
   // Modais
   const [modalConfig, setModalConfig] = useState(false);
   const [modalSprints, setModalSprints] = useState(false);
+  const [modalSustentacao, setModalSustentacao] = useState(false);
   const [novoCardEm, setNovoCardEm] = useState(null);
   const [cardAberto, setCardAberto] = useState(null);
   const [bloqueio, setBloqueio] = useState(null); // { dados, tentativa, snapshot }
@@ -404,7 +406,11 @@ export default function Quadro() {
   }
   if (!quadro) return null;
 
-  const colunasOrdenadas = [...quadro.colunas].sort((a, b) => a.ordem - b.ordem);
+  // Sprint 41 — a coluna oculta de sustentação nunca aparece no kanban
+  // (os chamados vivem na fila de Sustentação, não no board de arrastar).
+  const colunasOrdenadas = [...quadro.colunas]
+    .filter((c) => c.tipo !== 'sustentacao')
+    .sort((a, b) => a.ordem - b.ordem);
 
   return (
     <div className="-m-4 md:-m-8 flex h-[calc(100vh-3.5rem)] lg:h-screen flex-col bg-slate-50">
@@ -539,6 +545,15 @@ export default function Quadro() {
             title="Sprints"
           >
             <Flag size={13} /> Sprints
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalSustentacao(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            title="Sustentação"
+          >
+            <LifeBuoy size={13} /> Sustentação
           </button>
 
           {quadro.pode_editar && (
@@ -700,6 +715,15 @@ export default function Quadro() {
           quadro={quadro}
           podeEditar={quadro.pode_editar}
           onFechar={() => setModalSprints(false)}
+          onMudou={carregar}
+        />
+      )}
+
+      {modalSustentacao && (
+        <ModalSustentacao
+          quadro={quadro}
+          podeEditar={quadro.pode_editar}
+          onFechar={() => setModalSustentacao(false)}
           onMudou={carregar}
         />
       )}

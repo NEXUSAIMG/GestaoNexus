@@ -22,6 +22,7 @@ import quadrosRoutes from './quadros.routes.js';
 import colunasRoutes from './colunas.routes.js';
 import cardsRoutes from './cards.routes.js';
 import sprintsRoutes from './sprints.routes.js';
+import sustentacaoRoutes from './sustentacao.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import processosRoutes from './processos.routes.js';
 import instanciasRoutes from './instancias.routes.js';
@@ -82,6 +83,7 @@ router.use('/quadros', quadrosRoutes);
 router.use('/colunas', colunasRoutes);
 router.use('/cards', cardsRoutes);
 router.use('/sprints', sprintsRoutes);
+router.use('/sustentacao', sustentacaoRoutes);
 
 // Sprint 14 — Processos / Workflows (estilo BPMN)
 router.use('/processos', processosRoutes);
