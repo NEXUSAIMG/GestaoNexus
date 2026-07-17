@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Card from './Card.jsx';
 import { COR_CHIP, PRIORIDADES, prioridadeDe } from './ui.js';
+import { api } from '../../api/client.js';
 
 /**
  * Sprint 35 — Swimlanes (vista agrupada).
@@ -15,6 +16,7 @@ import { COR_CHIP, PRIORIDADES, prioridadeDe } from './ui.js';
  */
 
 const AGRUPADORES = [
+  { id: 'sprint', nome: 'Sprint' },
   { id: 'responsavel', nome: 'Responsável' },
   { id: 'etiqueta', nome: 'Etiqueta' },
   { id: 'prioridade', nome: 'Prioridade' },
@@ -22,13 +24,23 @@ const AGRUPADORES = [
 
 export default function VistaAgrupada({ quadro, onAbrirCard }) {
   const [por, setPor] = useState('responsavel');
+  const [sprints, setSprints] = useState([]);
+
+  // Sprint 41 — carrega as sprints do quadro (não vêm no payload do board).
+  useEffect(() => {
+    let vivo = true;
+    api.get('/sprints', { params: { quadro_id: quadro.id } })
+      .then((r) => { if (vivo) setSprints(r.data); })
+      .catch(() => { if (vivo) setSprints([]); });
+    return () => { vivo = false; };
+  }, [quadro.id]);
 
   const colunas = useMemo(
     () => [...(quadro.colunas || [])].sort((a, b) => a.ordem - b.ordem),
     [quadro.colunas],
   );
 
-  const grupos = useMemo(() => montarGrupos(por, quadro), [por, quadro]);
+  const grupos = useMemo(() => montarGrupos(por, quadro, sprints), [por, quadro, sprints]);
 
   return (
     <div className="flex h-full flex-col">
@@ -101,8 +113,32 @@ export default function VistaAgrupada({ quadro, onAbrirCard }) {
   );
 }
 
-function montarGrupos(por, quadro) {
+function montarGrupos(por, quadro, sprints = []) {
   const cards = quadro.cards || [];
+
+  if (por === 'sprint') {
+    const rank = (s) => (s.estado === 'ativa' ? 0 : s.estado === 'planejamento' ? 1 : 2);
+    const ordenadas = [...sprints].sort(
+      (a, b) => rank(a) - rank(b) || String(b.data_inicio).localeCompare(String(a.data_inicio)),
+    );
+    const badgeCls = (estado) => (
+      estado === 'ativa' ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+        : estado === 'encerrada' ? 'bg-slate-50 text-slate-400 border-slate-200'
+          : 'bg-slate-100 text-slate-600 border-slate-200'
+    );
+    const badgeTxt = (estado) => (estado === 'ativa' ? 'ativa' : estado === 'encerrada' ? 'encerrada' : 'plan.');
+    const grupos = ordenadas.map((s) => ({
+      chave: s.id,
+      nome: s.nome,
+      badge: <span className={'rounded-full border px-2 py-0.5 text-[10px] font-medium ' + badgeCls(s.estado)}>{badgeTxt(s.estado)}</span>,
+      cards: cards.filter((c) => c.sprint_id === s.id),
+    })).filter((g) => g.cards.length > 0);
+    const backlog = cards.filter((c) => c.fluxo === 'projeto' && !c.sprint_id);
+    if (backlog.length > 0) grupos.push({ chave: '__backlog__', nome: 'Backlog do produto', badge: null, cards: backlog });
+    const sust = cards.filter((c) => c.fluxo === 'sustentacao');
+    if (sust.length > 0) grupos.push({ chave: '__sust__', nome: 'Sustentação', badge: null, cards: sust });
+    return grupos;
+  }
 
   if (por === 'prioridade') {
     return PRIORIDADES.map((p) => ({
