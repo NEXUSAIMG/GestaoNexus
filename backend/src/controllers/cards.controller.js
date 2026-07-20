@@ -440,7 +440,7 @@ export async function criar(req, res, next) {
       idsResp.forEach((pid, i) => {
         const base = params.length;
         params.push(cardId, pid, i, req.pessoa.id);
-        vals.push(`(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4})`);
+        vals.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
       });
       await client.query(
         `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
@@ -467,7 +467,7 @@ export async function criar(req, res, next) {
       d.etiqueta_ids.forEach((eid) => {
         const base = params.length;
         params.push(cardId, eid);
-        vals.push(`(${base + 1}, ${base + 2})`);
+        vals.push(`($${base + 1}, $${base + 2})`);
       });
       await client.query(
         `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ${vals.join(', ')}`,
@@ -583,7 +583,7 @@ export async function atualizar(req, res, next) {
         novoConjunto.forEach((pid, i) => {
           const base = params.length;
           params.push(req.params.id, pid, i, req.pessoa.id);
-          vals.push(`(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4})`);
+          vals.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
         });
         await client.query(
           `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
@@ -613,7 +613,7 @@ export async function atualizar(req, res, next) {
         d.etiqueta_ids.forEach((eid) => {
           const base = params.length;
           params.push(req.params.id, eid);
-          vals.push(`(${base + 1}, ${base + 2})`);
+          vals.push(`($${base + 1}, $${base + 2})`);
         });
         await client.query(
           `INSERT INTO cards_etiquetas (card_id, etiqueta_id) VALUES ${vals.join(', ')}`,
