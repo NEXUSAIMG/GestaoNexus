@@ -1,0 +1,231 @@
+{
+ "cards": [
+  {
+   "titulo": "Kickoff e arquitetura do Zabbix",
+   "prioridade": 1,
+   "estimativa": 3.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Aprendizado",
+   "descricao": "ZBX-01 · Semana S1 · D1 · Curso: Arquitetura / Conceitos\n\nObjetivo: Entender o que é o Zabbix e as peças (server, agent, frontend web, banco) antes de instalar, e alinhar o objetivo da sprint.\n\nPré-requisitos: Acesso ao material do curso; pasta/repositório compartilhado para anotações; conta de e-mail do time.\n\n=== PASSO A PASSO ===\n1) Assistir/revisar o módulo de introdução do curso.\n2) Desenhar num papel/quadro o diagrama: Zabbix server ⇄ banco ⇄ frontend web; agent no host monitorado; conceito de 'item', 'trigger', 'template', 'host'.\n3) Escrever com as próprias palavras: o que é um Item, um Trigger e um Template.\n4) Criar a pasta de anotações compartilhada e colar o objetivo da sprint (ver aba Leia-me).\n5) Combinar com o Marcio: qual e-mail/Telegram vão usar para receber alertas.\n\n=== CRITÉRIO DE ACEITE ===\nUm documento curto (meia página) explicando com as próprias palavras: server, agent, item, trigger, template e host. Diagrama simples anexado.\n\nEntregável: Nota de conceitos + diagrama"
+  },
+  {
+   "titulo": "Instalar o Zabbix do zero (Docker Compose)",
+   "prioridade": 1,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Setup",
+   "descricao": "ZBX-02 · Semana S1 · D1-D2 · Curso: Instalação\n\nObjetivo: Subir um Zabbix funcional no laboratório usando containers: zabbix-server, zabbix-web (frontend), banco PostgreSQL e um zabbix-agent, tudo via docker-compose.\n\nPré-requisitos: ZBX-01 concluído. Uma VM/máquina de laboratório com Docker e Docker Compose instalados. Sem tocar produção.\n\nDependências: ZBX-01\n\n=== PASSO A PASSO ===\n1) Instalar Docker + Docker Compose na VM de lab (documentar os comandos).\n2) Criar um arquivo docker-compose.yml com os serviços: postgres, zabbix-server-pgsql, zabbix-web-nginx-pgsql e zabbix-agent (usar as imagens oficiais do Zabbix).\n3) Subir com 'docker compose up -d' e conferir 'docker compose ps' (todos 'Up').\n4) Abrir o frontend no navegador (porta 8080) e logar (Admin / zabbix). TROCAR a senha padrão imediatamente.\n5) Em Administration > verificar que o Zabbix server aparece como 'Yes' (conectado ao banco).\n6) Salvar o docker-compose.yml na pasta compartilhada com um README de como subir/derrubar.\n\n=== CRITÉRIO DE ACEITE ===\nFrontend do Zabbix abre, login funciona, senha padrão trocada e o 'Zabbix server is running' aparece verde. docker-compose.yml versionado.\n\nEntregável: docker-compose.yml + README"
+  },
+  {
+   "titulo": "Primeiro host monitorado (agent + template Linux)",
+   "prioridade": 1,
+   "estimativa": 5.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Configuração",
+   "descricao": "ZBX-03 · Semana S1 · D2 · Curso: Hosts e Templates\n\nObjetivo: Cadastrar o primeiro Host (a própria VM/agent do lab) e ligar o template padrão de Linux para ver CPU, memória e disco automaticamente.\n\nPré-requisitos: ZBX-02 no ar (Zabbix acessível). O container/host do zabbix-agent rodando.\n\nDependências: ZBX-02\n\n=== PASSO A PASSO ===\n1) Configuration > Hosts > Create host. Nome do host, grupo (ex.: 'Lab'), interface do tipo Agent apontando para o agent.\n2) Na aba Templates, linkar 'Linux by Zabbix agent'.\n3) Salvar e aguardar. Em Monitoring > Latest data, filtrar pelo host e ver os valores chegando (CPU, RAM, disco, uptime).\n4) Se ficar 'ZBX' vermelho (agent unreachable), conferir a interface/porta 10050 e a rede do Docker.\n5) Anotar 3 itens que o template trouxe de graça e o que cada um mede.\n\n=== CRITÉRIO DE ACEITE ===\nO host aparece com o 'ZBX' verde e há dados chegando em Latest data (CPU/RAM/disco). Print anexado.\n\nEntregável: Host configurado + print Latest data"
+  },
+  {
+   "titulo": "Entender Itens e Chaves (criar itens manuais)",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Aprendizado",
+   "descricao": "ZBX-04 · Semana S1 · D2-D3 · Curso: Items e Keys\n\nObjetivo: Fixar o conceito de Item e Key criando 2 itens manualmente e lendo o valor, para não depender só do template.\n\nPré-requisitos: ZBX-03 concluído.\n\nDependências: ZBX-03\n\n=== PASSO A PASSO ===\n1) No host do lab, Configuration > Items > Create item.\n2) Criar um item usando uma key do agent (ex.: system.uptime) — tipo 'Zabbix agent', intervalo 1m.\n3) Criar um segundo item (ex.: vfs.fs.size[/,pused] = % de uso do disco raiz).\n4) Ver os dois valores em Latest data.\n5) Escrever a diferença entre 'Item' (o que coleto) e 'Key' (a fórmula/endereço do que coleto).\n\n=== CRITÉRIO DE ACEITE ===\nDois itens manuais criados e retornando valor em Latest data. Explicação escrita de Item x Key.\n\nEntregável: 2 itens manuais + nota Item x Key"
+  },
+  {
+   "titulo": "Triggers e severidades (criar e testar disparo)",
+   "prioridade": 1,
+   "estimativa": 5.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Configuração",
+   "descricao": "ZBX-05 · Semana S1 · D3 · Curso: Triggers\n\nObjetivo: Aprender a transformar um item num alerta: criar triggers com severidade e provocar o disparo de propósito.\n\nPré-requisitos: ZBX-03 concluído (host com dados).\n\nDependências: ZBX-03\n\n=== PASSO A PASSO ===\n1) Configuration > Hosts > Triggers > Create trigger.\n2) Trigger de disco: expressão do tipo last(/host/vfs.fs.size[/,pused])>80, severidade High.\n3) Trigger de agent offline: usar nodata()/agent unreachable, severidade High.\n4) Provocar o disparo: encher um arquivo com 'fallocate' para o disco passar do limite (ou baixar o limite pra 5% temporariamente) e ver o Problem aparecer em Monitoring > Problems.\n5) Resolver a condição e ver o problema fechar sozinho.\n6) Anotar como funciona a expressão (função + item + operador + valor).\n\n=== CRITÉRIO DE ACEITE ===\nPelo menos 2 triggers criadas; um Problem apareceu em Monitoring>Problems ao provocar a condição e fechou ao normalizar.\n\nEntregável: Triggers criadas + print do Problem"
+  },
+  {
+   "titulo": "Monitoramento HTTP/Web (endpoint público)",
+   "prioridade": 1,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Configuração",
+   "descricao": "ZBX-06 · Semana S1 · D3-D4 · Curso: Web monitoring / HTTP agent\n\nObjetivo: Aprender a monitorar um site/endpoint 'de fora' (como um usuário faz) — base do que vão usar na produção serverless na semana 2.\n\nPré-requisitos: ZBX-02 no ar. Um endpoint público de teste (ex.: https://httpbin.org/status/200 ou o /status do backend em ambiente de teste).\n\nDependências: ZBX-02\n\n=== PASSO A PASSO ===\n1) Criar um item do tipo 'HTTP agent' apontando para o endpoint (GET). Coletar o código de status e o tempo de resposta.\n2) Alternativa: criar um Web scenario (Configuration > Hosts > Web) com um passo GET e 'Required status codes = 200'.\n3) Ver em Latest data o status e o response time.\n4) Criar trigger: se o status != 200 (down) → severidade High; se response time > 3s → Warning.\n5) Testar apontando para uma URL que devolve erro (ex.: httpbin.org/status/500) e ver o alerta.\n6) Explicar por que aqui NÃO se usa agent (o alvo é externo, monitoramos de fora).\n\n=== CRITÉRIO DE ACEITE ===\nEndpoint monitorado por HTTP, com status e tempo de resposta em Latest data e uma trigger de indisponibilidade testada.\n\nEntregável: Item/Web scenario HTTP + trigger"
+  },
+  {
+   "titulo": "Monitorar validade de certificado SSL",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Configuração",
+   "descricao": "ZBX-07 · Semana S1 · D4 · Curso: HTTP agent / Segurança\n\nObjetivo: Aprender a vigiar o vencimento de um certificado HTTPS — vale para o domínio da API e do painel do Seu Cartório.\n\nPré-requisitos: ZBX-06 concluído (conceito de HTTP agent).\n\nDependências: ZBX-06\n\n=== PASSO A PASSO ===\n1) Criar um item que leia a data de expiração do certificado de um domínio HTTPS (via HTTP agent com verificação de cert, ou item de checagem de SSL do template correspondente).\n2) Converter para 'dias até vencer'.\n3) Criar trigger: <30 dias → Warning; <7 dias → High.\n4) Testar com um domínio real (ex.: o site do cartório) e conferir o número de dias.\n5) Anotar por que isso importa (certificado vencido = site fora do ar / bot sem receber webhook).\n\n=== CRITÉRIO DE ACEITE ===\nItem de dias-para-vencer funcionando para pelo menos 1 domínio, com trigger de <30 e <7 dias.\n\nEntregável: Item SSL + trigger"
+  },
+  {
+   "titulo": "Notificações (e-mail/Telegram) e Actions",
+   "prioridade": 1,
+   "estimativa": 5.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Configuração",
+   "descricao": "ZBX-08 · Semana S1 · D4-D5 · Curso: Actions e Media types\n\nObjetivo: Fazer o alerta SAIR do Zabbix e chegar em alguém: configurar o meio (Media type) e a regra (Action) e receber um alerta de verdade.\n\nPré-requisitos: Pelo menos uma trigger já disparando (ZBX-05 ou ZBX-06). E-mail SMTP ou bot de Telegram definido com o Marcio.\n\nDependências: ZBX-05\n\n=== PASSO A PASSO ===\n1) Administration > Media types: habilitar e configurar E-mail (SMTP) e/ou Telegram (token do bot).\n2) No usuário, cadastrar o endereço/telegram de destino (Media).\n3) Configuration > Actions > Trigger actions: criar uma ação que, ao disparar uma trigger de severidade >= High, envia mensagem para o(s) usuário(s).\n4) Provocar um problema (derrubar o endpoint de teste ou encher o disco) e CONFIRMAR o recebimento do alerta.\n5) Testar também a mensagem de 'problema resolvido'.\n6) Documentar o passo a passo (é o que vão demonstrar na apresentação final).\n\n=== CRITÉRIO DE ACEITE ===\nUm alerta real chegou no e-mail/Telegram ao disparar uma trigger, e a mensagem de resolução também. Passo a passo documentado.\n\nEntregável: Media type + Action + print do alerta recebido"
+  },
+  {
+   "titulo": "Primeiro Dashboard no Zabbix",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Dashboard",
+   "descricao": "ZBX-09 · Semana S1 · D5 · Curso: Dashboards\n\nObjetivo: Aprender a montar um painel visual — ensaio do QUADRO que vão entregar na semana 2.\n\nPré-requisitos: Itens e triggers do lab já existindo (ZBX-03 a ZBX-06).\n\nDependências: ZBX-03\n\n=== PASSO A PASSO ===\n1) Monitoring > Dashboards > Create dashboard 'Lab Seu Cartório'.\n2) Adicionar widgets: Problems (lista de problemas), Graph (CPU/disco do host), e um widget de 'Data overview' ou 'Item value'.\n3) Adicionar o status do endpoint HTTP monitorado (ZBX-06) como um widget de valor.\n4) Organizar de forma legível (título, agrupamento).\n5) Salvar e tirar print.\n\n=== CRITÉRIO DE ACEITE ===\nUm dashboard com pelo menos 3 widgets úteis (problemas + gráfico + valor de endpoint), salvo e apresentável.\n\nEntregável: Dashboard de lab + print"
+  },
+  {
+   "titulo": "Fechamento da Semana 1 (revisão + doc do PoC)",
+   "prioridade": 1,
+   "estimativa": 3.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Aprendizado",
+   "descricao": "ZBX-10 · Semana S1 · D5 · Curso: Revisão\n\nObjetivo: Consolidar o aprendizado, documentar como o PoC foi montado e alinhar a semana 2 com o Marcio (checkpoint).\n\nPré-requisitos: Cards ZBX-02 a ZBX-09.\n\nDependências: ZBX-08\n\n=== PASSO A PASSO ===\n1) Revisar juntos: o que funcionou, o que travou, dúvidas do curso.\n2) Escrever o README do PoC: como subir o Zabbix, como cadastrar um host, como criar item/trigger/alerta (passo a passo reproduzível).\n3) Listar as dúvidas para o Marcio e o que precisam de acesso na semana 2 (credenciais read-only, URLs de produção, e-mail de alerta).\n4) Checkpoint de 20 min com o Marcio: mostrar o PoC funcionando.\n\n=== CRITÉRIO DE ACEITE ===\nREADME do PoC pronto e reproduzível; lista de acessos necessários para a semana 2 entregue ao Marcio; checkpoint feito.\n\nEntregável: README do PoC + lista de acessos"
+  },
+  {
+   "titulo": "Workshop: mapear o que dá para monitorar no Seu Cartório",
+   "prioridade": 1,
+   "estimativa": 5.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Descoberta",
+   "descricao": "ZBX-11 · Semana S2 · D6 · Curso: Aplicação prática\n\nObjetivo: Levantar TODO o universo monitorável do Seu Cartório e priorizar o que vira piloto real nesta semana. É o esqueleto do QUADRO final.\n\nPré-requisitos: Semana 1 concluída. Aba 'Catálogo monitorável' desta planilha como ponto de partida. Conversa rápida com o Marcio/Ícaro sobre a arquitetura.\n\nDependências: ZBX-10\n\n=== PASSO A PASSO ===\n1) Abrir a aba 'Catálogo monitorável' e ler cada área (Backend/Vercel, Banco/Railway, Z-API por empresa, Botpress, dependências, painel/app, negócio, certificados).\n2) Para cada item, discutir: dá para medir de fora (HTTP)? precisa de credencial? qual severidade?\n3) Marcar na coluna 'Status' o que será PILOTO nesta semana x PROPOSTO x ROADMAP.\n4) Confirmar com o Marcio quais 4-5 itens viram piloto real (sugestão: health-check, status Z-API de 2 cartórios, Groq, 1 métrica de negócio).\n5) Anotar quais credenciais read-only são necessárias.\n\n=== CRITÉRIO DE ACEITE ===\nAba Catálogo revisada e priorizada, com 4-5 itens marcados como 'Piloto' e o restante como Proposto/Roadmap. Lista de credenciais necessárias.\n\nEntregável: Catálogo priorizado"
+  },
+  {
+   "titulo": "Piloto real #1 — Health-check do backend (Vercel)",
+   "prioridade": 1,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-12 · Semana S2 · D6-D7 · Curso: HTTP agent aplicado\n\nObjetivo: Monitorar de verdade se o backend do Seu Cartório está no ar e respondendo, usando HTTP agent (não usa agent porque é serverless na Vercel).\n\nPré-requisitos: URL do endpoint de saúde do backend (ex.: GET /status do serviço saude-cartorio) em ambiente acessível. Validado antes no lab (ZBX-06).\n\nDependências: ZBX-11\n\n=== PASSO A PASSO ===\n1) Criar um Host 'Seu Cartório - Backend' (sem agent, só interface para organização).\n2) Item HTTP agent para GET no endpoint /status: coletar código HTTP e tempo de resposta, intervalo 1-2 min.\n3) Item de disponibilidade (up/down) derivado do status.\n4) Triggers: sem 200 em 2 checagens seguidas → Disaster; tempo de resposta > 3s → Warning (atenção a cold start da Vercel).\n5) Rodar por algumas horas e observar o comportamento real (inclusive latência de cold start).\n6) Documentar valores normais (baseline) para calibrar os limites.\n\n=== CRITÉRIO DE ACEITE ===\nBackend real monitorado por HTTP, com up/down e tempo de resposta em Latest data e triggers calibradas ao baseline observado.\n\nEntregável: Host Backend + itens + triggers"
+  },
+  {
+   "titulo": "Piloto real #2 — Status da instância Z-API por cartório",
+   "prioridade": 1,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-13 · Semana S2 · D7-D8 · Curso: HTTP agent aplicado\n\nObjetivo: Monitorar se o WhatsApp de cada cartório está conectado (o problema clássico: o QR cai e o cartório fica sem receber mensagem, ninguém percebe).\n\nPré-requisitos: Credenciais Z-API read-only (instanceId/token/clientToken) de 2 cartórios (Jaraguá e 5º Belém), entregues pelo Marcio/Ícaro. NÃO commitar tokens.\n\nDependências: ZBX-12\n\n=== PASSO A PASSO ===\n1) Estudar o endpoint GET /status da Z-API (retorna se a instância está 'connected'/'disconnected').\n2) Criar um item HTTP agent por cartório chamando /status com os headers (Content-Type + client-token). Guardar os tokens em macros {$ZAPI_TOKEN} do host, nunca no texto do item.\n3) Extrair do JSON o campo de conexão (dependent item + preprocessing JSONPath).\n4) Trigger CRÍTICA: instância 'disconnected' → Disaster (é cartório sem WhatsApp).\n5) Testar com os 2 cartórios (Jaraguá, 5º Belém).\n6) Deixar registrado que, na migração para a Meta Cloud API, este item precisará ser adaptado (o /status da Z-API deixa de existir).\n\n=== CRITÉRIO DE ACEITE ===\nStatus de conexão dos 2 cartórios visível em Latest data; trigger de 'desconectado = Disaster' funcionando; tokens guardados em macro (não expostos).\n\nEntregável: 2 itens de status Z-API + trigger crítica"
+  },
+  {
+   "titulo": "Piloto — Disponibilidade do webhook de entrada",
+   "prioridade": 2,
+   "estimativa": 5.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-14 · Semana S2 · D7 · Curso: HTTP agent aplicado\n\nObjetivo: Vigiar se o endpoint que RECEBE as mensagens do WhatsApp está de pé e respondendo rápido (é o caminho crítico do bot; roda síncrono na Vercel).\n\nPré-requisitos: URL pública do webhook (POST /api/zapi/webhook/{empresaId}). Combinar com o Ícaro um empresaId de teste e um payload inócuo (ou usar HEAD/OPTIONS).\n\nDependências: ZBX-11\n\n=== PASSO A PASSO ===\n1) Definir com o Ícaro a forma segura de checar sem poluir produção: um OPTIONS/HEAD no endpoint, ou um empresaId de teste com payload que o parser ignore (DeliveryCallback).\n2) Item HTTP agent medindo disponibilidade e latência do webhook.\n3) Trigger: sem resposta 2xx → High; latência alta (cold start) → Warning.\n4) Observar o comportamento e anotar o baseline.\n5) Registrar o cuidado: NÃO gerar atendimento falso na produção.\n\n=== CRITÉRIO DE ACEITE ===\nWebhook monitorado quanto a disponibilidade/latência sem gerar atendimento falso, com trigger de indisponibilidade.\n\nEntregável: Item de webhook + trigger"
+  },
+  {
+   "titulo": "Piloto — Banco PostgreSQL (Railway) read-only",
+   "prioridade": 2,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-15 · Semana S2 · D8 · Curso: DB monitoring\n\nObjetivo: Saber se o banco está acessível e saudável (conexões, tamanho), já que o banco fora do ar derruba tudo.\n\nPré-requisitos: Usuário PostgreSQL SOMENTE-LEITURA do banco de produção (Railway) OU, se não houver, host/porta para checagem de conectividade. Entregue pelo Marcio.\n\nDependências: ZBX-13\n\n=== PASSO A PASSO ===\n1) Caminho A (com usuário read-only): usar o template/monitoramento PostgreSQL do Zabbix (ou item db.odbc) para coletar nº de conexões ativas, conexões máximas e tamanho do banco.\n2) Caminho B (sem credencial): usar Simple check net.tcp.service para checar se a porta do banco responde (conectividade).\n3) Triggers: banco inacessível → Disaster; conexões > 80% do máximo → High.\n4) Rodar e observar baseline.\n5) Anotar qual caminho foi usado e por quê.\n\n=== CRITÉRIO DE ACEITE ===\nConectividade do banco monitorada (mínimo: porta respondendo). Se houver credencial read-only, nº de conexões e tamanho também. Trigger de indisponibilidade ativa.\n\nEntregável: Item(s) de banco + trigger"
+  },
+  {
+   "titulo": "Piloto — Dependências externas (Groq e Z-API)",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-16 · Semana S2 · D8 · Curso: HTTP agent aplicado\n\nObjetivo: Monitorar se os serviços de terceiros de que o bot depende estão de pé (se a Groq cai, o áudio não transcreve; se a Z-API cai, nada envia).\n\nPré-requisitos: Conhecer os endpoints públicos: API da Groq (transcrição de áudio) e a API da Z-API. Não precisa expor chave para um simples ping de disponibilidade.\n\nDependências: ZBX-11\n\n=== PASSO A PASSO ===\n1) Criar itens HTTP agent que checam a disponibilidade/latência das APIs externas (um endpoint de status/health público de cada).\n2) Triggers: dependência fora do ar → High.\n3) Observar latência normal e registrar baseline.\n4) Documentar o impacto de cada dependência no Seu Cartório (Groq → transcrição; Z-API → envio/recebimento).\n\n=== CRITÉRIO DE ACEITE ===\nGroq e Z-API monitoradas quanto a disponibilidade, com triggers e nota de impacto de cada uma.\n\nEntregável: 2 itens de dependência + triggers"
+  },
+  {
+   "titulo": "Piloto — 1 métrica de negócio (visão gerencial)",
+   "prioridade": 2,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Piloto (read-only)",
+   "descricao": "ZBX-17 · Semana S2 · D8-D9 · Curso: Itens calculados / aplicação\n\nObjetivo: Mostrar que o Zabbix também vigia o NEGÓCIO, não só a infra: um indicador que, caindo a zero em horário útil, sinaliza que algo quebrou mesmo que os servidores estejam 'no ar'.\n\nPré-requisitos: Definir com o Marcio 1 indicador viável de coletar sem escrever no banco: sugestão 'mensagens recebidas por hora por cartório' ou 'atendimentos na fila'. Fonte: endpoint de métricas read-only ou consulta read-only.\n\nDependências: ZBX-11\n\n=== PASSO A PASSO ===\n1) Escolher com o Marcio 1 indicador coletável de forma read-only (ex.: volume de mensagens recebidas/hora por cartório).\n2) Coletar via HTTP agent (endpoint de métricas) ou item de banco read-only.\n3) Criar um gráfico e uma trigger: 'zero mensagens em horário comercial por 60 min' → High (sinal de bot/instância caída sem ninguém perceber).\n4) Testar a leitura e validar que o número faz sentido com o Marcio.\n\n=== CRITÉRIO DE ACEITE ===\nPelo menos 1 métrica de negócio sendo coletada, com gráfico e uma trigger de 'queda anômala' que faça sentido para o Marcio.\n\nEntregável: Item de negócio + gráfico + trigger"
+  },
+  {
+   "titulo": "Montar o QUADRO final (Dashboard Seu Cartório)",
+   "prioridade": 1,
+   "estimativa": 6.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Dashboard",
+   "descricao": "ZBX-18 · Semana S2 · D9 · Curso: Dashboards aplicado\n\nObjetivo: Consolidar tudo num dashboard único, organizado por área — o QUADRO que será apresentado ao Marcio.\n\nPré-requisitos: Pilotos ZBX-12 a ZBX-17 coletando dados.\n\nDependências: ZBX-17\n\n=== PASSO A PASSO ===\n1) Criar o dashboard 'Seu Cartório — Monitoramento'.\n2) Seção Backend/API: status /status + tempo de resposta + webhook.\n3) Seção WhatsApp: status Z-API por cartório (Jaraguá, 5º Belém), bem visível (verde/vermelho).\n4) Seção Dependências: Groq, Z-API, banco.\n5) Seção Negócio: gráfico do indicador escolhido.\n6) Widget de Problemas no topo (o que está pegando fogo agora).\n7) Ajustar cores/severidade para leitura rápida por um gestor.\n\n=== CRITÉRIO DE ACEITE ===\nUm dashboard consolidado, dividido por área, mostrando todos os pilotos reais com leitura rápida (verde/vermelho). Apresentável a um gestor.\n\nEntregável: Dashboard 'Seu Cartório'"
+  },
+  {
+   "titulo": "Documentar o Catálogo e marcar status",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Kaleby"
+   ],
+   "tipo": "Documentação",
+   "descricao": "ZBX-19 · Semana S2 · D9-D10 · Curso: Documentação\n\nObjetivo: Fechar o catálogo do que pode ser monitorado, marcando o que já foi implementado no piloto x proposto x roadmap, com significado e severidade de cada item.\n\nPré-requisitos: Aba Catálogo (ZBX-11) e pilotos concluídos.\n\nDependências: ZBX-18\n\n=== PASSO A PASSO ===\n1) Revisar a aba 'Catálogo monitorável' item a item.\n2) Atualizar a coluna Status: Implementado (piloto) / Proposto / Roadmap.\n3) Para cada item implementado, escrever em 1 linha: o que significa e o que fazer quando disparar.\n4) Conferir que o catálogo bate com o dashboard (nada monitorado que não esteja no catálogo, e vice-versa).\n\n=== CRITÉRIO DE ACEITE ===\nCatálogo completo e coerente com o dashboard, com Status atualizado e uma linha de 'o que significa / o que fazer' por item implementado.\n\nEntregável: Catálogo final documentado"
+  },
+  {
+   "titulo": "Mapa de severidades e plano de alertas",
+   "prioridade": 2,
+   "estimativa": 4.0,
+   "responsaveis": [
+    "Ícaro"
+   ],
+   "tipo": "Documentação",
+   "descricao": "ZBX-20 · Semana S2 · D9-D10 · Curso: Actions aplicado\n\nObjetivo: Definir claramente quem é avisado, por qual canal, para cada nível de problema — para o monitoramento virar ação, não só tela bonita.\n\nPré-requisitos: Notificações da semana 1 (ZBX-08) e triggers dos pilotos.\n\nDependências: ZBX-18\n\n=== PASSO A PASSO ===\n1) Montar uma tabela: Severidade (Disaster/High/Warning/Info) → quem recebe → por qual canal (e-mail/Telegram) → em quanto tempo.\n2) Configurar as Actions no Zabbix conforme essa tabela (ex.: Disaster de Z-API desconectada avisa na hora; Warning só registra).\n3) Testar 1 caminho ponta a ponta (derrubar algo no lab e ver o alerta certo chegar na pessoa certa).\n4) Documentar como escalonamento futuro (se ninguém reconhecer em X min, avisa o próximo).\n\n=== CRITÉRIO DE ACEITE ===\nTabela de severidade→destinatário→canal definida, Actions configuradas de acordo e um caminho testado ponta a ponta.\n\nEntregável: Plano de alertas + Actions"
+  },
+  {
+   "titulo": "Ensaio da apresentação + simulação de incidente",
+   "prioridade": 1,
+   "estimativa": 3.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Apresentação",
+   "descricao": "ZBX-21 · Semana S2 · D10 · Curso: Revisão\n\nObjetivo: Ensaiar a demonstração e provar que o monitoramento funciona derrubando um serviço de propósito (no lab) e mostrando o alerta chegar.\n\nPré-requisitos: QUADRO (ZBX-18), catálogo (ZBX-19) e alertas (ZBX-20) prontos.\n\nDependências: ZBX-20\n\n=== PASSO A PASSO ===\n1) Rodar a apresentação inteira uma vez, cronometrando (alvo ~15 min).\n2) Preparar a simulação: derrubar um serviço no LAB (parar um container ou apontar um check para uma URL quebrada).\n3) Mostrar o problema aparecer no dashboard e o alerta chegar no e-mail/Telegram.\n4) Restaurar e mostrar o problema fechar.\n5) Ajustar o que ficou confuso na narrativa.\n\n=== CRITÉRIO DE ACEITE ===\nEnsaio feito dentro do tempo; a simulação de incidente mostra o alerta chegando e o problema fechando ao normalizar.\n\nEntregável: Roteiro ensaiado + incidente simulado"
+  },
+  {
+   "titulo": "Apresentação final do QUADRO para o Marcio",
+   "prioridade": 1,
+   "estimativa": 2.0,
+   "responsaveis": [
+    "Ícaro",
+    "Kaleby"
+   ],
+   "tipo": "Apresentação",
+   "descricao": "ZBX-22 · Semana S2 · D10 · Curso: Entrega\n\nObjetivo: Entregar o resultado da sprint: apresentar o QUADRO do que pode ser monitorado no universo Seu Cartório e o que já está monitorado de verdade.\n\nPré-requisitos: Tudo dos cards anteriores. Marcio disponível.\n\nDependências: ZBX-21\n\n=== PASSO A PASSO ===\n1) Abrir com o objetivo e a jornada (montaram Zabbix do zero → piloto real).\n2) Demonstrar o Zabbix ao vivo (dashboard 'Seu Cartório').\n3) Passear pelo catálogo: o que já está monitorado (piloto), o que é proposto, o que é roadmap.\n4) Rodar a simulação de incidente (alerta chegando).\n5) Mostrar o mapa de severidades/alertas.\n6) Fechar com recomendações e próximos passos (o que colocar em produção primeiro).\n\n=== CRITÉRIO DE ACEITE ===\nApresentação entregue ao Marcio cobrindo: PoC ao vivo, QUADRO/dashboard, catálogo com status, incidente simulado e próximos passos.\n\nEntregável: Apresentação final + próximos passos"
+  }
+ ]
+}

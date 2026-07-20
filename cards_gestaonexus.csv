@@ -1,0 +1,28 @@
+﻿ID,Titulo,Prioridade,Tipo,Categoria,Cliente,Estimativa_h,Coluna
+1,Ajustar formatação do app no celular,Urgente,Urgente,Plataforma,Plataforma,5,A fazer
+2,Remover última mensagem de avaliação,Urgente,Urgente,Bot,1º Tab. Jaraguá,1,A fazer
+5,Conversa de escritura na fila errada (privacidade),Alta,Bug,Correção,Correção,8,A fazer
+3,Transbordo não respeita etiqueta,Alta,Bug,Bot,1º Tab. Jaraguá,6,A fazer
+4,Mídia sem texto está transbordando,Alta,Bug,Bot,1º Tab. Jaraguá,5,A fazer
+6,Checklist incompleto,Alta,Bug,Bot,5º Tab. Belém,4,A fazer
+7,Ligação duplicada no registro,Alta,Bug,Plataforma,5º Tab. Belém,5,A fazer
+8,Importação de contatos rejeita acentos,Alta,Bug,Correção,Correção,3,A fazer
+9,Atrito na transferência entre atendentes,Alta,Bug,Plataforma,Plataforma,8,A fazer
+10,Mensagem automática de documento divergente,Média,Melhoria,Bot,Plataforma,1,A fazer
+11,Direcionar ao atendente solicitado,Média,Melhoria,Bot,1º Tab. Jaraguá,6,A fazer
+12,Etiquetas para contatos especiais,Média,Melhoria,Plataforma,1º Tab. Jaraguá,8,A fazer
+13,Melhorar visualização do histórico,Média,Melhoria,Plataforma,1º Tab. Jaraguá,6,A fazer
+14,Reabrir atendimento encerrado,Média,Melhoria,Plataforma,1º Tab. Jaraguá,6,A fazer
+15,Formatação da pesquisa de satisfação (Forms),Média,Melhoria,Plataforma,5º Tab. Belém,3,A fazer
+16,Sinalizar áudio na transcrição,Média,Melhoria,Plataforma,Plataforma,3,A fazer
+17,Enviar checklist em PDF automaticamente,Média,Melhoria,Bot,Plataforma,8,A fazer
+18,Alertas de novas mensagens,Média,Melhoria,Plataforma,Plataforma,6,A fazer
+19,Ações rápidas na ficha do contato,Média,Melhoria,Plataforma,Plataforma,3,A fazer
+20,Validar e-mails dos operadores,Média,Melhoria,Segurança,Plataforma,4,A fazer
+21,Player de áudio + transcrição,Baixa,Roadmap,Plataforma,Plataforma,12,A fazer
+22,Respostas em grupos do WhatsApp,Baixa,Roadmap,Plataforma,Plataforma,20,A fazer
+23,Transferência silenciosa entre atendentes,Baixa,Roadmap,Plataforma,Plataforma,10,A fazer
+24,Chat interno entre operadores,Baixa,Roadmap,Plataforma,Plataforma,24,A fazer
+25,Agenda estilo Google Agenda,Baixa,Roadmap,Agenda,Plataforma,40,A fazer
+26,Vincular atendente ao agendamento,Baixa,Roadmap,Agenda,Plataforma,8,A fazer
+27,Lembretes personalizados na agenda,Baixa,Roadmap,Agenda,Plataforma,10,A fazer
