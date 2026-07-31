@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Paperclip, Upload, Trash2, FileText, Image as ImageIcon, Download, Loader2,
+  Upload, Trash2, FileText, Image as ImageIcon, Download, Loader2,
+  AlertTriangle, RotateCcw,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 
@@ -10,6 +11,11 @@ import { api, mensagemDeErro } from '../api/client.js';
  * Múltiplos arquivos por card. Download é autenticado (token no header),
  * então buscamos o blob via axios e abrimos num object URL — <a href> direto
  * não carregaria o Authorization.
+ *
+ * Sprint 42: anexos enviados antes do volume persistente do Railway podem
+ * ter sumido do disco. O backend responde 410 'arquivo_perdido' nesses casos.
+ * Aqui a gente marca o anexo como perdido e oferece "Reenviar" no lugar de
+ * mostrar um erro cru.
  */
 
 function humanizarBytes(n) {
@@ -29,8 +35,12 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [baixandoId, setBaixandoId] = useState(null);
+  const [reenviandoId, setReenviandoId] = useState(null);
+  const [perdidos, setPerdidos] = useState(() => new Set());
   const [erro, setErro] = useState('');
   const inputRef = useRef(null);
+  const reenviarRef = useRef(null);
+  const reenviarAlvoRef = useRef(null);
 
   async function carregar() {
     setCarregando(true);
@@ -47,6 +57,10 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [cardId]);
 
   function avisar() { if (onMudou) onMudou(); }
+
+  function marcarPerdido(id) {
+    setPerdidos((s) => { const n = new Set(s); n.add(id); return n; });
+  }
 
   async function enviar(arquivo) {
     if (!arquivo) return;
@@ -78,8 +92,6 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
       });
       const tipo = anexo.mime_type || r.data.type || '';
       const url = URL.createObjectURL(r.data);
-      // Imagens e PDF podem abrir em nova aba (preview seguro). Qualquer
-      // outro tipo baixa como arquivo — evita renderizar HTML/SVG malicioso.
       if (tipo.startsWith('image/') || tipo === 'application/pdf') {
         window.open(url, '_blank', 'noopener');
       } else {
@@ -92,9 +104,45 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
-      alert(mensagemDeErro(err, 'Não consegui baixar o arquivo.'));
+      if (err?.response?.status === 410) {
+        marcarPerdido(anexo.id);
+      } else {
+        alert(mensagemDeErro(err, 'Não consegui baixar o arquivo.'));
+      }
     } finally {
       setBaixandoId(null);
+    }
+  }
+
+  function pedirReenvio(anexo) {
+    reenviarAlvoRef.current = anexo;
+    reenviarRef.current?.click();
+  }
+
+  async function reenviar(arquivo) {
+    const alvo = reenviarAlvoRef.current;
+    if (!arquivo || !alvo) return;
+    setReenviandoId(alvo.id);
+    setErro('');
+    try {
+      const fd = new FormData();
+      fd.append('arquivo', arquivo);
+      if (alvo.descricao) fd.append('descricao', alvo.descricao);
+      const r = await api.post(`/cards/${cardId}/anexos`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60_000,
+      });
+      // Remove o registro antigo (arquivo perdido). Best-effort.
+      try { await api.delete(`/cards/${cardId}/anexos/${alvo.id}`); } catch { /* ignora */ }
+      setAnexos((as) => [r.data, ...as.filter((a) => a.id !== alvo.id)]);
+      setPerdidos((s) => { const n = new Set(s); n.delete(alvo.id); return n; });
+      avisar();
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    } finally {
+      setReenviandoId(null);
+      reenviarAlvoRef.current = null;
+      if (reenviarRef.current) reenviarRef.current.value = '';
     }
   }
 
@@ -103,6 +151,7 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
     try {
       await api.delete(`/cards/${cardId}/anexos/${anexo.id}`);
       setAnexos((as) => as.filter((a) => a.id !== anexo.id));
+      setPerdidos((s) => { const n = new Set(s); n.delete(anexo.id); return n; });
       avisar();
     } catch (err) { alert(mensagemDeErro(err)); }
   }
@@ -116,6 +165,13 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
             type="file"
             className="hidden"
             onChange={(e) => enviar(e.target.files?.[0])}
+          />
+          {/* input dedicado ao fluxo de reenvio de anexo perdido */}
+          <input
+            ref={reenviarRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => reenviar(e.target.files?.[0])}
           />
           <button
             type="button"
@@ -133,57 +189,3 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
       {erro && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</div>
       )}
-
-      {carregando ? (
-        <div className="text-xs text-slate-400">Carregando anexos…</div>
-      ) : anexos.length === 0 ? (
-        <div className="text-xs text-slate-400">Nenhum anexo.</div>
-      ) : (
-        <ul className="space-y-1.5">
-          {anexos.map((a) => (
-            <li key={a.id} className="group flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-slate-100 text-slate-500">
-                {ehImagem(a.mime_type) ? <ImageIcon size={16} /> : <FileText size={16} />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <button
-                  type="button"
-                  onClick={() => baixar(a)}
-                  className="block truncate text-left text-sm font-medium text-slate-800 hover:text-nexus-700 hover:underline"
-                  title={a.nome_original}
-                >
-                  {a.nome_original}
-                </button>
-                <div className="text-[10px] text-slate-400">
-                  {humanizarBytes(a.tamanho_bytes)}
-                  {a.enviado_por_nome ? ` · ${a.enviado_por_nome}` : ''}
-                </div>
-              </div>
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => baixar(a)}
-                  disabled={baixandoId === a.id}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  title="Abrir / baixar"
-                >
-                  {baixandoId === a.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                </button>
-                {podeEditar && (
-                  <button
-                    type="button"
-                    onClick={() => excluir(a)}
-                    className="rounded p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
-                    title="Excluir"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
