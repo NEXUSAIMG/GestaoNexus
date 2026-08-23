@@ -7,7 +7,7 @@ import {
   criarItem, atualizarItem, excluirItem,
   listarComentarios, criarComentario, atualizarComentario, excluirComentario,
   listarAnexos, criarAnexo, baixarAnexo, excluirAnexo,
-  listarAtividades,
+  listarAtividades, listarHistorico,
 } from '../controllers/card-extras.controller.js';
 import {
   definirValorCampo,
@@ -66,6 +66,9 @@ router.delete('/:id/anexos/:anexoId', excluirAnexo);
 
 // Feed de atividades
 router.get('/:id/atividades', listarAtividades);
+
+// Historico do card: movimentacoes (de X para Y) + demais acoes
+router.get('/:id/historico', listarHistorico);
 
 // ---------------------------------------------------------------------------
 // Sprint 34 — Projetos: fundação (além do Trello)

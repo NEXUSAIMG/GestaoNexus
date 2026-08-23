@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  Archive, Palette, ListChecks, Paperclip, MessageSquare, Activity,
-  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag,
+  Archive, Palette, ListChecks, Paperclip, MessageSquare,
+  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag, History,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import MultiSelectPessoas from '../MultiSelectPessoas.jsx';
 import CardChecklists from '../CardChecklists.jsx';
 import CardComentarios from '../CardComentarios.jsx';
 import CardAnexos from '../CardAnexos.jsx';
-import CardAtividades from '../CardAtividades.jsx';
+import CardHistorico from './CardHistorico.jsx';
 import ModalFrame from './ModalFrame.jsx';
 import CardSubtarefas from './CardSubtarefas.jsx';
 import CardDependencias from './CardDependencias.jsx';
@@ -32,7 +32,7 @@ const ABAS = [
   { id: 'dependencias', nome: 'Dependências', icone: Ban },
   { id: 'vinculos', nome: 'Vínculos', icone: Link2 },
   { id: 'horas', nome: 'Horas', icone: Clock },
-  { id: 'atividade', nome: 'Atividade', icone: Activity },
+  { id: 'historico', nome: 'Histórico', icone: History },
 ];
 
 export default function ModalCard({
@@ -209,7 +209,7 @@ export default function ModalCard({
           {aba === 'horas' && (
             <CardTimer cardId={cardId} podeEditar={podeEditar} onMudou={aoMudarExtras} />
           )}
-          {aba === 'atividade' && <CardAtividades cardId={cardId} />}
+          {aba === 'historico' && <CardHistorico cardId={cardId} />}
 
           <div className="flex justify-end border-t border-slate-200 pt-3">
             <button

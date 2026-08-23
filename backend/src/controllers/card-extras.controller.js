@@ -570,3 +570,105 @@ export async function listarAtividades(req, res, next) {
     res.json(rows);
   } catch (err) { next(err); }
 }
+
+// ===========================================================================
+// HISTÓRICO  (movimentações + demais ações, numa linha do tempo só)
+// ===========================================================================
+
+/**
+ * GET /api/cards/:id/historico
+ *
+ * Junta duas fontes que sempre existiram mas nunca foram lidas juntas:
+ *
+ *   - `cards_movimentos` — o registro de fluxo. Guarda de qual coluna para
+ *     qual coluna, quem moveu, quando, e quantos minutos o card ficou parado
+ *     na origem. É daqui que sai o "de X para Y" que a tela mostra.
+ *
+ *   - `log_acoes` — o resto (criou, editou, comentou, anexou, arquivou).
+ *
+ * Os nomes das colunas são resolvidos por JOIN: `log_acoes.detalhes` só
+ * guarda uuid, e era por isso que a aba de atividades dizia apenas "moveu o
+ * card de coluna", sem dizer para onde.
+ *
+ * Query string:
+ *   ?tipo=movimentos|acoes   (padrão: tudo)
+ *   ?limite=  (1..500, padrão 200)
+ */
+export async function listarHistorico(req, res, next) {
+  try {
+    await contextoCard(req, req.params.id);
+
+    const tipo = ['movimentos', 'acoes'].includes(req.query.tipo) ? req.query.tipo : 'tudo';
+    const limite = Math.min(Math.max(parseInt(req.query.limite ?? '200', 10) || 200, 1), 500);
+
+    const movimentos = tipo === 'acoes' ? { rows: [] } : await query(
+      `SELECT m.id,
+              'movimento'          AS origem,
+              'card.moveu'         AS acao,
+              m.em                 AS quando,
+              m.pessoa_id,
+              p.nome               AS pessoa_nome,
+              m.de_coluna_id,
+              m.para_coluna_id,
+              cde.nome             AS de_coluna_nome,
+              cpara.nome           AS para_coluna_nome,
+              m.de_tipo,
+              m.para_tipo,
+              m.minutos_na_origem
+         FROM cards_movimentos m
+         LEFT JOIN pessoas_acesso p ON p.id = m.pessoa_id
+         LEFT JOIN colunas cde   ON cde.id   = m.de_coluna_id
+         LEFT JOIN colunas cpara ON cpara.id = m.para_coluna_id
+        WHERE m.card_id = $1
+        ORDER BY m.em DESC
+        LIMIT $2`,
+      [req.params.id, limite],
+    );
+
+    // As ações de movimentação também caem em log_acoes ('card.moveu').
+    // Excluímos aqui para o mesmo evento não aparecer duas vezes na linha do
+    // tempo — cards_movimentos é a versão dessa história com nome de coluna.
+    const acoes = tipo === 'movimentos' ? { rows: [] } : await query(
+      `SELECT l.id,
+              'acao'      AS origem,
+              l.acao,
+              l.created_at AS quando,
+              l.pessoa_acesso_id AS pessoa_id,
+              p.nome      AS pessoa_nome,
+              l.detalhes,
+              l.ip,
+              l.user_agent
+         FROM log_acoes l
+         LEFT JOIN pessoas_acesso p ON p.id = l.pessoa_acesso_id
+        WHERE l.detalhes->>'card_id' = $1
+          AND l.acao <> 'card.moveu'
+        ORDER BY l.created_at DESC
+        LIMIT $2`,
+      [req.params.id, limite],
+    );
+
+    const linha = [...movimentos.rows, ...acoes.rows]
+      .sort((a, b) => new Date(b.quando) - new Date(a.quando))
+      .slice(0, limite);
+
+    // `desde` conta o aging da coluna atual: o front mostra "está aqui há X"
+    // mesmo quando o último movimento é antigo.
+    const { rows: atual } = await query(
+      `SELECT c.coluna_desde, col.nome AS coluna_nome
+         FROM cards c JOIN colunas col ON col.id = c.coluna_id
+        WHERE c.id = $1`,
+      [req.params.id],
+    );
+
+    res.json({
+      itens: linha,
+      coluna_atual: atual[0]?.coluna_nome || null,
+      coluna_desde: atual[0]?.coluna_desde || null,
+      // A tabela de movimentos nasceu na migração 026; antes disso só existe
+      // o que estiver em log_acoes. A tela avisa em vez de fingir histórico
+      // completo.
+      total: linha.length,
+      truncado: linha.length >= limite,
+    });
+  } catch (err) { next(err); }
+}
