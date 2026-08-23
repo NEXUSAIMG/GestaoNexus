@@ -161,6 +161,7 @@ export default function ModalCard({
   // em que a pessoa marca a etiqueta, antes mesmo de salvar.
   const ehCliente = ehCardCliente(
     etiquetaIds.map((eid) => (quadro.etiquetas || []).find((e) => e.id === eid)).filter(Boolean),
+    camposDoQuadro,
   );
 
   return (

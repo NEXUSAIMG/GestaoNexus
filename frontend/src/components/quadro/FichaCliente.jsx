@@ -16,19 +16,35 @@ import { Globe, Mail, Phone } from 'lucide-react';
 
 export const ETIQUETA_CLIENTE = 'cliente';
 
-/** O card é uma ficha de cliente? Decidido pelo nome da etiqueta. */
-export function ehCardCliente(etiquetasDoCard = []) {
-  return etiquetasDoCard.some(
-    (e) => String(e?.nome || '').trim().toLowerCase() === ETIQUETA_CLIENTE,
-  );
-}
-
 // Ordem de exibição pedida pelo comercial. Campo que não existir no quadro é
 // simplesmente pulado — a ficha não quebra se alguém renomear ou remover um.
 const ORDEM = [
   'Origem', 'Termômetro', 'Cidade/UF', 'Representante/Oficial',
   'Competência', 'Faturamento', 'Site', 'E-mail', 'Telefone/WhatsApp',
 ];
+
+/**
+ * O card é uma ficha de cliente?
+ *
+ * Duas condições, e a segunda é o que impede a ficha de vazar: TODO quadro
+ * criado pela tela nasce com a etiqueta "Cliente" entre as padrão. Só a
+ * etiqueta como gatilho faria qualquer card marcado como "Cliente", em
+ * qualquer quadro do sistema, trocar de layout — inclusive os que já existem
+ * hoje em produção e não têm nada a ver com o funil comercial.
+ *
+ * Por isso exigimos também que o QUADRO tenha pelo menos um dos campos
+ * comerciais configurado. Quadro sem esses campos continua exatamente como
+ * está, etiqueta "Cliente" ou não.
+ */
+export function ehCardCliente(etiquetasDoCard = [], camposDoQuadro = []) {
+  const temEtiqueta = etiquetasDoCard.some(
+    (e) => String(e?.nome || '').trim().toLowerCase() === ETIQUETA_CLIENTE,
+  );
+  if (!temEtiqueta) return false;
+
+  const nomes = new Set(ORDEM);
+  return camposDoQuadro.some((c) => nomes.has(c?.nome));
+}
 
 // Campos que ocupam a linha inteira (valor longo ou clicável).
 const LARGURA_TOTAL = new Set(['Site', 'E-mail', 'Telefone/WhatsApp']);

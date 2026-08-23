@@ -155,7 +155,7 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
     const { rows } = await client.query(
       `INSERT INTO quadros_etiquetas (quadro_id, nome, cor, ordem)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (quadro_id, lower(nome)) DO UPDATE SET nome = EXCLUDED.nome
+       ON CONFLICT (quadro_id, lower(nome)) DO UPDATE SET ordem = quadros_etiquetas.ordem
        RETURNING id`,
       [quadroId, nome, corDe(lb.color), ordemEtq],
     );

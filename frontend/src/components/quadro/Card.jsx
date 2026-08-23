@@ -48,7 +48,7 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
 
   // Card com a etiqueta "Cliente" vira ficha comercial: os campos
   // personalizados aparecem no próprio card, sem precisar abrir.
-  const cliente = ehCardCliente(etqs);
+  const cliente = ehCardCliente(etqs, campos);
 
   // Sprint 32
   const totalChk = Number(card.n_checklist_total || 0);
