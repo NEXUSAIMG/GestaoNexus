@@ -15,6 +15,7 @@ import CardDependencias from './CardDependencias.jsx';
 import CardVinculos from './CardVinculos.jsx';
 import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
+import { ehCardCliente } from './FichaCliente.jsx';
 import { COR_CHIP, CORES, corForte, inputCls, PRIORIDADES } from './ui.js';
 import { PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
@@ -155,6 +156,12 @@ export default function ModalCard({
 
   const podeEditar = !!quadro.pode_editar;
   const camposDoQuadro = quadro.campos || [];
+
+  // A ficha comercial é disparada pela etiqueta "Cliente" — e reage na hora
+  // em que a pessoa marca a etiqueta, antes mesmo de salvar.
+  const ehCliente = ehCardCliente(
+    etiquetaIds.map((eid) => (quadro.etiquetas || []).find((e) => e.id === eid)).filter(Boolean),
+  );
 
   return (
     <ModalFrame
@@ -421,7 +428,14 @@ export default function ModalCard({
 
           {editando && camposDoQuadro.length > 0 && (
             <div className="border-t border-slate-200 pt-3">
-              <h3 className="mb-2 text-sm font-semibold text-slate-900">Campos do quadro</h3>
+              <h3 className="mb-1 text-sm font-semibold text-slate-900">
+                {ehCliente ? 'Dados do cliente' : 'Campos do quadro'}
+              </h3>
+              {ehCliente && (
+                <p className="mb-2 text-xs text-slate-500">
+                  Preenchidos aqui, estes dados aparecem direto no card, no board.
+                </p>
+              )}
               <CardCampos
                 cardId={cardId}
                 campos={camposDoQuadro}

@@ -553,7 +553,7 @@ export async function pagar(req, res, next) {
     );
 
     // Se o pagamento saiu de uma conta bancária cadastrada, desconta o saldo.
-    // A ideia: a Gestão Nexus é a fonte de verdade do saldo manual,
+    // A ideia: a Gestão Ayio é a fonte de verdade do saldo manual,
     // então ao registrar saída, o saldo acompanha.
     if (d.conta_bancaria_id) {
       await client.query(

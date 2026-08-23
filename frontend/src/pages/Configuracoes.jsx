@@ -66,7 +66,7 @@ export default function Configuracoes() {
         <div className="text-xs uppercase tracking-widest text-nexus-700">Configurações</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-900">Notificações</h1>
         <p className="mt-1 text-slate-600">
-          Controle quais avisos a Gestão Nexus envia por e-mail. As notificações dentro
+          Controle quais avisos a Gestão Ayio envia por e-mail. As notificações dentro
           do app (sino) ficam sempre ligadas — só o e-mail correspondente é controlado aqui.
         </p>
       </header>

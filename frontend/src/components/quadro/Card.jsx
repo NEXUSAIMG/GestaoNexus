@@ -8,6 +8,7 @@ import {
   COR_CHIP, corForte, formatarPrazo, iniciais, prioridadeDe, formatarMinutos,
 } from './ui.js';
 import { estiloCapaCard } from '../../constants/kanbanVisual.js';
+import FichaCliente, { ehCardCliente } from './FichaCliente.jsx';
 
 /**
  * Card do board.
@@ -20,7 +21,7 @@ import { estiloCapaCard } from '../../constants/kanbanVisual.js';
  * "normal, sem nada" continua limpo como era antes.
  */
 
-export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar, selecaoAtiva }) {
+export function CardSortable({ card, etiquetas, campos, aoClicar, marcado, aoMarcar, selecaoAtiva }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
   } = useSortable({ id: card.id });
@@ -33,17 +34,21 @@ export function CardSortable({ card, etiquetas, aoClicar, marcado, aoMarcar, sel
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card card={card} etiquetas={etiquetas} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} selecaoAtiva={selecaoAtiva} />
+      <Card card={card} etiquetas={etiquetas} campos={campos} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} selecaoAtiva={selecaoAtiva} />
     </div>
   );
 }
 
-export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva }) {
+export default function Card({ card, etiquetas, campos = [], aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva }) {
   const prazo = formatarPrazo(card.data_prazo);
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
     .filter(Boolean);
   const resps = card.responsaveis || [];
+
+  // Card com a etiqueta "Cliente" vira ficha comercial: os campos
+  // personalizados aparecem no próprio card, sem precisar abrir.
+  const cliente = ehCardCliente(etqs);
 
   // Sprint 32
   const totalChk = Number(card.n_checklist_total || 0);
@@ -158,6 +163,14 @@ export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, a
 
       <div className="text-sm font-medium text-slate-900 leading-snug">{card.titulo}</div>
 
+      {cliente && (
+        <FichaCliente
+          campos={campos}
+          valores={card.campos || {}}
+          responsaveis={resps}
+        />
+      )}
+
       {temRodape && (
         <div className="mt-2 space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-slate-500">
@@ -218,7 +231,7 @@ export default function Card({ card, etiquetas, aoClicar, arrastando, marcado, a
             )}
           </div>
 
-          {resps.length > 0 && (
+          {resps.length > 0 && !cliente && (
             <div className="flex justify-end -space-x-1.5" title={resps.map((r) => r.nome).join(', ')}>
               {resps.slice(0, 3).map((r) => (
                 <span

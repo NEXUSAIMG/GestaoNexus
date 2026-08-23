@@ -78,7 +78,7 @@ export const env = {
   // Remetente. Em produção precisa ser um endereço de domínio verificado
   // no Resend. Em sandbox, pode usar 'onboarding@resend.dev' (Resend
   // libera esse remetente sem verificação, mas só envia pra dono da conta).
-  EMAIL_FROM: process.env.EMAIL_FROM ?? 'Gestão Nexus <onboarding@resend.dev>',
+  EMAIL_FROM: process.env.EMAIL_FROM ?? 'Gestão Ayio <onboarding@resend.dev>',
 
   // URL pública do app, usada pra montar links nos e-mails.
   // Ex: https://gestao-nexus.up.railway.app

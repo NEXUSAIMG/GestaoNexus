@@ -98,7 +98,7 @@ function moldura({ titulo, paragrafos = [], botao = null, rodape = null }) {
             <td style="padding: 0 0 16px 4px;">
               <div style="font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
                           color: ${CORES.primario}; font-weight: 600;">
-                Gestão Nexus
+                Gestão Ayio
               </div>
             </td>
           </tr>
@@ -122,7 +122,7 @@ function moldura({ titulo, paragrafos = [], botao = null, rodape = null }) {
           <!-- Rodapé fora do cartão -->
           <tr>
             <td style="padding: 18px 4px 0; color: ${CORES.texto_secundario}; font-size: 12px; line-height: 1.5;">
-              Esta mensagem foi gerada automaticamente pela Gestão Nexus.<br/>
+              Esta mensagem foi gerada automaticamente pela Gestão Ayio.<br/>
               Você está recebendo porque tem cadastro ativo na ferramenta.
               Para deixar de receber avisos, fale com um administrador.
             </td>
@@ -165,11 +165,11 @@ export function tplDocumentoEmAprovacao({ documento, criadoPor, sociosTotal }) {
   const linkPath = documento.tipo === 'contrato_social' ? '/governanca/contrato' : '/governanca/atas';
 
   return {
-    assunto: `[Gestão Nexus] Voto pendente: ${documento.titulo}`,
+    assunto: `[Gestão Ayio] Voto pendente: ${documento.titulo}`,
     html: moldura({
       titulo: `Sua aprovação foi solicitada`,
       paragrafos: [
-        `Uma nova ${tipoLabel} foi colocada em aprovação na Gestão Nexus${criadoPor ? ` por <strong>${escapar(criadoPor)}</strong>` : ''}.`,
+        `Uma nova ${tipoLabel} foi colocada em aprovação na Gestão Ayio${criadoPor ? ` por <strong>${escapar(criadoPor)}</strong>` : ''}.`,
         `<strong>${escapar(documento.titulo)}</strong>` +
           (documento.descricao ? `<br/><span style="color: ${CORES.texto_secundario};">${escapar(documento.descricao).slice(0, 240)}${documento.descricao.length > 240 ? '...' : ''}</span>` : ''),
         {
@@ -191,7 +191,7 @@ export function tplDocumentoEmAprovacao({ documento, criadoPor, sociosTotal }) {
 export function tplDecisaoEmAprovacao({ decisao, criadoPor, sociosTotal }) {
   const quorum = decisao.quorum === 'unanimidade' ? 'unanimidade' : 'maioria simples';
   return {
-    assunto: `[Gestão Nexus] Voto pendente: ${decisao.titulo}`,
+    assunto: `[Gestão Ayio] Voto pendente: ${decisao.titulo}`,
     html: moldura({
       titulo: 'Uma decisão precisa do seu voto',
       paragrafos: [
@@ -222,7 +222,7 @@ export function tplFinalizado({ titulo, statusFinal, link, comentarioContagem })
   }[statusFinal] || statusFinal;
   const isAprovado = String(statusFinal).startsWith('aprovad');
   return {
-    assunto: `[Gestão Nexus] ${statusLabel}: ${titulo}`,
+    assunto: `[Gestão Ayio] ${statusLabel}: ${titulo}`,
     html: moldura({
       titulo: `${statusLabel}: ${titulo}`,
       paragrafos: [
@@ -254,7 +254,7 @@ export function tplMovimentoSocioCriado({ movimento, socioNome }) {
   }[movimento.tipo] || 'Movimento';
 
   return {
-    assunto: `[Gestão Nexus] ${rotuloTipo} registrado: ${formatarBRL(movimento.valor)}`,
+    assunto: `[Gestão Ayio] ${rotuloTipo} registrado: ${formatarBRL(movimento.valor)}`,
     html: moldura({
       titulo: `${rotuloTipo} registrado em seu nome`,
       paragrafos: [
@@ -292,7 +292,7 @@ export function tplResumoDiarioAdmin({
     : 'Resumo do dia';
 
   return {
-    assunto: `[Gestão Nexus] ${tituloEmail} — ${formatarData(new Date())}`,
+    assunto: `[Gestão Ayio] ${tituloEmail} — ${formatarData(new Date())}`,
     html: moldura({
       titulo: tituloEmail,
       paragrafos: [
@@ -392,7 +392,7 @@ export function tplCardAtribuido({ card, quadroNome, equipeNome, atribuidoPor })
   ].filter(Boolean).join('<br/>');
 
   return {
-    assunto: `[Gestão Nexus] Você foi atribuído: ${card.titulo}`,
+    assunto: `[Gestão Ayio] Você foi atribuído: ${card.titulo}`,
     html: moldura({
       titulo: 'Nova tarefa pra você',
       paragrafos: [
@@ -420,7 +420,7 @@ export function tplCardsPrazoHoje({ pessoaNome, cards }) {
   ]);
 
   return {
-    assunto: `[Gestão Nexus] ${cards.length} tarefa${cards.length === 1 ? '' : 's'} com prazo hoje`,
+    assunto: `[Gestão Ayio] ${cards.length} tarefa${cards.length === 1 ? '' : 's'} com prazo hoje`,
     html: moldura({
       titulo: `Você tem ${cards.length} tarefa${cards.length === 1 ? '' : 's'} com prazo hoje`,
       paragrafos: [
@@ -512,7 +512,7 @@ export function tplContratoVencendo({ contratos = [] } = {}) {
   ]);
 
   return {
-    assunto: `[Gestão Nexus] ${tituloEmail}`,
+    assunto: `[Gestão Ayio] ${tituloEmail}`,
     html: moldura({
       titulo: tituloEmail,
       paragrafos: [

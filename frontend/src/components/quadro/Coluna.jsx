@@ -28,7 +28,7 @@ const PONTO_TIPO = {
 };
 
 export default function Coluna({
-  coluna, cards, cartoriosNestaFase = [], podeEditar, etiquetas,
+  coluna, cards, cartoriosNestaFase = [], podeEditar, etiquetas, campos = [],
   aoClicarCard, aoNovoCard, aoArquivarColuna, aoMudarColuna,
   selecionados, aoSelecionarCard, selecaoAtiva,
 }) {
@@ -336,6 +336,7 @@ export default function Coluna({
               key={card.id}
               card={card}
               etiquetas={etiquetas}
+              campos={campos}
               aoClicar={() => aoClicarCard(card)}
               marcado={selecionados ? selecionados.has(card.id) : undefined}
               aoMarcar={aoSelecionarCard ? (e) => aoSelecionarCard(card.id, e) : undefined}

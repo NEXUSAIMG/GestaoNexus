@@ -136,7 +136,7 @@ async function notificarSociosNovaRodada(distribuicaoId) {
     await notificarPessoas({
       pessoas,
       tipo: 'distribuicao.criada',
-      titulo: tpl.assunto.replace(/^\[Gestão Nexus\]\s*/, ''),
+      titulo: tpl.assunto.replace(/^\[Gestão Ayio\]\s*/, ''),
       descricao: `${mov.descricao} · R$ ${Number(mov.valor).toFixed(2).replace('.', ',')}`,
       link: `/socios/${mov.socio_id}/extrato`,
       contexto: { distribuicao_id: distribuicaoId, movimento_id: mov.id },

@@ -81,7 +81,7 @@ export default function EscolherContexto() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-3xl flex items-center justify-between px-6 py-4">
           <div>
-            <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Nexus</div>
+            <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Ayio</div>
             <div className="text-sm text-slate-600">Olá, {pessoa?.nome}</div>
           </div>
           <button

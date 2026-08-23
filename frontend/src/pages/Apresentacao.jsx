@@ -322,7 +322,7 @@ export default function Apresentacao() {
       {/* Barra topo */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4 sm:px-10">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em] text-nexus-200/80">
-          <Sparkles size={14} /> Gestão Nexus
+          <Sparkles size={14} /> Gestão Ayio
         </div>
         <div className="flex items-center gap-2">
           <button onClick={alternarTela} title="Tela cheia (F)"
