@@ -90,7 +90,7 @@ export async function importarTrello(req, res, next) {
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
       [d.equipe_id, nomeQuadro, 'Importado do Trello.', d.aberto_a_socios, req.pessoa.id],
     );
-    const quadroId = qr.rows[0].id;
+    const quadroId = qr[0].id;
 
     const contagem = await importarConteudo(client, quadroId, board, listas, req.pessoa.id,
       { equipeId: d.equipe_id, criarMembrosAusentes: d.criar_membros_ausentes });
@@ -130,26 +130,37 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
   // ---- Etiquetas (labels do board) --------------------------------------
   // Trello permite label sem nome (só cor). Damos um nome pela cor pra não
   // criar etiqueta em branco.
+  // O Trello aceita duas etiquetas de mesmo nome (cores diferentes), e uma
+  // etiqueta sem nome vira "(cor)" — duas sem nome e da mesma cor colidem.
+  // Aqui isso bate no índice único idx_quadros_etiquetas_nome.
+  //
+  // A versão anterior tentava se recuperar com try/catch, o que NÃO funciona
+  // dentro de uma transação: o erro 23505 aborta a transação inteira e a
+  // consulta do catch já falha com 25P02. Resolvemos de duas formas: as
+  // homônimas são fundidas antes de gravar, e o INSERT usa ON CONFLICT para
+  // nunca chegar a lançar erro.
   const mapaEtiqueta = {}; // trelloLabelId -> nossoId
+  const idsPorNome = new Map(); // nome normalizado -> nossoId (funde homônimas)
   let ordemEtq = 0;
   for (const lb of (board.labels || [])) {
-    const nome = (lb.name && lb.name.trim()) || ('(' + (lb.color || 'sem cor') + ')');
-    ordemEtq += 1;
-    try {
-      const { rows } = await client.query(
-        `INSERT INTO quadros_etiquetas (quadro_id, nome, cor, ordem)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [quadroId, nome.slice(0, 50), corDe(lb.color), ordemEtq],
-      );
-      mapaEtiqueta[lb.id] = rows[0].id;
-    } catch {
-      // nome duplicado (índice único case-insensitive) — ignora, reaproveita
-      const { rows } = await client.query(
-        'SELECT id FROM quadros_etiquetas WHERE quadro_id = $1 AND lower(nome) = lower($2)',
-        [quadroId, nome.slice(0, 50)],
-      );
-      if (rows[0]) mapaEtiqueta[lb.id] = rows[0].id;
+    const nome = ((lb.name && lb.name.trim()) || ('(' + (lb.color || 'sem cor') + ')')).slice(0, 50);
+    const chave = nome.toLowerCase();
+
+    if (idsPorNome.has(chave)) {
+      mapaEtiqueta[lb.id] = idsPorNome.get(chave);
+      continue;
     }
+
+    ordemEtq += 1;
+    const { rows } = await client.query(
+      `INSERT INTO quadros_etiquetas (quadro_id, nome, cor, ordem)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (quadro_id, lower(nome)) DO UPDATE SET nome = EXCLUDED.nome
+       RETURNING id`,
+      [quadroId, nome, corDe(lb.color), ordemEtq],
+    );
+    mapaEtiqueta[lb.id] = rows[0].id;
+    idsPorNome.set(chave, rows[0].id);
   }
 
   // ---- Membros do board -> pessoas do sistema ---------------------------
@@ -222,12 +233,21 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
     if (a.type !== 'commentCard') continue;
     const cid = a.data?.card?.id;
     const texto = a.data?.text;
-    if (cid && texto) (comentariosPorCard[cid] ||= []).push(texto);
+    // Guardamos quem escreveu e quando: o comentário importado sem autor
+    // aparecia como "Alguém" no card, perdendo justamente a informação que
+    // faz um comentário antigo valer alguma coisa.
+    if (cid && texto) {
+      (comentariosPorCard[cid] ||= []).push({
+        texto,
+        autorTrelloId: a.idMemberCreator || null,
+        em: a.date || null,
+      });
+    }
   }
 
   // ---- Cards -------------------------------------------------------------
   let nCards = 0; let nChecklists = 0; let nComentarios = 0;
-  let nResp = 0; let nAnexos = 0;
+  let nResp = 0; let nLinksAnexos = 0;
   const ordemPorColuna = {};
 
   const cards = (board.cards || [])
@@ -243,13 +263,19 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
     const concluido = tipoCol === 'concluida' || c.dueComplete === true;
     const iniciado = tipoCol !== 'backlog' || concluido;
 
-    // Responsavel = 1o membro (idMembers) que existe no sistema.
+    // Responsaveis = todos os membros (idMembers) que existem no sistema.
+    //
+    // A fonte de verdade e a tabela N:N cards_responsaveis (migracao 018) —
+    // e o board le SO dela. Gravar apenas cards.responsavel_id, como a versao
+    // anterior fazia, deixava o quadro abrir com todos os cards sem dono
+    // enquanto o relatorio do import dizia que trouxe N responsaveis.
+    // Um gatilho espelha o primeiro da N:N de volta em responsavel_id.
     const idMembros = c.idMembers || [];
-    let responsavelId = null;
+    const responsaveisDoCard = [];
     for (const mid of idMembros) {
-      if (mapaMembroPessoa[mid]) { responsavelId = mapaMembroPessoa[mid]; break; }
+      const pid = mapaMembroPessoa[mid];
+      if (pid && !responsaveisDoCard.includes(pid)) responsaveisDoCard.push(pid);
     }
-    if (responsavelId) nResp += 1;
 
     // Rodape com o que nao cabe em campo estruturado (nomes + anexos).
     const extras = [];
@@ -259,7 +285,7 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
     if (anexos.length) {
       extras.push('Anexos (Trello):');
       for (const a of anexos) extras.push('- ' + (String(a.name || '').trim() || a.url) + ': ' + a.url);
-      nAnexos += anexos.length;
+      nLinksAnexos += anexos.length;
     }
     let descricao = c.desc ? String(c.desc) : '';
     if (extras.length) descricao = (descricao ? descricao + '\n\n' : '') + '---\n' + extras.join('\n');
@@ -267,8 +293,8 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
 
     const { rows } = await client.query(
       `INSERT INTO cards (coluna_id, quadro_id, titulo, descricao, data_prazo, ordem,
-                          coluna_desde, iniciado_em, concluido_em, criado_por_id, responsavel_id)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10) RETURNING id`,
+                          coluna_desde, iniciado_em, concluido_em, criado_por_id)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9) RETURNING id`,
       [
         colunaId, quadroId,
         String(c.name || 'Card').slice(0, 255),
@@ -277,11 +303,22 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
         iniciado ? new Date().toISOString() : null,
         concluido ? new Date().toISOString() : null,
         pessoaId,
-        responsavelId,
       ],
     );
     const cardId = rows[0].id;
     nCards += 1;
+
+    // Responsaveis na N:N (o gatilho espelha o primeiro em responsavel_id).
+    let ordemResp = 0;
+    for (const pid of responsaveisDoCard) {
+      await client.query(
+        `INSERT INTO cards_responsaveis (card_id, pessoa_id, ordem, adicionado_por_id)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (card_id, pessoa_id) DO NOTHING`,
+        [cardId, pid, ordemResp, pessoaId],
+      );
+      ordemResp += 1;
+      nResp += 1;
+    }
 
     // etiquetas do card
     for (const lid of (c.idLabels || [])) {
@@ -317,11 +354,20 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
       }
     }
 
-    // comentários do card
-    for (const txt of (comentariosPorCard[c.id] || [])) {
+    // comentários do card — preservando autor e data de origem
+    for (const cm of (comentariosPorCard[c.id] || [])) {
+      const autorId = cm.autorTrelloId ? (mapaMembroPessoa[cm.autorTrelloId] || null) : null;
+      // Quando o autor não existe por aqui, o nome dele vai como assinatura no
+      // texto — melhor do que um comentário órfão.
+      const assinatura = (!autorId && cm.autorTrelloId && nomeMembro[cm.autorTrelloId])
+        ? `\n\n— ${nomeMembro[cm.autorTrelloId]} (importado do Trello)`
+        : '';
+      const dataOriginal = cm.em && !Number.isNaN(Date.parse(cm.em)) ? cm.em : null;
+
       await client.query(
-        `INSERT INTO card_comentarios (card_id, pessoa_id, texto) VALUES ($1, NULL, $2)`,
-        [cardId, String(txt).slice(0, 5000)],
+        `INSERT INTO card_comentarios (card_id, pessoa_id, texto, criado_em)
+         VALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()))`,
+        [cardId, autorId, (String(cm.texto) + assinatura).slice(0, 5000), dataOriginal],
       );
       nComentarios += 1;
     }
@@ -334,7 +380,7 @@ async function importarConteudo(client, quadroId, board, listas, pessoaId, opcoe
     checklists: nChecklists,
     comentarios: nComentarios,
     responsaveis: nResp,
-    anexos: nAnexos,
+    links_anexos: nLinksAnexos,
     membros_criados: nMembrosCriados,
   };
 }

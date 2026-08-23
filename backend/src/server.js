@@ -34,6 +34,12 @@ app.use(
   }),
 );
 
+// O import do Trello manda o board inteiro num JSON só, e um board real passa
+// de 10 MB com facilidade. Este parser roda ANTES do geral e só nessa rota:
+// quando ele consome o corpo, o express.json de baixo não mexe mais nele.
+// O resto da API continua no limite apertado de sempre.
+app.use('/api/quadros/importar-trello', express.json({ limit: '60mb' }));
+
 app.use(express.json({ limit: '10mb' }));
 
 // Rotas da API

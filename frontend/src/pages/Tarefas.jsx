@@ -199,6 +199,54 @@ export default function Tarefas() {
 // Sprint 38 — Importar do Trello
 // ---------------------------------------------------------------------------
 
+/**
+ * O export do Trello traz o board inteiro, e o grosso do arquivo é o array
+ * `actions` — o histórico completo, do qual só aproveitamos os comentários.
+ * Mandar isso inteiro estourava o limite de tamanho da requisição e o import
+ * morria com "Erro interno do servidor".
+ *
+ * Aqui ficamos só com o que o backend lê. Em boards de verdade isso costuma
+ * cortar a maior parte do arquivo.
+ */
+function enxugarBoard(json) {
+  return {
+    name: json.name,
+    lists: json.lists || [],
+    cards: (json.cards || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      desc: c.desc,
+      idList: c.idList,
+      pos: c.pos,
+      closed: c.closed,
+      due: c.due,
+      dueComplete: c.dueComplete,
+      idLabels: c.idLabels,
+      idMembers: c.idMembers,
+      attachments: (c.attachments || []).map((a) => ({ name: a.name, url: a.url })),
+    })),
+    labels: json.labels || [],
+    checklists: json.checklists || [],
+    members: (json.members || []).map((m) => ({
+      id: m.id, fullName: m.fullName, username: m.username,
+    })),
+    actions: (json.actions || [])
+      .filter((a) => a.type === 'commentCard')
+      .map((a) => ({
+        type: a.type,
+        date: a.date,
+        idMemberCreator: a.idMemberCreator,
+        data: { card: { id: a.data?.card?.id }, text: a.data?.text },
+      })),
+  };
+}
+
+function tamanhoLegivel(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 function ModalImportarTrello({ equipes, onFechar, onImportado }) {
   const [equipeId, setEquipeId] = useState(equipes[0]?.id || '');
   const [arquivo, setArquivo] = useState(null);
@@ -207,6 +255,7 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
   const [enviando, setEnviando] = useState(false);
   const [criarMembros, setCriarMembros] = useState(true);
   const [resultado, setResultado] = useState(null);
+  const [tamanhos, setTamanhos] = useState(null);
 
   function aoEscolher(e) {
     setErro('');
@@ -222,7 +271,12 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
           setErro('Esse JSON não parece um export de board do Trello.');
           return;
         }
-        setBoard(json);
+        const limpo = enxugarBoard(json);
+        setBoard(limpo);
+        setTamanhos({
+          original: f.size,
+          enviado: new Blob([JSON.stringify(limpo)]).size,
+        });
       } catch {
         setErro('Não consegui ler o arquivo — ele precisa ser o JSON exportado do Trello.');
       }
@@ -239,6 +293,11 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
         equipe_id: equipeId,
         board,
         criar_membros_ausentes: criarMembros,
+      }, {
+        // Board grande grava card a card e passa dos 15s do padrão. Sem isto,
+        // o navegador desistia no meio e mostrava erro de um import que
+        // estava dando certo.
+        timeout: 10 * 60 * 1000,
       });
       setResultado(r.data);
     } catch (err) {
@@ -253,6 +312,7 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
       listas: (board.lists || []).filter((l) => !l.closed).length,
       cards: (board.cards || []).filter((c) => !c.closed).length,
       etiquetas: (board.labels || []).length,
+      comentarios: (board.actions || []).length,
     }
     : null;
 
@@ -276,9 +336,16 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
                 Quadro <strong>{resultado.nome}</strong> importado:
                 {' '}{resultado.colunas} colunas, {resultado.cards} cards,
                 {' '}{resultado.etiquetas} etiquetas, {resultado.checklists} checklists
+                {resultado.comentarios ? ', ' + resultado.comentarios + ' comentários' : ''}
                 {resultado.responsaveis ? ', ' + resultado.responsaveis + ' responsáveis' : ''}
                 {resultado.membros_criados ? ' (' + resultado.membros_criados + ' contas novas)' : ''}.
               </p>
+              {resultado.links_anexos > 0 && (
+                <p className="text-xs text-slate-500">
+                  {resultado.links_anexos} anexo(s) do Trello entraram como <strong>link</strong> no
+                  fim da descrição do card — o arquivo em si continua hospedado no Trello.
+                </p>
+              )}
               <div className="flex justify-center gap-2">
                 <Link
                   to={'/tarefas/' + resultado.quadro_id}
@@ -325,8 +392,18 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
 
               {previa && (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                  Pronto para importar: <strong>{previa.listas}</strong> listas,
-                  {' '}<strong>{previa.cards}</strong> cards, {previa.etiquetas} etiquetas.
+                  <div>
+                    Pronto para importar: <strong>{previa.listas}</strong> listas,
+                    {' '}<strong>{previa.cards}</strong> cards, {previa.etiquetas} etiquetas,
+                    {' '}{previa.comentarios} comentários.
+                  </div>
+                  {tamanhos && tamanhos.enviado < tamanhos.original && (
+                    <div className="mt-1 text-emerald-700">
+                      Arquivo de {tamanhoLegivel(tamanhos.original)} reduzido para
+                      {' '}{tamanhoLegivel(tamanhos.enviado)} — o histórico do Trello que não
+                      usamos fica de fora do envio.
+                    </div>
+                  )}
                 </div>
               )}
 
