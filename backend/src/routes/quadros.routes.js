@@ -5,7 +5,7 @@ import {
   criarEtiqueta, atualizarEtiqueta, excluirEtiqueta,
 } from '../controllers/quadros.controller.js';
 import {
-  criar as criarColuna,
+  criar as criarColuna, listarArquivados,
 } from '../controllers/colunas.controller.js';
 import {
   listar as listarEventos, obter as obterEvento,
@@ -38,6 +38,9 @@ router.post('/:id/arquivar', arquivarQuadro);
 
 // Colunas (criação a partir do quadro pai — RESTful natural)
 router.post('/:id/colunas', criarColuna);
+
+// Gaveta de arquivados (colunas e cards que sairam do board)
+router.get('/:id/arquivados', listarArquivados);
 
 // Etiquetas
 router.post('/:id/etiquetas', criarEtiqueta);

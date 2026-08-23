@@ -883,3 +883,78 @@ export async function arquivar(req, res, next) {
     res.status(204).send();
   } catch (err) { next(err); }
 }
+
+/**
+ * POST /api/cards/:id/desarquivar
+ *
+ * Contrapartida de `arquivar`. Sem isto, arquivar um card por engano era
+ * definitivo do ponto de vista de quem usa a ferramenta.
+ *
+ * Se a coluna de origem tiver sido arquivada nesse meio tempo, o card volta
+ * para a primeira coluna ativa do quadro — senão ele reapareceria num lugar
+ * que não existe mais no board.
+ */
+export async function desarquivar(req, res, next) {
+  try {
+    const cR = await query(
+      `SELECT c.quadro_id, c.coluna_id, c.titulo, c.arquivado_em,
+              col.arquivada_em AS coluna_arquivada_em
+         FROM cards c JOIN colunas col ON col.id = c.coluna_id
+        WHERE c.id = $1`,
+      [req.params.id],
+    );
+    if (!cR.rows[0]) throw new NaoEncontradoError('Card não encontrado');
+    if (!cR.rows[0].arquivado_em) throw new AppError('Este card não está arquivado.', 400);
+
+    const isAdmin = !!req.pessoa?.administrador;
+    const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, cR.rows[0].quadro_id);
+    if (!podeEditar) throw new NaoAutorizadoError('Sem permissão.');
+
+    let colunaDestino = cR.rows[0].coluna_id;
+    let colunaTrocada = false;
+    if (cR.rows[0].coluna_arquivada_em) {
+      const { rows: alt } = await query(
+        `SELECT id FROM colunas
+          WHERE quadro_id = $1 AND arquivada_em IS NULL
+          ORDER BY ordem LIMIT 1`,
+        [cR.rows[0].quadro_id],
+      );
+      if (!alt[0]) {
+        throw new AppError(
+          'O quadro não tem nenhuma coluna ativa para receber o card. Desarquive uma coluna antes.',
+          400,
+        );
+      }
+      colunaDestino = alt[0].id;
+      colunaTrocada = true;
+    }
+
+    const { rows: max } = await query(
+      `SELECT COALESCE(MAX(ordem), 0) + 1000 AS prox
+         FROM cards WHERE coluna_id = $1 AND arquivado_em IS NULL`,
+      [colunaDestino],
+    );
+
+    const { rows } = await query(
+      `UPDATE cards
+          SET arquivado_em = NULL, coluna_id = $2, ordem = $3, coluna_desde = NOW()
+        WHERE id = $1
+        RETURNING id, titulo, coluna_id, ordem`,
+      [req.params.id, colunaDestino, max[0].prox],
+    );
+
+    registrarAcao({
+      acao: 'card.desarquivou',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: {
+        card_id: req.params.id,
+        coluna_id: colunaDestino,
+        coluna_trocada: colunaTrocada,
+      },
+      req,
+    });
+
+    publicarMudanca(cR.rows[0].quadro_id, 'card_desarquivado');
+    res.json({ ...rows[0], coluna_trocada: colunaTrocada });
+  } catch (err) { next(err); }
+}

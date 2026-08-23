@@ -4,7 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  Plus, X, Archive, Settings, GripVertical, Building2, Gauge,
+  Plus, X, Archive, Settings, GripVertical, Building2, Gauge, Pencil,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { CardSortable } from './Card.jsx';
@@ -37,6 +37,11 @@ export default function Coluna({
   const [menuAberto, setMenuAberto] = useState(false);
   const [editandoWip, setEditandoWip] = useState(false);
   const [wipTexto, setWipTexto] = useState(String(coluna.wip_limite || ''));
+  // Renomear estava faltando: o menu tinha tipo, cor, WIP e arquivar, mas não
+  // renomear — então corrigir um nome digitado errado obrigava a excluir a
+  // coluna e recriar. O backend sempre aceitou (PUT /colunas/:id).
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nomeTexto, setNomeTexto] = useState(coluna.nome);
 
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
@@ -57,6 +62,13 @@ export default function Coluna({
     } catch (err) {
       alert(mensagemDeErro(err, 'Não consegui salvar a coluna.'));
     }
+  }
+
+  async function salvarNome() {
+    const novo = nomeTexto.trim();
+    setEditandoNome(false);
+    if (!novo || novo === coluna.nome) { setNomeTexto(coluna.nome); return; }
+    await salvarColuna({ nome: novo });
   }
 
   async function salvarWip() {
@@ -98,9 +110,35 @@ export default function Coluna({
             className={'h-2 w-2 shrink-0 rounded-full ' + (PONTO_TIPO[coluna.tipo] || PONTO_TIPO.em_andamento)}
             title={TIPOS_COLUNA.find((t) => t.valor === coluna.tipo)?.nome || 'Em andamento'}
           />
-          <h3 title={coluna.nome} className="text-sm font-semibold text-slate-900 leading-tight break-words">
-            {coluna.nome}
-          </h3>
+          {editandoNome ? (
+            <input
+              autoFocus
+              value={nomeTexto}
+              maxLength={80}
+              onChange={(e) => setNomeTexto(e.target.value)}
+              onBlur={salvarNome}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') salvarNome();
+                if (e.key === 'Escape') { setNomeTexto(coluna.nome); setEditandoNome(false); }
+              }}
+              // O board inteiro é uma área de arrastar; sem isto o clique no
+              // input vira início de drag da coluna.
+              onPointerDown={(e) => e.stopPropagation()}
+              className="min-w-0 flex-1 rounded border border-nexus-400 bg-white px-1.5 py-0.5 text-sm font-semibold text-slate-900 outline-none"
+              aria-label="Nome da coluna"
+            />
+          ) : (
+            <h3
+              title={podeEditar ? 'Duplo clique para renomear' : coluna.nome}
+              onDoubleClick={() => { if (podeEditar) { setNomeTexto(coluna.nome); setEditandoNome(true); } }}
+              className={[
+                'text-sm font-semibold text-slate-900 leading-tight break-words',
+                podeEditar ? 'cursor-text rounded px-0.5 hover:bg-white/50' : '',
+              ].join(' ')}
+            >
+              {coluna.nome}
+            </h3>
+          )}
           <span
             className={[
               'rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums',
@@ -139,6 +177,20 @@ export default function Coluna({
                     aria-label="Fechar menu"
                   />
                   <div className="absolute right-0 top-full z-20 mt-1 w-60 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuAberto(false);
+                        setNomeTexto(coluna.nome);
+                        setEditandoNome(true);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      <Pencil size={11} /> Renomear coluna
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100" />
+
                     <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       Tipo da coluna
                     </div>

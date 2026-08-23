@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  meusCards, obter, criar, atualizar, mover, arquivar,
+  meusCards, obter, criar, atualizar, mover, arquivar, desarquivar,
 } from '../controllers/cards.controller.js';
 import {
   listarChecklists, criarChecklist, atualizarChecklist, excluirChecklist,
@@ -38,6 +38,7 @@ router.post('/', criar);
 router.put('/:id', atualizar);
 router.post('/:id/mover', mover);
 router.post('/:id/arquivar', arquivar);
+router.post('/:id/desarquivar', desarquivar);
 
 // ---------------------------------------------------------------------------
 // Sprint 32 — Extras do card (Kanban nível Trello)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Globe, Lock, Users2, Calendar, Settings, KanbanSquare, Gauge, X,
-  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3, Flag, LifeBuoy,
+  BarChart3, Table2, GanttChartSquare, UsersRound, Rows3, Flag, LifeBuoy, Archive,
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, rectIntersection,
@@ -17,6 +17,7 @@ import ModalCard from '../components/quadro/ModalCard.jsx';
 import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
 import ModalSprints from '../components/quadro/ModalSprints.jsx';
 import ModalSustentacao from '../components/quadro/ModalSustentacao.jsx';
+import ModalArquivados from '../components/quadro/ModalArquivados.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
 import { estiloFundoQuadro } from '../constants/kanbanVisual.js';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
@@ -82,6 +83,7 @@ export default function Quadro() {
   const [modalConfig, setModalConfig] = useState(false);
   const [modalSprints, setModalSprints] = useState(false);
   const [modalSustentacao, setModalSustentacao] = useState(false);
+  const [modalArquivados, setModalArquivados] = useState(false);
   const [novoCardEm, setNovoCardEm] = useState(null);
   const [cardAberto, setCardAberto] = useState(null);
   const [bloqueio, setBloqueio] = useState(null); // { dados, tentativa, snapshot }
@@ -564,6 +566,15 @@ export default function Quadro() {
             <LifeBuoy size={13} /> Sustentação
           </button>
 
+          <button
+            type="button"
+            onClick={() => setModalArquivados(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            title="Cards e colunas arquivados (com opção de restaurar)"
+          >
+            <Archive size={13} /> Arquivados
+          </button>
+
           {quadro.pode_editar && (
             <button
               type="button"
@@ -723,6 +734,14 @@ export default function Quadro() {
           quadro={quadro}
           podeEditar={quadro.pode_editar}
           onFechar={() => setModalSprints(false)}
+          onMudou={carregar}
+        />
+      )}
+
+      {modalArquivados && (
+        <ModalArquivados
+          quadro={quadro}
+          onFechar={() => setModalArquivados(false)}
           onMudou={carregar}
         />
       )}
