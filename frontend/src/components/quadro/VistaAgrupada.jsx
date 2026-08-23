@@ -63,7 +63,10 @@ export default function VistaAgrupada({ quadro, onAbrirCard }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      {/* `overflow-auto` aqui, com as raias rolando na horizontal logo abaixo,
+          empilhava duas barras horizontais uma dentro da outra. Este nível só
+          rola na vertical; o horizontal fica com cada raia. */}
+      <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
           {grupos.map((g) => (
             <div key={g.chave} className="rounded-xl border border-slate-200 bg-slate-50/60">
@@ -94,6 +97,7 @@ export default function VistaAgrupada({ quadro, onAbrirCard }) {
                             key={card.id}
                             card={card}
                             etiquetas={quadro.etiquetas}
+                            campos={quadro.campos || []}
                             aoClicar={() => onAbrirCard(card.id)}
                           />
                         ))}

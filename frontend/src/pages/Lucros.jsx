@@ -141,7 +141,7 @@ export default function Lucros() {
 
       {/* Cabeçalho de impressão */}
       <header className="mb-6 hidden print-only">
-        <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Nexus</div>
+        <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Ayio</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-900">
           Sócios & Lucros — {ano}
         </h1>
@@ -198,8 +198,8 @@ export default function Lucros() {
 
       {/* Tabela de sócios */}
       <SecaoTituloEBotao titulo="Por sócio" descricao={`Totais efetivados em ${ano}. Clique em um sócio para ver o extrato completo.`} />
-      <div className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="mb-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Sócio</th>
@@ -502,8 +502,8 @@ function BadgeStatus({ status }) {
 
 function TabelaMovimentos({ movimentos, carregando, admin, colunaExtra, colunaExtraValor, vazioTexto, onEfetivar, onCancelar }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full min-w-[38rem] text-sm">
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-4 py-3">Sócio / Descrição</th>
@@ -639,10 +639,10 @@ function CartaoDistribuicao({ distribuicao: d, admin, onEfetivar, onCancelar }) 
 
       {aberto && movimentos && (
         <div className="border-t border-slate-100 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+          <div className="overflow-x-auto text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
             Divisão por sócio
           </div>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[38rem] text-sm">
             <tbody className="divide-y divide-slate-100">
               {movimentos.map((m) => (
                 <tr key={m.id}>
@@ -901,8 +901,8 @@ function ModalNovaDistribuicao({ socios, onFechar, onSalvo }) {
               >Recalcular por participação</button>
             )}
           </div>
-          <div className="rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[38rem] text-sm">
               <thead className="bg-slate-50 text-left text-[10px] font-semibold uppercase text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Sócio</th>
