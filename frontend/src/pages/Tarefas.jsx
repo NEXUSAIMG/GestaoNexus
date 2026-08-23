@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import ImportarCsv from '../components/quadro/ImportarCsv.jsx';
 
 /**
  * Tarefas — Sprint 10.
@@ -92,7 +93,7 @@ export default function Tarefas() {
               onClick={() => setModalImportar(true)}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              <Upload size={14} /> Importar do Trello
+              <Upload size={14} /> Importar
             </button>
             <button
               type="button"
@@ -185,8 +186,9 @@ export default function Tarefas() {
       )}
 
       {modalImportar && (
-        <ModalImportarTrello
+        <ModalImportar
           equipes={equipesParaCriar}
+          quadros={quadros}
           onFechar={() => setModalImportar(false)}
           onImportado={() => { setModalImportar(false); carregar(); }}
         />
@@ -247,7 +249,7 @@ function tamanhoLegivel(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function ModalImportarTrello({ equipes, onFechar, onImportado }) {
+function CorpoTrello({ equipes, onFechar, onImportado }) {
   const [equipeId, setEquipeId] = useState(equipes[0]?.id || '');
   const [arquivo, setArquivo] = useState(null);
   const [board, setBoard] = useState(null);
@@ -317,18 +319,7 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
-        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <h2 className="inline-flex items-center gap-1.5 text-base font-semibold text-slate-900">
-            <Upload size={15} /> Importar do Trello
-          </h2>
-          <button onClick={onFechar} className="rounded p-1 text-slate-400 hover:bg-slate-100">
-            <X size={18} />
-          </button>
-        </header>
-
-        <div className="space-y-4 p-5">
+    <div className="space-y-4">
           {resultado ? (
             <div className="space-y-3 text-center">
               <CheckCircle2 size={36} className="mx-auto text-emerald-500" />
@@ -443,6 +434,60 @@ function ModalImportarTrello({ equipes, onFechar, onImportado }) {
                 </button>
               </div>
             </>
+          )}
+    </div>
+  );
+}
+
+/**
+ * Modal de importação — dois formatos na mesma porta.
+ *
+ * Trello (JSON) para quem está migrando de board; planilha (CSV) para quem
+ * tem o backlog no Excel, que é a maioria.
+ */
+function ModalImportar({ equipes, quadros, onFechar, onImportado }) {
+  const [formato, setFormato] = useState('csv');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-xl bg-white shadow-xl">
+        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h2 className="inline-flex items-center gap-1.5 text-base font-semibold text-slate-900">
+            <Upload size={15} /> Importar quadro
+          </h2>
+          <button onClick={onFechar} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="shrink-0 border-b border-slate-200 px-5 py-2">
+          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+            {[['csv', 'Planilha (CSV)'], ['trello', 'Trello (JSON)']].map(([id, rotulo]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFormato(id)}
+                className={[
+                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                  formato === id ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+                ].join(' ')}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {formato === 'csv' ? (
+            <ImportarCsv
+              equipes={equipes}
+              quadros={quadros}
+              onFechar={onFechar}
+              onImportado={onImportado}
+            />
+          ) : (
+            <CorpoTrello equipes={equipes} onFechar={onFechar} onImportado={onImportado} />
           )}
         </div>
       </div>
