@@ -421,7 +421,9 @@ export default function Quadro() {
     .sort((a, b) => a.ordem - b.ordem);
 
   return (
-    <div className="-m-4 md:-m-8 flex h-[calc(100vh-3.5rem)] lg:h-screen flex-col bg-slate-50">
+    // `dvh` em vez de `vh`: no celular a barra de endereço entra e sai da
+    // conta, e com `vh` o board ficava mais alto que a tela visível.
+    <div className="-m-4 md:-m-8 flex h-[calc(100dvh-3.5rem)] lg:h-[100dvh] flex-col bg-slate-50">
       {instancia && (
         <HeaderInstancia instancia={instancia} aoAbrirDecisao={(d) => setModalDecisao(d)} />
       )}
@@ -455,13 +457,13 @@ export default function Quadro() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-slate-300 bg-white p-0.5">
             <button
               type="button"
               onClick={() => setAba('kanban')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'kanban' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -471,7 +473,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('calendario')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'calendario' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -481,7 +483,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('tabela')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'tabela' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -491,7 +493,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('timeline')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'timeline' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -501,7 +503,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('carga')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'carga' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -511,7 +513,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('agrupada')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'agrupada' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -521,7 +523,7 @@ export default function Quadro() {
               type="button"
               onClick={() => setAba('metricas')}
               className={[
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'metricas' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
@@ -643,6 +645,7 @@ export default function Quadro() {
                     cartoriosNestaFase={cartoriosDoQuadro.filter((c) => c.coluna_id === col.id)}
                     podeEditar={quadro.pode_editar}
                     etiquetas={quadro.etiquetas}
+                    campos={quadro.campos || []}
                     aoClicarCard={(c) => setCardAberto(c.id)}
                     aoNovoCard={() => setNovoCardEm(col.id)}
                     aoMudarColuna={carregar}
@@ -667,7 +670,7 @@ export default function Quadro() {
 
             <DragOverlay>
               {arrastando?.tipo === 'card' && (
-                <Card card={arrastando.card} etiquetas={quadro.etiquetas} arrastando />
+                <Card card={arrastando.card} etiquetas={quadro.etiquetas} campos={quadro.campos || []} arrastando />
               )}
               {arrastando?.tipo === 'coluna' && (
                 <div className="w-72 rounded-xl bg-slate-100 px-3 py-2 shadow-2xl ring-2 ring-nexus-300 opacity-90">
