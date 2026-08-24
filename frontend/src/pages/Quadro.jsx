@@ -726,6 +726,7 @@ export default function Quadro() {
       {modalConfig && (
         <ModalConfigQuadro
           quadro={quadro}
+          ehAdmin={ehAdmin}
           onFechar={() => setModalConfig(false)}
           onAlterado={() => { setModalConfig(false); carregar(); }}
           onRecarregar={carregar}
