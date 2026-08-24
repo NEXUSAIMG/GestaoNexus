@@ -10,8 +10,8 @@ import { api, mensagemDeErro } from '../../api/client.js';
  *
  * A prévia é obrigatória: importar para um quadro que já está em uso é a
  * operação com mais chance de sujar dado. Ver antes o que vai entrar, o que
- * vai ser pulado e qual coluna da planilha não casa com o quadro é o que
- * separa "importei errado" de "cancelei a tempo".
+ * vai ser pulado e quais campos/colunas do Kanban serão criados do zero é o
+ * que separa "importei errado" de "cancelei a tempo".
  *
  * O parser mora no backend (utils/csv.js) e é o mesmo do importador de linha
  * de comando, já usado em importação real.
@@ -98,7 +98,9 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
           {resultado.cards_pulados > 0 && <>, {resultado.cards_pulados} pulado(s) por já existirem</>}
           {resultado.etiquetas_criadas > 0 && <>, {resultado.etiquetas_criadas} etiqueta(s) nova(s)</>}
           {resultado.responsaveis > 0 && <>, {resultado.responsaveis} responsável(is) atribuído(s)</>}
-          {resultado.campos_preenchidos > 0 && <>, {resultado.campos_preenchidos} campo(s) personalizado(s) preenchido(s)</>}.
+          {resultado.campos_preenchidos > 0 && <>, {resultado.campos_preenchidos} campo(s) personalizado(s) preenchido(s)</>}
+          {resultado.campos_personalizados_criados > 0 && <>, {resultado.campos_personalizados_criados} campo(s) novo(s) criado(s) no quadro</>}
+          {resultado.colunas_criadas > 0 && <>, {resultado.colunas_criadas} coluna(s) nova(s) criada(s) no Kanban</>}.
         </p>
         <div className="flex justify-center gap-2">
           <Link
@@ -126,6 +128,9 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
       <p className="text-xs text-slate-500">
         Uma linha por card. A planilha precisa de uma coluna <strong>Título</strong>; as demais são
         opcionais: Descrição, Prioridade, Tipo, Etiquetas, Estimativa_h, Coluna, Responsável, Prazo.
+        Qualquer outra coluna vira campo personalizado do quadro, e cada valor de Coluna que ainda
+        não existe no Kanban vira uma coluna nova — automaticamente, confira o que vai ser criado
+        na prévia antes de importar.
         Separador <code>,</code> ou <code>;</code> — detectamos sozinho.
       </p>
 
@@ -216,6 +221,15 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
               {previa.campos_personalizados_casados.map((c) => c.coluna_do_arquivo).join(', ')}
             </div>
           )}
+          {previa.campos_personalizados_novos?.length > 0 && (
+            <div className="flex items-start gap-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] text-sky-800">
+              <FileSpreadsheet size={12} className="mt-0.5 shrink-0" />
+              <span>
+                O quadro ainda não tem estes campos — serão criados na importação:{' '}
+                <strong>{previa.campos_personalizados_novos.map((c) => c.coluna_do_arquivo).join(', ')}</strong>
+              </span>
+            </div>
+          )}
           {previa.colunas_para_descricao?.length > 0 && (
             <div className="text-[11px] text-slate-500">
               Sem campo correspondente, vão para a descrição do card:{' '}
@@ -228,12 +242,13 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
             </div>
           )}
 
-          {previa.colunas_nao_casadas.length > 0 && (
-            <div className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+          {previa.colunas_novas?.length > 0 && (
+            <div className="flex items-start gap-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] text-sky-800">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" />
               <span>
-                Estas colunas da planilha não existem no quadro e cairão na coluna padrão:{' '}
-                <strong>{previa.colunas_nao_casadas.join(', ')}</strong>
+                O quadro ainda não tem estas colunas do Kanban — serão criadas na importação, e cada
+                card vai direto pra coluna do seu estágio:{' '}
+                <strong>{previa.colunas_novas.map((c) => c.nome).join(', ')}</strong>
               </span>
             </div>
           )}
