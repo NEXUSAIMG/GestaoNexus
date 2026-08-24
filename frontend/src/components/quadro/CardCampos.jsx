@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, Pencil } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { inputCls } from './ui.js';
 
@@ -154,8 +154,44 @@ export function GestorCampos({ quadroId, campos, onMudou }) {
   const [opcoesTexto, setOpcoesTexto] = useState('');
   const [mostrarNoCard, setMostrarNoCard] = useState(false);
 
+  // Editar um campo existente era impossível: só dava para criar e excluir —
+  // e excluir leva junto os valores preenchidos em todos os cards. O backend
+  // já tinha PUT /quadros/:id/campos/:campoId; faltava a tela.
+  const [editandoId, setEditandoId] = useState(null);
+  const [edNome, setEdNome] = useState('');
+  const [edOpcoes, setEdOpcoes] = useState('');
+  const [edMostrar, setEdMostrar] = useState(false);
+
   function limpar() {
     setNome(''); setTipo('texto'); setOpcoesTexto(''); setMostrarNoCard(false); setCriando(false);
+  }
+
+  function abrirEdicao(c) {
+    setEditandoId(c.id);
+    setEdNome(c.nome);
+    setEdOpcoes((c.opcoes || []).join(', '));
+    setEdMostrar(!!c.mostrar_no_card);
+  }
+
+  async function salvarEdicao() {
+    const campo = campos.find((c) => c.id === editandoId);
+    if (!campo || !edNome.trim()) return;
+    const corpo = { nome: edNome.trim(), mostrar_no_card: edMostrar };
+    if (campo.tipo === 'selecao') {
+      const opcoes = edOpcoes.split(',').map((s) => s.trim()).filter(Boolean);
+      if (opcoes.length === 0) {
+        alert('Campo de seleção precisa de pelo menos uma opção.');
+        return;
+      }
+      corpo.opcoes = opcoes;
+    }
+    try {
+      await api.put(`/quadros/${quadroId}/campos/${editandoId}`, corpo);
+      setEditandoId(null);
+      onMudou?.();
+    } catch (err) {
+      alert(mensagemDeErro(err, 'Não consegui salvar o campo.'));
+    }
   }
 
   async function criar() {
@@ -196,19 +232,85 @@ export function GestorCampos({ quadroId, campos, onMudou }) {
       {campos.length > 0 && (
         <ul className="space-y-1">
           {campos.map((c) => (
-            <li key={c.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-              <span className="flex-1 truncate text-xs font-medium text-slate-800">{c.nome}</span>
-              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
-                {TIPOS.find((t) => t.valor === c.tipo)?.nome || c.tipo}
-              </span>
-              <button
-                type="button"
-                onClick={() => excluir(c.id)}
-                className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"
-              >
-                <Trash2 size={11} />
-              </button>
-            </li>
+            editandoId === c.id ? (
+              <li key={c.id} className="space-y-2 rounded-lg border border-nexus-300 bg-nexus-50 p-2">
+                <input
+                  autoFocus
+                  className={inputCls}
+                  value={edNome}
+                  onChange={(e) => setEdNome(e.target.value)}
+                  placeholder="Nome do campo"
+                  maxLength={60}
+                />
+                {c.tipo === 'selecao' && (
+                  <input
+                    className={inputCls}
+                    value={edOpcoes}
+                    onChange={(e) => setEdOpcoes(e.target.value)}
+                    placeholder="Opções separadas por vírgula"
+                  />
+                )}
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={edMostrar}
+                    onChange={(e) => setEdMostrar(e.target.checked)}
+                  />
+                  Mostrar no card
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  O tipo ({TIPOS.find((t) => t.valor === c.tipo)?.nome || c.tipo}) não muda:
+                  trocá-lo invalidaria os valores já preenchidos nos cards.
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={salvarEdicao}
+                    className="rounded-md bg-nexus-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-nexus-800"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoId(null)}
+                    className="rounded-md p-1 text-slate-500 hover:bg-slate-200"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li key={c.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+                <span className="flex-1 truncate text-xs font-medium text-slate-800">{c.nome}</span>
+                {c.mostrar_no_card && (
+                  <span
+                    className="shrink-0 rounded bg-nexus-100 px-1.5 py-0.5 text-[9px] font-medium uppercase text-nexus-800"
+                    title="Aparece no card, no board"
+                  >
+                    no card
+                  </span>
+                )}
+                <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
+                  {TIPOS.find((t) => t.valor === c.tipo)?.nome || c.tipo}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => abrirEdicao(c)}
+                  className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-nexus-700"
+                  title="Editar campo"
+                >
+                  <Pencil size={11} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => excluir(c.id)}
+                  className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                  title="Excluir campo"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </li>
+            )
           ))}
         </ul>
       )}

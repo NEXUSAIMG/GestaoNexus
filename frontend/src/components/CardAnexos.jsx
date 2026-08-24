@@ -189,3 +189,98 @@ export default function CardAnexos({ cardId, podeEditar, onMudou }) {
       {erro && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</div>
       )}
+
+      {carregando ? (
+        <div className="text-xs text-slate-400">Carregando anexos…</div>
+      ) : anexos.length === 0 ? (
+        <div className="text-xs text-slate-400">Nenhum anexo.</div>
+      ) : (
+        <ul className="space-y-1.5">
+          {anexos.map((a) => {
+            const perdido = perdidos.has(a.id);
+            return (
+              <li
+                key={a.id}
+                className={[
+                  'group flex items-center gap-2 rounded-lg border bg-white p-2',
+                  perdido ? 'border-amber-300 bg-amber-50/60' : 'border-slate-200',
+                ].join(' ')}
+              >
+                <span
+                  className={[
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded',
+                    perdido ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500',
+                  ].join(' ')}
+                >
+                  {perdido
+                    ? <AlertTriangle size={16} />
+                    : ehImagem(a.mime_type) ? <ImageIcon size={16} /> : <FileText size={16} />}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => baixar(a)}
+                    className="block truncate text-left text-sm font-medium text-slate-800 hover:text-nexus-700 hover:underline"
+                    title={a.nome_original}
+                  >
+                    {a.nome_original}
+                  </button>
+                  {perdido ? (
+                    <div className="text-[10px] font-medium text-amber-700">
+                      Arquivo não está mais no servidor. Reenvie para recuperar.
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400">
+                      {humanizarBytes(a.tamanho_bytes)}
+                      {a.enviado_por_nome ? ` · ${a.enviado_por_nome}` : ''}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-0.5">
+                  {perdido && podeEditar ? (
+                    <button
+                      type="button"
+                      onClick={() => pedirReenvio(a)}
+                      disabled={reenviandoId === a.id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                      title="Escolher o arquivo de novo"
+                    >
+                      {reenviandoId === a.id
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <RotateCcw size={12} />}
+                      Reenviar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => baixar(a)}
+                      disabled={baixandoId === a.id}
+                      className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      title="Abrir / baixar"
+                    >
+                      {baixandoId === a.id
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <Download size={14} />}
+                    </button>
+                  )}
+                  {podeEditar && (
+                    <button
+                      type="button"
+                      onClick={() => excluir(a)}
+                      className="rounded p-1.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"
+                      title="Excluir"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

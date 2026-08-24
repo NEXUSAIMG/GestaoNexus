@@ -279,3 +279,91 @@ export async function arquivar(req, res, next) {
     res.status(204).send();
   } catch (err) { next(err); }
 }
+
+/**
+ * POST /api/colunas/:id/desarquivar
+ *
+ * Arquivar era um caminho sem volta: não havia rota de desarquivar nem tela
+ * que listasse coluna arquivada. Quem arquivava por engano perdia o acesso
+ * pela interface e só voltava mexendo no banco.
+ *
+ * A coluna volta para o fim do quadro — a `ordem` antiga pode ter sido
+ * ocupada por outra coluna enquanto ela estava fora.
+ */
+export async function desarquivar(req, res, next) {
+  try {
+    const cR = await query(
+      `SELECT quadro_id, nome, arquivada_em FROM colunas WHERE id = $1`,
+      [req.params.id],
+    );
+    if (!cR.rows[0]) throw new NaoEncontradoError('Coluna não encontrada');
+    if (!cR.rows[0].arquivada_em) throw new AppError('Esta coluna não está arquivada.', 400);
+
+    const isAdmin = !!req.pessoa?.administrador;
+    const { podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, cR.rows[0].quadro_id);
+    if (!podeEditar) throw new NaoAutorizadoError('Sem permissão.');
+
+    const { rows: max } = await query(
+      `SELECT COALESCE(MAX(ordem), 0) + 1000 AS prox
+         FROM colunas WHERE quadro_id = $1 AND arquivada_em IS NULL`,
+      [cR.rows[0].quadro_id],
+    );
+
+    const { rows } = await query(
+      `UPDATE colunas SET arquivada_em = NULL, ordem = $2
+        WHERE id = $1
+        RETURNING id, nome, ordem, tipo, wip_limite, cor`,
+      [req.params.id, max[0].prox],
+    );
+
+    registrarAcao({
+      acao: 'coluna.desarquivou',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: { coluna_id: req.params.id, nome: cR.rows[0].nome },
+      req,
+    });
+
+    publicarMudanca(cR.rows[0].quadro_id, 'coluna_desarquivada');
+    res.json(rows[0]);
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/quadros/:id/arquivados
+ *
+ * Gaveta de arquivados do quadro: colunas e cards que saíram do board mas
+ * continuam no banco. É o que torna o arquivamento reversível.
+ */
+export async function listarArquivados(req, res, next) {
+  try {
+    const isAdmin = !!req.pessoa?.administrador;
+    const { pode } = await podeVerQuadro(req.pessoa.id, isAdmin, req.params.id);
+    if (!pode) throw new NaoAutorizadoError('Sem acesso a este quadro.');
+
+    const [colunas, cards] = await Promise.all([
+      query(
+        `SELECT id, nome, tipo, arquivada_em,
+                (SELECT COUNT(*)::int FROM cards c
+                  WHERE c.coluna_id = colunas.id AND c.arquivado_em IS NULL) AS n_cards
+           FROM colunas
+          WHERE quadro_id = $1 AND arquivada_em IS NOT NULL
+          ORDER BY arquivada_em DESC`,
+        [req.params.id],
+      ),
+      query(
+        `SELECT c.id, c.titulo, c.arquivado_em, c.coluna_id,
+                col.nome AS coluna_nome, col.arquivada_em AS coluna_arquivada_em,
+                p.nome AS criado_por_nome
+           FROM cards c
+           JOIN colunas col ON col.id = c.coluna_id
+           LEFT JOIN pessoas_acesso p ON p.id = c.criado_por_id
+          WHERE c.quadro_id = $1 AND c.arquivado_em IS NOT NULL
+          ORDER BY c.arquivado_em DESC
+          LIMIT 200`,
+        [req.params.id],
+      ),
+    ]);
+
+    res.json({ colunas: colunas.rows, cards: cards.rows });
+  } catch (err) { next(err); }
+}

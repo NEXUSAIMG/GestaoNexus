@@ -515,8 +515,8 @@ function TabelaCobrancas({ cobrancas, carregando, statusFiltro }) {
   ), [cobrancas]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full min-w-[38rem] text-sm">
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
             <th className="px-4 py-3">Cliente / Descrição</th>

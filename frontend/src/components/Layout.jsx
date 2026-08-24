@@ -49,7 +49,7 @@ export default function Layout() {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-nexus-800">
           <div>
-            <div className="text-lg font-semibold leading-tight">Gestão Nexus</div>
+            <div className="text-lg font-semibold leading-tight">Gestão Ayio</div>
             <div className="text-xs text-nexus-200">Transparência para os sócios</div>
           </div>
           <button
@@ -108,14 +108,25 @@ export default function Layout() {
           >
             <Menu size={20} />
           </button>
-          <div className="flex-1 font-semibold text-slate-800">Gestão Nexus</div>
+          <div className="flex-1 font-semibold text-slate-800">Gestão Ayio</div>
           {/* Sino do mobile fica fora do menu, sempre visível. */}
           <div className="text-slate-700">
             <Sino />
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-8">
+        {/*
+          `min-w-0` + `overflow-x-clip` seguram o conteúdo largo aqui dentro.
+          Sem isso, qualquer página com tabela ou board mais largo que a tela
+          transbordava até o documento e o navegador criava uma barra de
+          rolagem horizontal na PÁGINA INTEIRA — que somava com a barra do
+          próprio componente. Era essa a origem das duas barras.
+
+          É `clip` e não `hidden` de propósito: `overflow-x: hidden` obriga o
+          eixo vertical a virar `auto`, o que quebraria os cabeçalhos `sticky`
+          e a altura do quadro.
+        */}
+        <main className="min-w-0 flex-1 overflow-x-clip p-4 md:p-8">
           <Outlet />
         </main>
       </div>

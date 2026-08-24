@@ -5,7 +5,7 @@ import {
   criarEtiqueta, atualizarEtiqueta, excluirEtiqueta,
 } from '../controllers/quadros.controller.js';
 import {
-  criar as criarColuna,
+  criar as criarColuna, listarArquivados,
 } from '../controllers/colunas.controller.js';
 import {
   listar as listarEventos, obter as obterEvento,
@@ -17,6 +17,8 @@ import {
 } from '../controllers/projetos.controller.js';
 import { metricasDoQuadro, forcarSnapshot } from '../controllers/metricas.controller.js';
 import { importarTrello } from '../controllers/importar-trello.controller.js';
+import { importarCsv, previaCsv } from '../controllers/importar-csv.controller.js';
+import { uploaderCards } from '../utils/uploads.js';
 import {
   listar as listarAutomacoes, criar as criarAutomacao,
   atualizar as atualizarAutomacao, excluir as excluirAutomacao,
@@ -25,6 +27,10 @@ import {
 import { autenticar } from '../middleware/auth.middleware.js';
 
 const router = Router();
+// A planilha chega como multipart; reaproveitamos o uploader de cards, que
+// aceita qualquer tipo e respeita o limite de tamanho.
+const uploadPlanilha = uploaderCards();
+
 router.use(autenticar);
 
 // Quadros
@@ -33,11 +39,18 @@ router.get('/:id', obterQuadro);
 router.post('/', criarQuadro);
 // Sprint 38 — importador do Trello (rota estatica antes de /:id)
 router.post('/importar-trello', importarTrello);
+
+// Sprint 43 — importador de planilha (CSV). A previa nao grava nada.
+router.post('/importar-csv/previa', uploadPlanilha.single('arquivo'), previaCsv);
+router.post('/importar-csv', uploadPlanilha.single('arquivo'), importarCsv);
 router.put('/:id', atualizarQuadro);
 router.post('/:id/arquivar', arquivarQuadro);
 
 // Colunas (criação a partir do quadro pai — RESTful natural)
 router.post('/:id/colunas', criarColuna);
+
+// Gaveta de arquivados (colunas e cards que sairam do board)
+router.get('/:id/arquivados', listarArquivados);
 
 // Etiquetas
 router.post('/:id/etiquetas', criarEtiqueta);

@@ -122,8 +122,8 @@ export default function Metricas({ quadroId, ehAdmin }) {
         {dados.aging.length === 0 ? (
           <Vazio texto="Nenhum card em coluna do tipo “em andamento”." />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[32rem] text-xs">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Card</th>

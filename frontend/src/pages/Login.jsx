@@ -60,7 +60,7 @@ export default function Login() {
           </div>
         </div>
         <div className="text-xs text-nexus-300">
-          Gestão Nexus · v1.2
+          Gestão Ayio · v1.2
         </div>
       </div>
 

@@ -49,3 +49,10 @@ uploads/
 # Dumps de banco - nunca versionar
 *.dump
 gestaonexus.dump
+
+# Ambiente de teste local (Postgres embutido, capturas e artefatos)
+testes/node_modules/
+testes/pgdata/
+testes/capturas/
+testes/*.csv
+testes/pg.log

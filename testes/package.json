@@ -1,0 +1,19 @@
+{
+  "name": "gestao-ayio-testes",
+  "private": true,
+  "type": "module",
+  "description": "Ambiente local e bateria de testes ponta a ponta",
+  "scripts": {
+    "db:criar": "node pg-start.mjs init",
+    "db:subir": "node pg-start.mjs",
+    "db:parar": "node pg-start.mjs stop",
+    "semear": "node semear.mjs",
+    "api": "node t-importar.mjs && node t-importar-real.mjs && node t-erros.mjs && node t-historico.mjs && node t-arquivados.mjs && node t-csv.mjs",
+    "layout": "node t-layout.mjs",
+    "ui": "node t-quadro.mjs && node t-import-ui.mjs"
+  },
+  "dependencies": {
+    "embedded-postgres": "17.10.0-beta.17",
+    "playwright-core": "^1.49.0"
+  }
+}

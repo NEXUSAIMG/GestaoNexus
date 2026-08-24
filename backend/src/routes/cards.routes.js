@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import {
-  meusCards, obter, criar, atualizar, mover, arquivar,
+  meusCards, obter, criar, atualizar, mover, arquivar, desarquivar,
 } from '../controllers/cards.controller.js';
 import {
   listarChecklists, criarChecklist, atualizarChecklist, excluirChecklist,
   criarItem, atualizarItem, excluirItem,
   listarComentarios, criarComentario, atualizarComentario, excluirComentario,
   listarAnexos, criarAnexo, baixarAnexo, excluirAnexo,
-  listarAtividades,
+  listarAtividades, listarHistorico,
 } from '../controllers/card-extras.controller.js';
 import {
   definirValorCampo,
@@ -38,6 +38,7 @@ router.post('/', criar);
 router.put('/:id', atualizar);
 router.post('/:id/mover', mover);
 router.post('/:id/arquivar', arquivar);
+router.post('/:id/desarquivar', desarquivar);
 
 // ---------------------------------------------------------------------------
 // Sprint 32 — Extras do card (Kanban nível Trello)
@@ -66,6 +67,9 @@ router.delete('/:id/anexos/:anexoId', excluirAnexo);
 
 // Feed de atividades
 router.get('/:id/atividades', listarAtividades);
+
+// Historico do card: movimentacoes (de X para Y) + demais acoes
+router.get('/:id/historico', listarHistorico);
 
 // ---------------------------------------------------------------------------
 // Sprint 34 — Projetos: fundação (além do Trello)

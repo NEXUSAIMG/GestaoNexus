@@ -149,7 +149,7 @@ export default function Mensal() {
 
       {/* Cabeçalho de impressão — só aparece no PDF */}
       <header className="mb-6 hidden print-only">
-        <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Nexus</div>
+        <div className="text-xs uppercase tracking-widest text-nexus-700">Gestão Ayio</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-900">
           Resumo de {formatarMesLongo(mes)}
         </h1>
@@ -253,7 +253,7 @@ export default function Mensal() {
 
       {/* Rodapé de impressão */}
       <footer className="hidden print-only mt-8 pt-4 border-t border-slate-300 text-[10px] text-slate-500">
-        Gestão Nexus · Resumo de {formatarMesLongo(mes)} · Página gerada via ferramenta interna.
+        Gestão Ayio · Resumo de {formatarMesLongo(mes)} · Página gerada via ferramenta interna.
       </footer>
     </div>
   );
@@ -499,8 +499,8 @@ function ContasPagasMes({ contas, carregando }) {
         )}
       </h2>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Descrição / Fornecedor</th>

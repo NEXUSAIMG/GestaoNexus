@@ -153,6 +153,34 @@ export async function atualizarCampo(req, res, next) {
       );
     }
 
+    // Tirar uma opcao que cards ja usam deixaria o valor gravado orfao: ele
+    // continua no banco, some do <select> (que so lista as opcoes atuais) e a
+    // primeira edicao do card o apaga em silencio. Preferimos recusar e dizer
+    // quantos cards dependem da opcao — mesma logica de nao deixar trocar o
+    // tipo de um campo em uso.
+    if (d.opcoes !== undefined && atual.rows[0].tipo === 'selecao') {
+      const novas = Array.isArray(d.opcoes) ? d.opcoes : [];
+      const { rows: emUso } = await query(
+        `SELECT v.valor #>> '{}' AS valor, COUNT(*)::int AS n
+           FROM cards_campos_valores v
+          WHERE v.campo_id = $1 AND v.valor IS NOT NULL
+          GROUP BY 1`,
+        [req.params.campoId],
+      );
+      const perdidas = emUso.filter((u) => u.valor != null && !novas.includes(u.valor));
+      if (perdidas.length > 0) {
+        const err = new AppError(
+          'Estas opcoes estao em uso e nao podem ser removidas: '
+          + perdidas.map((p) => `"${p.valor}" (${p.n} card${p.n === 1 ? '' : 's'})`).join(', ')
+          + '. Troque o valor nesses cards antes.',
+          409,
+          'opcao_em_uso',
+        );
+        err.detalhes = { opcoes_em_uso: perdidas };
+        throw err;
+      }
+    }
+
     const updates = [];
     const params = [];
     if (d.nome !== undefined) {

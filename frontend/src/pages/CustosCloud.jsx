@@ -160,7 +160,8 @@ function Dashboard({ mes, admin }) {
             </span>
           )}
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
               <th className="px-4 py-2 font-medium">Serviço</th>
@@ -204,6 +205,7 @@ function Dashboard({ mes, admin }) {
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -290,8 +292,8 @@ function Fechamento({ mes, admin }) {
           <span className="font-semibold text-amber-900">{dados.cotacao_usd ? Number(dados.cotacao_usd).toFixed(4) : '—'}</span>
         )}
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
               <th className="px-4 py-2 font-medium">Serviço</th>
@@ -377,8 +379,8 @@ function Catalogo({ admin }) {
       <p className="text-xs text-slate-500">
         A lista de tudo que pagamos na nuvem. {admin ? 'Você pode ajustar o teto e ativar/desativar serviços.' : 'Somente leitura.'}
       </p>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
               <th className="px-4 py-2 font-medium">Serviço</th>
@@ -466,7 +468,7 @@ function Rateio({ mes, admin }) {
         {' '}dividido igualmente entre {d.empresas} cartório(s).{!admin && ' Somente administradores editam.'}
       </p>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[38rem] text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
               <th className="px-3 py-2 font-medium">Cartório</th>

@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import {
-  Archive, Palette, ListChecks, Paperclip, MessageSquare, Activity,
-  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag,
+  Archive, Palette, ListChecks, Paperclip, MessageSquare,
+  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag, History,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import MultiSelectPessoas from '../MultiSelectPessoas.jsx';
 import CardChecklists from '../CardChecklists.jsx';
 import CardComentarios from '../CardComentarios.jsx';
 import CardAnexos from '../CardAnexos.jsx';
-import CardAtividades from '../CardAtividades.jsx';
+import CardHistorico from './CardHistorico.jsx';
 import ModalFrame from './ModalFrame.jsx';
 import CardSubtarefas from './CardSubtarefas.jsx';
 import CardDependencias from './CardDependencias.jsx';
 import CardVinculos from './CardVinculos.jsx';
 import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
+import { ehCardCliente } from './FichaCliente.jsx';
 import { COR_CHIP, CORES, corForte, inputCls, PRIORIDADES } from './ui.js';
 import { PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
@@ -32,7 +33,7 @@ const ABAS = [
   { id: 'dependencias', nome: 'Dependências', icone: Ban },
   { id: 'vinculos', nome: 'Vínculos', icone: Link2 },
   { id: 'horas', nome: 'Horas', icone: Clock },
-  { id: 'atividade', nome: 'Atividade', icone: Activity },
+  { id: 'historico', nome: 'Histórico', icone: History },
 ];
 
 export default function ModalCard({
@@ -156,6 +157,13 @@ export default function ModalCard({
   const podeEditar = !!quadro.pode_editar;
   const camposDoQuadro = quadro.campos || [];
 
+  // A ficha comercial é disparada pela etiqueta "Cliente" — e reage na hora
+  // em que a pessoa marca a etiqueta, antes mesmo de salvar.
+  const ehCliente = ehCardCliente(
+    etiquetaIds.map((eid) => (quadro.etiquetas || []).find((e) => e.id === eid)).filter(Boolean),
+    camposDoQuadro,
+  );
+
   return (
     <ModalFrame
       titulo={editando ? 'Editar tarefa' : 'Nova tarefa'}
@@ -209,7 +217,7 @@ export default function ModalCard({
           {aba === 'horas' && (
             <CardTimer cardId={cardId} podeEditar={podeEditar} onMudou={aoMudarExtras} />
           )}
-          {aba === 'atividade' && <CardAtividades cardId={cardId} />}
+          {aba === 'historico' && <CardHistorico cardId={cardId} />}
 
           <div className="flex justify-end border-t border-slate-200 pt-3">
             <button
@@ -421,7 +429,14 @@ export default function ModalCard({
 
           {editando && camposDoQuadro.length > 0 && (
             <div className="border-t border-slate-200 pt-3">
-              <h3 className="mb-2 text-sm font-semibold text-slate-900">Campos do quadro</h3>
+              <h3 className="mb-1 text-sm font-semibold text-slate-900">
+                {ehCliente ? 'Dados do cliente' : 'Campos do quadro'}
+              </h3>
+              {ehCliente && (
+                <p className="mb-2 text-xs text-slate-500">
+                  Preenchidos aqui, estes dados aparecem direto no card, no board.
+                </p>
+              )}
               <CardCampos
                 cardId={cardId}
                 campos={camposDoQuadro}
