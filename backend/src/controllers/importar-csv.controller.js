@@ -30,12 +30,14 @@ import {
  *
  * Colunas que não são nenhum campo fixo do card (Título, Descrição,
  * Prioridade, Tipo, Etiquetas, Categoria, Cliente, Coluna, Responsável,
- * Prazo) não são mais simplesmente jogadas fora: se o nome bate com um
- * *campo personalizado* já cadastrado no quadro (mesma tabela que alimenta a
- * Ficha de Cliente — Origem, Termômetro, Faturamento, Site, etc., ver
- * `FichaCliente.jsx`), o valor vai pro campo; senão, entra como texto extra
- * na descrição, pra não sumir. Só quadro EXISTENTE tem campos pra casar —
- * quadro novo nasce sem nenhum, então tudo cai na descrição.
+ * Prazo) casam com um *campo personalizado* do quadro (mesma tabela que
+ * alimenta a Ficha de Cliente — Origem, Termômetro, Faturamento, Site,
+ * etc., ver `FichaCliente.jsx`). Sem casar, a importação CRIA o campo na
+ * hora (tipo texto) — funciona pra qualquer quadro escolhido no momento da
+ * importação, sem exigir setup manual antes. O mesmo vale pra "Status
+ * Atual"/"Coluna": valor que não é nenhuma coluna do Kanban vira uma coluna
+ * nova. A prévia mostra o que vai ser criado antes de gravar — é a mesma
+ * confirmação que já existe pra "cards que seriam pulados" etc.
  */
 
 /** Colunas padrão de um quadro criado por este import — mesma lista usada
@@ -46,6 +48,48 @@ const COLUNAS_PADRAO = [
   { nome: 'Em andamento', ordem: 2000, tipo: 'em_andamento' },
   { nome: 'Concluído', ordem: 3000, tipo: 'concluida' },
 ];
+
+/** Nome de campo/coluna pronto pra virar registro: cabeçalho de planilha
+ * do Sheets vem às vezes com quebra de linha manual dentro da célula do
+ * título ("Representante /Oficial\n(Cargo / Função)") — sem limpar isso
+ * vira um nome de campo esquisito no quadro. */
+function limparNome(nome, tamanho = 60) {
+  return String(nome).replace(/\s+/g, ' ').trim().slice(0, tamanho);
+}
+
+/**
+ * Valores distintos de uma coluna do corpo do CSV, na ordem em que
+ * aparecem primeiro. Serve tanto pra saber se uma coluna extra tem algo
+ * pra importar (lista não vazia) quanto pra listar os estágios do
+ * "Status Atual" que ainda não são coluna do quadro.
+ */
+function valoresDistintos(linhas, indice) {
+  if (indice < 0) return [];
+  const vistos = new Set();
+  const ordem = [];
+  for (const linha of linhas) {
+    const v = linha[indice] != null ? String(linha[indice]).trim() : '';
+    if (v && !vistos.has(v)) { vistos.add(v); ordem.push(v); }
+  }
+  return ordem;
+}
+
+/**
+ * Tipo de uma coluna do Kanban criada automaticamente a partir de um
+ * estágio de funil ("Status Atual" etc.) que a planilha trouxe e o quadro
+ * ainda não tinha.
+ *
+ * ponytail: heurística ingênua por palavra-chave — cobre os nomes óbvios
+ * de estágio terminal (ativado/ganho/perdido/desistência); o resto nasce
+ * "em_andamento" e o tipo dá pra corrigir na tela de colunas depois. Um
+ * "Status" sem nenhuma dessas palavras não tem como saber se é início,
+ * meio ou fim só pelo nome.
+ */
+function tipoColunaAuto(nome) {
+  const n = semAcento(nome);
+  if (/ativad|ganh|convert|fechad|perdid|negativ|desist|cancel|recus/.test(n)) return 'concluida';
+  return 'em_andamento';
+}
 
 /** Lê o arquivo do multer e devolve as linhas + o mapa de colunas. */
 async function lerPlanilha(arquivo) {
@@ -160,6 +204,17 @@ export async function previaCsv(req, res, next) {
     const destino = await resolverDestino(req, req.body);
     const camposPorChave = mapaCampos(destino.campos);
 
+    // Simula a auto-criação (a gravação de verdade faz o mesmo em
+    // importarCsv): campo personalizado que a planilha pede e o quadro
+    // ainda não tem entra no mapa com um id "novo:..." só pra prévia casar
+    // igual vai casar depois de criado de verdade.
+    const camposNovos = extras.filter(({ i, nome }) => (
+      !camposPorChave.has(chaveCampo(nome)) && valoresDistintos(linhas, i).length > 0
+    ));
+    for (const { nome } of camposNovos) {
+      camposPorChave.set(chaveCampo(nome), { id: 'novo:' + chaveCampo(nome), nome: limparNome(nome), tipo: 'texto' });
+    }
+
     const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
       .filter((c) => c.titulo);
     const semTitulo = linhas.length - itens.length;
@@ -180,36 +235,32 @@ export async function previaCsv(req, res, next) {
       .filter(([, i]) => i >= 0)
       .map(([nome, i]) => ({ campo: nome, coluna_do_arquivo: cabecalho[i] }));
 
-    // Extras: casaram com campo personalizado do quadro, viraram texto na
-    // descrição (linha teve valor mas nada casou), ou seguem genuinamente
-    // vazias em toda a planilha (nada pra importar mesmo).
+    // Extras: casaram com campo personalizado que o quadro já tinha, viram
+    // campo personalizado NOVO (criado na hora da importação de verdade),
+    // viraram texto na descrição (algo deu errado ao converter o valor pro
+    // tipo do campo), ou seguem genuinamente vazias (nada pra importar).
+    const nomesCamposNovos = new Set(camposNovos.map((e) => e.nome));
     const camposPersonalizadosCasados = extras
-      .filter(({ nome }) => camposPorChave.has(chaveCampo(nome)))
+      .filter(({ nome }) => camposPorChave.has(chaveCampo(nome)) && !nomesCamposNovos.has(nome))
       .map(({ nome }) => ({ campo: camposPorChave.get(chaveCampo(nome)).nome, coluna_do_arquivo: nome }));
+    const camposPersonalizadosNovos = camposNovos
+      .map(({ nome }) => ({ campo: limparNome(nome), coluna_do_arquivo: nome }));
     const nomesNaDescricao = new Set(itens.flatMap((i) => i.extras_na_descricao));
     const colunasParaDescricao = extras.map((e) => e.nome).filter((n) => nomesNaDescricao.has(n));
     const ignoradas = extras
       .map((e) => e.nome)
       .filter((n) => !camposPorChave.has(chaveCampo(n)) && !nomesNaDescricao.has(n));
 
-    // Colunas da planilha que não casam com nenhuma coluna do quadro: o
-    // valor (ex.: "Em prospecção") não pode ficar só implícito em qual
-    // coluna o card caiu — sem casar, também vira texto na descrição, senão
-    // desaparece de vez. Quadro novo usa a mesma lista padrão que será
-    // criada, pra prévia bater com o que a importação de fato vai fazer.
-    const colunasNaoCasadas = [];
+    // "Status Atual" (ou equivalente): valor que não é nenhuma coluna do
+    // quadro vira uma coluna nova do Kanban na importação de verdade — a
+    // prévia simula isso pra mostrar o que vai ser criado. Quadro novo usa
+    // a mesma lista padrão que será criada, pra prévia bater com o real.
+    let colunasNovas = [];
     if (col.coluna >= 0) {
-      const colunasAlvo = destino.novo ? COLUNAS_PADRAO : destino.colunas;
-      const rotuloColuna = cabecalho[col.coluna];
-      const vistas = new Set();
-      for (const item of itens) {
-        if (!item.coluna) continue;
-        const { casou } = acharColuna(colunasAlvo, item.coluna, null);
-        if (casou) continue;
-        if (!vistas.has(item.coluna)) { vistas.add(item.coluna); colunasNaoCasadas.push(item.coluna); }
-        item.descricao = ((item.descricao ? item.descricao + '\n\n' : '')
-          + rotuloColuna + ': ' + item.coluna).slice(0, 20000);
-      }
+      const colunasBase = destino.novo ? COLUNAS_PADRAO : destino.colunas;
+      colunasNovas = valoresDistintos(linhas, col.coluna)
+        .filter((v) => !acharColuna(colunasBase, v, null).casou)
+        .map((nome) => ({ nome: limparNome(nome), tipo: tipoColunaAuto(nome) }));
     }
 
     res.json({
@@ -220,9 +271,10 @@ export async function previaCsv(req, res, next) {
       ja_existem: jaExistem,
       colunas_reconhecidas: reconhecidas,
       campos_personalizados_casados: camposPersonalizadosCasados,
+      campos_personalizados_novos: camposPersonalizadosNovos,
       colunas_para_descricao: colunasParaDescricao,
       colunas_ignoradas: ignoradas,
-      colunas_nao_casadas: colunasNaoCasadas,
+      colunas_novas: colunasNovas,
       etiquetas: [...new Set(itens.flatMap((i) => i.etiquetas))],
       destino: destino.novo
         ? { tipo: 'novo_quadro' }
@@ -250,12 +302,6 @@ export async function importarCsv(req, res, next) {
     const { cabecalho, col, corpo: linhas, extras } = await lerPlanilha(req.file);
     const destino = await resolverDestino(req, req.body);
     const camposPorChave = mapaCampos(destino.campos);
-
-    const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
-      .filter((c) => c.titulo);
-    if (itens.length === 0) {
-      throw new AppError('Nenhuma linha da planilha tem título preenchido.', 400);
-    }
 
     await client.query('BEGIN');
 
@@ -289,6 +335,51 @@ export async function importarCsv(req, res, next) {
     } else {
       quadroId = destino.quadro.id;
       colunas = destino.colunas;
+    }
+
+    // Campo personalizado que a planilha pede e o quadro ainda não tem:
+    // cria na hora (tipo texto). É o que faz a importação funcionar sempre,
+    // pra qualquer quadro escolhido no momento, sem exigir que alguém tenha
+    // configurado os campos antes (a prévia já mostrou que isso ia
+    // acontecer — ver camposPersonalizadosNovos em previaCsv).
+    let proximaOrdemCampo = camposPorChave.size;
+    let camposCriados = 0;
+    for (const { i, nome } of extras) {
+      const chave = chaveCampo(nome);
+      if (camposPorChave.has(chave)) continue;
+      if (valoresDistintos(linhas, i).length === 0) continue;
+      proximaOrdemCampo += 1;
+      const { rows } = await client.query(
+        `INSERT INTO quadros_campos (quadro_id, nome, tipo, ordem)
+         VALUES ($1, $2, 'texto', $3) RETURNING id, nome, tipo, opcoes`,
+        [quadroId, limparNome(nome), proximaOrdemCampo],
+      );
+      camposPorChave.set(chave, rows[0]);
+      camposCriados += 1;
+    }
+
+    // Estágio de "Status Atual" (ou equivalente) que ainda não é coluna do
+    // quadro: cria a coluna do Kanban na hora, mesma lógica.
+    let colunasCriadas = 0;
+    if (col.coluna >= 0) {
+      let proximaOrdemColuna = colunas.reduce((m, c) => Math.max(m, c.ordem), 0);
+      for (const valor of valoresDistintos(linhas, col.coluna)) {
+        if (acharColuna(colunas, valor, null).casou) continue;
+        proximaOrdemColuna += 1000;
+        const { rows } = await client.query(
+          `INSERT INTO colunas (quadro_id, nome, ordem, tipo) VALUES ($1, $2, $3, $4)
+           RETURNING id, nome, tipo, ordem`,
+          [quadroId, limparNome(valor), proximaOrdemColuna, tipoColunaAuto(valor)],
+        );
+        colunas.push(rows[0]);
+        colunasCriadas += 1;
+      }
+    }
+
+    const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
+      .filter((c) => c.titulo);
+    if (itens.length === 0) {
+      throw new AppError('Nenhuma linha da planilha tem título preenchido.', 400);
     }
 
     const fallbackId = colunaPadrao(colunas, req.body.coluna_id || null);
@@ -417,6 +508,8 @@ export async function importarCsv(req, res, next) {
       etiquetas_criadas: etiquetasCriadas,
       responsaveis: comResponsavel,
       campos_preenchidos: camposPreenchidos,
+      campos_personalizados_criados: camposCriados,
+      colunas_criadas: colunasCriadas,
     };
 
     registrarAcao({

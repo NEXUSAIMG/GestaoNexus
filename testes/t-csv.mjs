@@ -44,6 +44,10 @@ ok(am.data_prazo === '2026-09-30', 'data 30/09/2026 virou 2026-09-30');
 ok(p1.dados.amostra[1].data_prazo === '2026-10-15', 'data já em ISO também funciona');
 ok(p1.dados.etiquetas.includes('Bug') && p1.dados.etiquetas.includes('Melhoria'),
   'etiquetas extraídas de Tipo');
+ok(p1.dados.colunas_novas.some((c) => c.nome === 'Coluna Inexistente'),
+  'prévia avisa que "Coluna Inexistente" vai virar coluna nova do Kanban');
+ok(p1.dados.campos_personalizados_novos.length === 0,
+  'CSV só com campos fixos não propõe nenhum campo personalizado novo');
 
 // ---------------------------------------------------------------------------
 titulo('Importa criando quadro novo');
@@ -54,6 +58,7 @@ console.log('   →', imp.status, JSON.stringify(imp.dados));
 ok(imp.status === 201, 'import responde 201');
 ok(imp.dados.cards_criados === 3, '3 cards criados');
 ok(imp.dados.responsaveis === 1, 'o responsável que existe foi atribuído');
+ok(imp.dados.colunas_criadas === 1, 'a coluna nova ("Coluna Inexistente") foi de fato criada');
 
 const q = (await get('/quadros/' + imp.dados.quadro_id)).dados;
 const porNome = Object.fromEntries(q.cards.map((c) => [c.titulo, c]));
@@ -61,8 +66,8 @@ const colPorId = Object.fromEntries(q.colunas.map((c) => [c.id, c.nome]));
 
 ok(colPorId[porNome['Migrar contrato do cartório'].coluna_id] === 'Em andamento',
   'card foi para a coluna indicada na planilha');
-ok(colPorId[porNome['Tarefa sem coluna conhecida'].coluna_id] === 'A fazer',
-  'coluna desconhecida cai no backlog em vez de falhar');
+ok(colPorId[porNome['Tarefa sem coluna conhecida'].coluna_id] === 'Coluna Inexistente',
+  'coluna que não existia no quadro foi criada, card foi pra ela');
 ok(porNome['Migrar contrato do cartório'].responsaveis.length === 1,
   'responsável aparece no board (gravado na N:N)');
 ok(String(porNome['Migrar contrato do cartório'].data_prazo).startsWith('2026-09-30'),
@@ -82,8 +87,8 @@ ok(q2.cards.length === 3, 'o quadro continua com 3 cards');
 titulo('Prévia em quadro existente avisa o que já existe');
 const p2 = await enviar('/quadros/importar-csv/previa', csvBr, { quadro_id: imp.dados.quadro_id });
 ok(p2.dados.ja_existem.length === 3, 'prévia lista os 3 títulos que seriam pulados');
-ok(p2.dados.colunas_nao_casadas.includes('Coluna Inexistente'),
-  'prévia avisa qual coluna da planilha não casa com o quadro');
+ok(p2.dados.colunas_novas.length === 0,
+  '"Coluna Inexistente" já foi criada no import anterior — prévia não propõe de novo');
 
 // ---------------------------------------------------------------------------
 titulo('CSV com vírgula (formato internacional)');
