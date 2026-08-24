@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  meusCards, obter, criar, atualizar, mover, arquivar, desarquivar,
+  meusCards, obter, criar, atualizar, mover, moverQuadro, arquivar, desarquivar,
 } from '../controllers/cards.controller.js';
 import {
   listarChecklists, criarChecklist, atualizarChecklist, excluirChecklist,
@@ -37,6 +37,9 @@ router.get('/:id', obter);
 router.post('/', criar);
 router.put('/:id', atualizar);
 router.post('/:id/mover', mover);
+// Move pra OUTRO quadro (equipe/funil diferente) — o /mover de cima só
+// troca de coluna dentro do mesmo quadro, e recusa entre quadros.
+router.post('/:id/mover-quadro', moverQuadro);
 router.post('/:id/arquivar', arquivar);
 router.post('/:id/desarquivar', desarquivar);
 
