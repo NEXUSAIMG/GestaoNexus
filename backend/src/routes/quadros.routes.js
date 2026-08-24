@@ -17,7 +17,9 @@ import {
 } from '../controllers/projetos.controller.js';
 import { metricasDoQuadro, forcarSnapshot } from '../controllers/metricas.controller.js';
 import { importarTrello } from '../controllers/importar-trello.controller.js';
-import { importarCsv, previaCsv, reordenarTermometro } from '../controllers/importar-csv.controller.js';
+import {
+  importarCsv, previaCsv, reordenarTermometro, termometroSelecionavel,
+} from '../controllers/importar-csv.controller.js';
 import { uploaderCards } from '../utils/uploads.js';
 import {
   listar as listarAutomacoes, criar as criarAutomacao,
@@ -49,6 +51,9 @@ router.post('/:id/arquivar', arquivarQuadro);
 // Reordena cards já existentes por Termômetro (card criado antes da regra
 // existir, ou criado à mão) — o import só ordena card novo, na hora.
 router.post('/:id/reordenar-termometro', reordenarTermometro);
+// Converte o campo Termômetro (de um import antigo, texto livre) pra
+// seleção — Quente/Médio/Frio no <select>, sem perder valor já em uso.
+router.post('/:id/termometro-selecionavel', termometroSelecionavel);
 
 // Colunas (criação a partir do quadro pai — RESTful natural)
 router.post('/:id/colunas', criarColuna);

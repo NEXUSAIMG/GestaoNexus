@@ -26,6 +26,8 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
   const [erro, setErro] = useState('');
   const [reordenando, setReordenando] = useState(false);
   const [msgReordenar, setMsgReordenar] = useState('');
+  const [convertendo, setConvertendo] = useState(false);
+  const [msgConverter, setMsgConverter] = useState('');
 
   async function salvarMetadados() {
     setSalvando(true);
@@ -65,6 +67,23 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
       setErro(mensagemDeErro(err));
     } finally {
       setReordenando(false);
+    }
+  }
+
+  // Campo criado por import antigo nasceu como texto livre. Converte pra
+  // seleção (Quente/Médio/Frio) sem perder o que já tava preenchido.
+  async function tornarTermometroSelecionavel() {
+    setConvertendo(true);
+    setMsgConverter('');
+    setErro('');
+    try {
+      await api.post('/quadros/' + quadro.id + '/termometro-selecionavel');
+      setMsgConverter('Termômetro agora é campo de seleção (Quente/Médio/Frio).');
+      onRecarregar();
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    } finally {
+      setConvertendo(false);
     }
   }
 
@@ -180,24 +199,50 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
             campos={quadro.campos || []}
             onMudou={onRecarregar}
           />
-          {(quadro.campos || []).some((c) => semAcento(c.nome) === 'termometro') && (
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-              <div className="mb-1.5 text-xs text-slate-600">
-                Card criado antes do campo Termômetro (ou importado por uma planilha antiga) não
-                se reordena sozinho — só card novo já nasce na posição certa.
-              </div>
-              <button
-                type="button"
-                onClick={reordenarPorTermometro}
-                disabled={reordenando}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <ArrowDownUp size={11} />
-                {reordenando ? 'Reordenando…' : 'Reordenar cards existentes por Termômetro'}
-              </button>
-              {msgReordenar && <div className="mt-1.5 text-xs text-emerald-700">{msgReordenar}</div>}
-            </div>
-          )}
+          {(() => {
+            const campoTermometro = (quadro.campos || []).find((c) => semAcento(c.nome) === 'termometro');
+            if (!campoTermometro) return null;
+            return (
+              <>
+                {campoTermometro.tipo !== 'selecao' && (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div className="mb-1.5 text-xs text-slate-600">
+                      Termômetro veio de um import antigo como texto livre — pode ser digitado
+                      qualquer coisa. Converter pra seleção trava nas 3 opções (Quente/Médio/Frio)
+                      sem perder o que já tá preenchido.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={tornarTermometroSelecionavel}
+                      disabled={convertendo}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <SlidersHorizontal size={11} />
+                      {convertendo ? 'Convertendo…' : 'Tornar Termômetro selecionável'}
+                    </button>
+                    {msgConverter && <div className="mt-1.5 text-xs text-emerald-700">{msgConverter}</div>}
+                  </div>
+                )}
+
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="mb-1.5 text-xs text-slate-600">
+                    Card criado antes do campo Termômetro (ou importado por uma planilha antiga)
+                    não se reordena sozinho — só card novo já nasce na posição certa.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={reordenarPorTermometro}
+                    disabled={reordenando}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <ArrowDownUp size={11} />
+                    {reordenando ? 'Reordenando…' : 'Reordenar cards existentes por Termômetro'}
+                  </button>
+                  {msgReordenar && <div className="mt-1.5 text-xs text-emerald-700">{msgReordenar}</div>}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Sprint 36 — automações */}

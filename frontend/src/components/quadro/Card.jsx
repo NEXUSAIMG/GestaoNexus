@@ -52,8 +52,9 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
 
   // Termômetro preenchido: o card já está categorizado por ele (quente/
   // médio/frio pautam ordem e prioridade — ver ordenarPorTermometro no
-  // backend), então Prioridade e Prazo somem do card pra não duplicar
-  // sinal. Não apaga o dado, só para de mostrar aqui.
+  // backend), então Prioridade some do card pra não duplicar sinal. Prazo
+  // fica — é só informativo, independe do termômetro. Não apaga o dado,
+  // só para de mostrar aqui.
   const campoTermometro = campos.find((c) => semAcento(c.nome) === 'termometro');
   const valorTermometro = campoTermometro ? card.campos?.[campoTermometro.id] : null;
   const temTermometro = !!String(valorTermometro || '').trim();
@@ -62,7 +63,7 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
   // senão a informação apareceria duas vezes.
   const corSeloTermometro = !cliente && temTermometro ? corTermometro(valorTermometro) : null;
 
-  const prazo = temTermometro ? null : formatarPrazo(card.data_prazo);
+  const prazo = formatarPrazo(card.data_prazo);
 
   // Sprint 32
   const totalChk = Number(card.n_checklist_total || 0);
