@@ -16,7 +16,9 @@ import CardVinculos from './CardVinculos.jsx';
 import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
 import { ehCardCliente } from './FichaCliente.jsx';
-import { COR_CHIP, CORES, corForte, inputCls, PRIORIDADES } from './ui.js';
+import {
+  COR_CHIP, CORES, corForte, inputCls, PRIORIDADES, semAcento,
+} from './ui.js';
 import { PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
 /**
@@ -164,6 +166,15 @@ export default function ModalCard({
     camposDoQuadro,
   );
 
+  // Termômetro preenchido: o card já está categorizado por ele, então
+  // Prioridade/Estimativa/Pontos/Início/Prazo somem do formulário — não
+  // apaga o que já tava salvo, só para de mostrar/editar aqui enquanto o
+  // termômetro estiver preenchido. Card novo (sem cardId ainda) não tem
+  // valor de campo personalizado pra ler, então isso só entra em ação
+  // depois que o termômetro é preenchido e o card é reaberto.
+  const campoTermometro = camposDoQuadro.find((c) => semAcento(c.nome) === 'termometro');
+  const temTermometro = !!String((campoTermometro && valoresCampos[campoTermometro.id]) || '').trim();
+
   return (
     <ModalFrame
       titulo={editando ? 'Editar tarefa' : 'Nova tarefa'}
@@ -247,58 +258,67 @@ export default function ModalCard({
             />
           </div>
 
+          {temTermometro && (
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
+              Prioridade, Estimativa, Pontos, Início e Prazo ficam ocultos enquanto o Termômetro
+              está preenchido — o card já está categorizado por ele.
+            </p>
+          )}
+
           {/* Sprint 34 — prioridade / estimativa / pontos */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-900">
-                <span className="inline-flex items-center gap-1"><Flag size={12} /> Prioridade</span>
-              </label>
-              <div className="flex gap-1">
-                {PRIORIDADES.map((p) => (
-                  <button
-                    key={p.valor}
-                    type="button"
-                    onClick={() => setPrioridade(p.valor)}
-                    title={p.nome}
-                    className={[
-                      'flex-1 rounded-md border px-1 py-1.5 text-[11px] font-bold transition-all',
-                      p.chip,
-                      Number(prioridade) === p.valor
-                        ? 'ring-2 ring-offset-1 ring-nexus-700'
-                        : 'opacity-50 hover:opacity-100',
-                    ].join(' ')}
-                  >
-                    {p.sigla}
-                  </button>
-                ))}
+          {!temTermometro && (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-900">
+                  <span className="inline-flex items-center gap-1"><Flag size={12} /> Prioridade</span>
+                </label>
+                <div className="flex gap-1">
+                  {PRIORIDADES.map((p) => (
+                    <button
+                      key={p.valor}
+                      type="button"
+                      onClick={() => setPrioridade(p.valor)}
+                      title={p.nome}
+                      className={[
+                        'flex-1 rounded-md border px-1 py-1.5 text-[11px] font-bold transition-all',
+                        p.chip,
+                        Number(prioridade) === p.valor
+                          ? 'ring-2 ring-offset-1 ring-nexus-700'
+                          : 'opacity-50 hover:opacity-100',
+                      ].join(' ')}
+                    >
+                      {p.sigla}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-900">Estimativa (h)</label>
+                <input
+                  className={inputCls}
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={estimativa}
+                  onChange={(e) => setEstimativa(e.target.value)}
+                  placeholder="—"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-900">Pontos</label>
+                <input
+                  className={inputCls}
+                  type="number"
+                  min="0"
+                  value={pontos}
+                  onChange={(e) => setPontos(e.target.value)}
+                  placeholder="—"
+                />
               </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-900">Estimativa (h)</label>
-              <input
-                className={inputCls}
-                type="number"
-                step="0.5"
-                min="0"
-                value={estimativa}
-                onChange={(e) => setEstimativa(e.target.value)}
-                placeholder="—"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-900">Pontos</label>
-              <input
-                className={inputCls}
-                type="number"
-                min="0"
-                value={pontos}
-                onChange={(e) => setPontos(e.target.value)}
-                placeholder="—"
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={temTermometro ? '' : 'grid grid-cols-2 gap-3'}>
             <div>
               <label className="block text-sm font-medium text-slate-900 mb-1">
                 Responsáveis
@@ -317,36 +337,38 @@ export default function ModalCard({
                 <p className="mt-1 text-xs text-slate-500">Nenhuma pessoa ativa cadastrada.</p>
               )}
             </div>
-            <div className="space-y-2">
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Início</label>
-                <input
-                  type="date"
-                  className={inputCls}
-                  value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
-                />
+            {!temTermometro && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-900 mb-1">Início</label>
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-900 mb-1">Prazo</label>
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={dataPrazo}
+                    onChange={(e) => setDataPrazo(e.target.value)}
+                  />
+                  {dataPrazo && (
+                    <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prazoConcluido}
+                        onChange={(e) => setPrazoConcluido(e.target.checked)}
+                      />
+                      Prazo concluído
+                    </label>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-1">Prazo</label>
-                <input
-                  type="date"
-                  className={inputCls}
-                  value={dataPrazo}
-                  onChange={(e) => setDataPrazo(e.target.value)}
-                />
-                {dataPrazo && (
-                  <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={prazoConcluido}
-                      onChange={(e) => setPrazoConcluido(e.target.checked)}
-                    />
-                    Prazo concluído
-                  </label>
-                )}
-              </div>
-            </div>
+            )}
           </div>
 
           <div>
