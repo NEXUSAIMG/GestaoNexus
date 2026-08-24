@@ -7,7 +7,7 @@ import { podeVerQuadro } from './quadros.controller.js';
 import { publicarMudanca } from '../services/realtime.service.js';
 import {
   parseCSV, indexarCabecalho, semAcento,
-  colunasExtras, interpretarLinha, mapaCampos, chaveCampo,
+  colunasExtras, interpretarLinha, mapaCampos, chaveCampo, ordenarPorTermometro,
 } from '../utils/csv.js';
 
 /**
@@ -215,8 +215,11 @@ export async function previaCsv(req, res, next) {
       camposPorChave.set(chaveCampo(nome), { id: 'novo:' + chaveCampo(nome), nome: limparNome(nome), tipo: 'texto' });
     }
 
-    const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
-      .filter((c) => c.titulo);
+    // Termômetro reordena: quente primeiro, depois médio, depois frio — a
+    // amostra já mostra a ordem real que os cards vão nascer no quadro.
+    const itens = ordenarPorTermometro(
+      linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave)).filter((c) => c.titulo),
+    );
     const semTitulo = linhas.length - itens.length;
 
     // Quais já existem no quadro de destino (seriam pulados)?
@@ -437,10 +440,18 @@ export async function importarCsv(req, res, next) {
     let etiquetasCriadas = 0;
     const etiquetasAntes = etiquetaPorNome.size;
 
+    // Dedup primeiro, na ordem original da planilha — duas linhas com o
+    // mesmo título, é a primeira que fica. SÓ DEPOIS reordena por
+    // Termômetro: isso decide a posição (`ordem`) na coluna, não quem é
+    // criado ou pulado.
+    const aCriar = [];
     for (const item of itens) {
       if (existentes.has(item.titulo.toLowerCase())) { pulados += 1; continue; }
       existentes.add(item.titulo.toLowerCase());
+      aCriar.push(item);
+    }
 
+    for (const item of ordenarPorTermometro(aCriar)) {
       const { id: colunaId, casou } = acharColuna(colunas, item.coluna, fallbackId);
       ordemPorColuna[colunaId] = (ordemPorColuna[colunaId] || 0) + 1000;
 

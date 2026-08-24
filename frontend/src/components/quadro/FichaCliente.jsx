@@ -1,4 +1,5 @@
 import { Globe, Mail, Phone } from 'lucide-react';
+import { corTermometro } from './ui.js';
 
 /**
  * Ficha de cliente dentro do card.
@@ -48,16 +49,6 @@ export function ehCardCliente(etiquetasDoCard = [], camposDoQuadro = []) {
 
 // Campos que ocupam a linha inteira (valor longo ou clicável).
 const LARGURA_TOTAL = new Set(['Site', 'E-mail', 'Telefone/WhatsApp']);
-
-const CHIP_TERMOMETRO = {
-  quente: 'bg-red-100 text-red-800 border-red-200',
-  morno: 'bg-amber-100 text-amber-800 border-amber-200',
-  frio: 'bg-sky-100 text-sky-800 border-sky-200',
-};
-
-function normalizar(s) {
-  return String(s || '').trim().toLowerCase();
-}
 
 /** "(47) 99123-4567" -> "5547991234567" para o link do WhatsApp. */
 function paraWhatsapp(valor) {
@@ -118,7 +109,7 @@ export default function FichaCliente({ campos = [], valores = {}, responsaveis =
                 <span
                   className={[
                     'inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold',
-                    CHIP_TERMOMETRO[normalizar(valor)] || 'border-slate-200 bg-slate-100 text-slate-700',
+                    corTermometro(valor) || 'border-slate-200 bg-slate-100 text-slate-700',
                   ].join(' ')}
                 >
                   {valor}

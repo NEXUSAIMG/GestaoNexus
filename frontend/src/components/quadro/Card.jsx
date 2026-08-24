@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import {
   COR_CHIP, corForte, formatarPrazo, iniciais, prioridadeDe, formatarMinutos,
+  semAcento, corTermometro,
 } from './ui.js';
 import { estiloCapaCard } from '../../constants/kanbanVisual.js';
 import FichaCliente, { ehCardCliente } from './FichaCliente.jsx';
@@ -49,6 +50,14 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
   // Card com a etiqueta "Cliente" vira ficha comercial: os campos
   // personalizados aparecem no próprio card, sem precisar abrir.
   const cliente = ehCardCliente(etqs, campos);
+
+  // Termômetro do funil (Quente/Médio/Frio): selo colorido no topo do card,
+  // pra ver sem abrir. A Ficha de Cliente já mostra o mesmo campo quando o
+  // card tem a etiqueta "Cliente" — aqui só quando ela NÃO está sendo
+  // mostrada, senão a informação apareceria duas vezes.
+  const campoTermometro = !cliente && campos.find((c) => semAcento(c.nome) === 'termometro');
+  const valorTermometro = campoTermometro ? card.campos?.[campoTermometro.id] : null;
+  const corSeloTermometro = valorTermometro ? corTermometro(valorTermometro) : null;
 
   // Sprint 32
   const totalChk = Number(card.n_checklist_total || 0);
@@ -124,8 +133,16 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
         />
       )}
 
-      {(etqs.length > 0 || mostraPrio || bloqueado || ehSubtarefa) && (
+      {(etqs.length > 0 || mostraPrio || bloqueado || ehSubtarefa || corSeloTermometro) && (
         <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {corSeloTermometro && (
+            <span
+              className={'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold border ' + corSeloTermometro}
+              title={'Termômetro: ' + valorTermometro}
+            >
+              {valorTermometro}
+            </span>
+          )}
           {mostraPrio && (
             <span
               className={'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ' + prio.chip}

@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import {
   indexarCabecalho, colunasExtras, mapaCampos, interpretarLinha, normalizarValorCampoImport,
+  ordenarPorTermometro,
 } from '../backend/src/utils/csv.js';
 
 function ok(cond, msg) {
@@ -61,4 +62,40 @@ ok(normalizarValorCampoImport({ tipo: 'moeda' }, 'não é número') === null,
 ok(normalizarValorCampoImport({ tipo: 'selecao', opcoes: ['A', 'B'] }, 'C') === null,
   'opção de seleção fora da lista devolve null');
 
+// Termômetro: sem coluna de Prioridade na planilha, "quente" empurra a
+// prioridade do card pra Alta (1) — planilha não tem Prioridade nesse teste.
+ok(item.termometro === 'quente', 'valor bruto do termômetro capturado pra ordenação/prioridade');
+ok(item.prioridade === 1, 'termômetro "quente" sem coluna de Prioridade virou prioridade Alta (1)');
+
 console.log('\ntudo certo — colunas do CRM casam com campo personalizado ou viram descrição.');
+
+// ---------------------------------------------------------------------------
+// Ordenação por Termômetro: quente > médio/morno > frio > sem termômetro
+// reconhecido (que mantém a ordem original — "tratamento especial" é só
+// pra quem tem o campo preenchido).
+const fila = [
+  { titulo: 'Frio 1', termometro: 'Frio' },
+  { titulo: 'Sem termômetro 1', termometro: null },
+  { titulo: 'Quente 1', termometro: 'Quente' },
+  { titulo: 'Médio 1', termometro: 'Médio' },
+  { titulo: 'Quente 2', termometro: 'quente' }, // caixa diferente, mesma chave
+  { titulo: 'Morno 1', termometro: 'Morno' }, // sinônimo de Médio
+  { titulo: 'Sem termômetro 2', termometro: '' },
+  { titulo: 'Texto desconhecido', termometro: 'Abandonado' },
+];
+const ordenada = ordenarPorTermometro(fila).map((i) => i.titulo);
+ok(
+  ordenada.slice(0, 2).join(',') === 'Quente 1,Quente 2',
+  'os dois "quente" (caixa diferente) vêm primeiro, na ordem que já vinham: ' + ordenada.join(' | '),
+);
+ok(
+  ordenada.slice(2, 4).join(',') === 'Médio 1,Morno 1',
+  '"médio" e o sinônimo "morno" vêm em seguida: ' + ordenada.join(' | '),
+);
+ok(ordenada[4] === 'Frio 1', '"frio" vem depois de médio/morno');
+ok(
+  ordenada.slice(5).join(',') === 'Sem termômetro 1,Sem termômetro 2,Texto desconhecido',
+  'sem termômetro reconhecido mantém a ordem original que já tinha, por último: ' + ordenada.join(' | '),
+);
+
+console.log('\ntudo certo — quente/médio/frio ordenam o funil, o resto mantém a ordem que já tinha.');

@@ -205,6 +205,36 @@ export function normalizarValorCampoImport(campo, texto) {
   }
 }
 
+/**
+ * Termômetro -> prioridade do card (0=Urgente, 1=Alta, 2=Média, 3=Baixa) e
+ * -> posição no funil. "Morno" é sinônimo de "Médio" — nomenclatura antiga
+ * da Ficha de Cliente que ainda pode aparecer em planilha de gente.
+ */
+const PRIORIDADE_POR_TERMOMETRO = {
+  quente: 1, medio: 2, morno: 2, frio: 3,
+};
+
+/** Posição no funil (0=primeiro): quente > médio/morno > frio > sem
+ * termômetro reconhecido (fica na ordem em que já vinha na planilha). */
+const RANK_TERMOMETRO = { quente: 0, medio: 1, morno: 1, frio: 2 };
+export function rankTermometro(valor) {
+  return RANK_TERMOMETRO[chaveCampo(valor || '')] ?? 3;
+}
+
+/**
+ * Reordena os itens interpretados por Termômetro — quente primeiro, depois
+ * médio, depois frio; sem termômetro reconhecido mantém a posição relativa
+ * que já tinha na planilha (Array.prototype.sort é estável). "Tratamento
+ * especial" é só pra quem tem o campo preenchido; o resto não muda de lugar
+ * por causa disso.
+ */
+export function ordenarPorTermometro(itens) {
+  return itens
+    .map((item, idx) => ({ item, idx, rank: rankTermometro(item.termometro) }))
+    .sort((a, b) => (a.rank - b.rank) || (a.idx - b.idx))
+    .map((x) => x.item);
+}
+
 /** Transforma uma linha da planilha no card que ela vai virar. */
 export function interpretarLinha(linha, col, extras, camposPorChave) {
   const em = (i) => (i >= 0 && linha[i] != null ? String(linha[i]).trim() : '');
@@ -226,12 +256,16 @@ export function interpretarLinha(linha, col, extras, camposPorChave) {
   if (em(col.cliente)) textoExtra.push('Cliente: ' + em(col.cliente));
 
   // Colunas extras: casa com campo personalizado do quadro quando dá; senão
-  // vira mais uma linha de texto na descrição.
+  // vira mais uma linha de texto na descrição. "Termômetro" (Quente/Médio/
+  // Frio) sai capturado à parte, além de virar campo — ele também pauta
+  // ordem e prioridade do card (ver PRIORIDADE_POR_TERMOMETRO abaixo).
   const camposValores = {};
   const extrasNaDescricao = [];
+  let termometro = null;
   for (const { i, nome } of extras) {
     const valor = em(i);
     if (!valor) continue;
+    if (chaveCampo(nome) === 'termometro') termometro = valor;
     const campo = camposPorChave?.get(chaveCampo(nome));
     const normalizado = campo ? normalizarValorCampoImport(campo, valor) : null;
     if (campo && normalizado !== null && normalizado !== undefined) {
@@ -243,10 +277,19 @@ export function interpretarLinha(linha, col, extras, camposPorChave) {
   }
   if (textoExtra.length) descricao = (descricao ? descricao + '\n\n' : '') + textoExtra.join('\n');
 
+  // Sem coluna de Prioridade na planilha, o Termômetro serve de substituto
+  // razoável — "quente" é lead que não pode esperar. Prioridade explícita
+  // da planilha sempre manda quando existir; isso só preenche o vazio.
+  let prioridade = col.prioridade >= 0 ? mapPrioridade(em(col.prioridade)) : 2;
+  if (col.prioridade < 0 && termometro) {
+    const p = PRIORIDADE_POR_TERMOMETRO[chaveCampo(termometro)];
+    if (p !== undefined) prioridade = p;
+  }
+
   return {
     titulo: em(col.titulo).slice(0, 255),
     descricao: descricao ? descricao.slice(0, 20000) : null,
-    prioridade: col.prioridade >= 0 ? mapPrioridade(em(col.prioridade)) : 2,
+    prioridade,
     estimativa_horas: col.estimativa >= 0 ? parseHoras(em(col.estimativa)) : null,
     data_prazo: col.prazo >= 0 ? parseData(em(col.prazo)) : null,
     etiquetas: [...new Set(etiquetas.map((e) => e.slice(0, 50)))],
@@ -254,5 +297,6 @@ export function interpretarLinha(linha, col, extras, camposPorChave) {
     responsavel: em(col.responsavel),
     campos_valores: camposValores,
     extras_na_descricao: extrasNaDescricao,
+    termometro,
   };
 }
