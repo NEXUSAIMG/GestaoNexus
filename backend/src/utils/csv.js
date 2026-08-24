@@ -87,7 +87,7 @@ export function indexarCabecalho(cabecalho) {
     etiquetas: pega('etiquetas', 'labels', 'tags'),
     categoria: pega('categoria'),
     cliente: pega('cliente'),
-    coluna: pega('coluna', 'lista', 'status', 'situacao', 'fase'),
+    coluna: pega('coluna', 'lista', 'status', 'status atual', 'situacao', 'fase'),
     responsavel: pega('responsavel', 'responsaveis', 'dono', 'atribuido a'),
     prazo: pega('prazo', 'data_prazo', 'vencimento', 'data de entrega', 'entrega'),
   };
@@ -126,4 +126,133 @@ export function parseData(v) {
     return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
   return null;
+}
+
+/**
+ * Colunas fora do formato "uma linha, um card": informação que hoje o
+ * import descarta em silêncio (CRM/funil de vendas exportado em planilha
+ * costuma trazer isso — Origem, Termômetro, Cidade, Faturamento...).
+ *
+ * A saída: casa com um *campo personalizado* já cadastrado no quadro (mesma
+ * tabela que alimenta a Ficha de Cliente — ver `FichaCliente.jsx` no
+ * frontend); sem campo correspondente, o valor vai pra descrição do card em
+ * vez de sumir.
+ */
+
+/** Nomes de campo fixo já tratados por `interpretarLinha` — o resto do
+ * cabeçalho é "extra" (campo personalizado do quadro, ou texto solto). */
+const CAMPOS_FIXOS = [
+  'titulo', 'descricao', 'prioridade', 'estimativa', 'tipo', 'etiquetas',
+  'categoria', 'cliente', 'coluna', 'responsavel', 'prazo',
+];
+
+/** Chave de comparação de nome de campo: sem acento/caixa e sem espaço, pra
+ * "Telefone / WhatsApp" (planilha) casar com "Telefone/WhatsApp" (campo). */
+export function chaveCampo(s) {
+  return semAcento(s).replace(/\s+/g, '');
+}
+
+/** Colunas do cabeçalho que não são nenhum campo fixo — candidatas a campo
+ * personalizado do quadro ou a texto extra na descrição. */
+export function colunasExtras(cabecalho, col) {
+  const usados = new Set(CAMPOS_FIXOS.map((k) => col[k]).filter((i) => i >= 0));
+  return cabecalho
+    .map((h, i) => ({ i, nome: String(h ?? '').trim() }))
+    .filter(({ i, nome }) => nome && !usados.has(i));
+}
+
+/** Mapa chave-normalizada -> campo, pra casar cabeçalho da planilha com
+ * campo personalizado do quadro (`quadros_campos`). */
+export function mapaCampos(campos) {
+  return new Map(campos.map((c) => [chaveCampo(c.nome), c]));
+}
+
+/**
+ * Converte o texto da planilha pro formato do campo personalizado.
+ * Best-effort: se não der pra interpretar com confiança (moeda em formato
+ * estranho, opção de seleção que não bate, pessoa — exigiria casar nome
+ * numa consulta à parte), devolve null e o valor vira texto na descrição em
+ * vez de travar o import por um campo malformado.
+ *
+ * ponytail: "pessoa" fica de fora (exigiria a mesma consulta de pessoas do
+ * import inteiro, duplicada na prévia); casa por nome quando alguém pedir.
+ */
+export function normalizarValorCampoImport(campo, texto) {
+  switch (campo.tipo) {
+    case 'texto':
+      return texto.slice(0, 500);
+    case 'url':
+      return (/^https?:\/\//i.test(texto) ? texto : 'https://' + texto).slice(0, 500);
+    case 'numero':
+    case 'moeda': {
+      const n = parseHoras(texto);
+      return n == null ? null : n;
+    }
+    case 'data':
+      return parseData(texto);
+    case 'checkbox': {
+      const v = semAcento(texto);
+      if (['sim', 'true', '1', 'x', 'verdadeiro'].includes(v)) return true;
+      if (['nao', 'false', '0', 'falso'].includes(v)) return false;
+      return null;
+    }
+    case 'selecao': {
+      const opcoes = Array.isArray(campo.opcoes) ? campo.opcoes : [];
+      return opcoes.find((o) => semAcento(o) === semAcento(texto)) || null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Transforma uma linha da planilha no card que ela vai virar. */
+export function interpretarLinha(linha, col, extras, camposPorChave) {
+  const em = (i) => (i >= 0 && linha[i] != null ? String(linha[i]).trim() : '');
+
+  const etiquetas = [];
+  if (em(col.tipo)) etiquetas.push(em(col.tipo));
+  if (em(col.etiquetas)) {
+    for (const e of em(col.etiquetas).split(/[;,]/)) {
+      const t = e.trim();
+      if (t) etiquetas.push(t);
+    }
+  }
+
+  // Categoria e Cliente entram na descrição quando não há coluna própria de
+  // descrição — é onde a informação fica visível sem inventar campo.
+  let descricao = em(col.descricao);
+  const textoExtra = [];
+  if (em(col.categoria)) textoExtra.push('Categoria: ' + em(col.categoria));
+  if (em(col.cliente)) textoExtra.push('Cliente: ' + em(col.cliente));
+
+  // Colunas extras: casa com campo personalizado do quadro quando dá; senão
+  // vira mais uma linha de texto na descrição.
+  const camposValores = {};
+  const extrasNaDescricao = [];
+  for (const { i, nome } of extras) {
+    const valor = em(i);
+    if (!valor) continue;
+    const campo = camposPorChave?.get(chaveCampo(nome));
+    const normalizado = campo ? normalizarValorCampoImport(campo, valor) : null;
+    if (campo && normalizado !== null && normalizado !== undefined) {
+      camposValores[campo.id] = normalizado;
+    } else {
+      textoExtra.push(nome + ': ' + valor);
+      extrasNaDescricao.push(nome);
+    }
+  }
+  if (textoExtra.length) descricao = (descricao ? descricao + '\n\n' : '') + textoExtra.join('\n');
+
+  return {
+    titulo: em(col.titulo).slice(0, 255),
+    descricao: descricao ? descricao.slice(0, 20000) : null,
+    prioridade: col.prioridade >= 0 ? mapPrioridade(em(col.prioridade)) : 2,
+    estimativa_horas: col.estimativa >= 0 ? parseHoras(em(col.estimativa)) : null,
+    data_prazo: col.prazo >= 0 ? parseData(em(col.prazo)) : null,
+    etiquetas: [...new Set(etiquetas.map((e) => e.slice(0, 50)))],
+    coluna: em(col.coluna),
+    responsavel: em(col.responsavel),
+    campos_valores: camposValores,
+    extras_na_descricao: extrasNaDescricao,
+  };
 }
