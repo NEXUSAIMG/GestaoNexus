@@ -91,6 +91,22 @@ function tipoColunaAuto(nome) {
   return 'em_andamento';
 }
 
+/** Opções fixas do Termômetro quando ele é criado como campo de seleção
+ * (em vez de texto livre) — pedido explícito: só Quente/Médio/Frio. */
+const OPCOES_TERMOMETRO = ['Quente', 'Médio', 'Frio'];
+
+/**
+ * Tipo/opções de um campo personalizado criado automaticamente. Termômetro
+ * nasce "seleção" com as 3 opções do funil — texto livre deixaria digitar
+ * "quentao"/"morno-ish" e quebrar o casamento com a cor do selo e a
+ * ordenação. O resto continua texto (mesma lógica de sempre: aceita
+ * qualquer coisa, nunca falha o import por um campo malformado).
+ */
+function defCampoNovo(nome) {
+  if (chaveCampo(nome) === 'termometro') return { tipo: 'selecao', opcoes: OPCOES_TERMOMETRO };
+  return { tipo: 'texto', opcoes: null };
+}
+
 /** Lê o arquivo do multer e devolve as linhas + o mapa de colunas. */
 async function lerPlanilha(arquivo) {
   const texto = await fs.readFile(arquivo.path, 'utf8');
@@ -212,7 +228,9 @@ export async function previaCsv(req, res, next) {
       !camposPorChave.has(chaveCampo(nome)) && valoresDistintos(linhas, i).length > 0
     ));
     for (const { nome } of camposNovos) {
-      camposPorChave.set(chaveCampo(nome), { id: 'novo:' + chaveCampo(nome), nome: limparNome(nome), tipo: 'texto' });
+      camposPorChave.set(chaveCampo(nome), {
+        id: 'novo:' + chaveCampo(nome), nome: limparNome(nome), ...defCampoNovo(nome),
+      });
     }
 
     // Termômetro reordena: quente primeiro, depois médio, depois frio — a
@@ -341,10 +359,11 @@ export async function importarCsv(req, res, next) {
     }
 
     // Campo personalizado que a planilha pede e o quadro ainda não tem:
-    // cria na hora (tipo texto). É o que faz a importação funcionar sempre,
-    // pra qualquer quadro escolhido no momento, sem exigir que alguém tenha
-    // configurado os campos antes (a prévia já mostrou que isso ia
-    // acontecer — ver camposPersonalizadosNovos em previaCsv).
+    // cria na hora (texto, salvo Termômetro — ver defCampoNovo). É o que
+    // faz a importação funcionar sempre, pra qualquer quadro escolhido no
+    // momento, sem exigir que alguém tenha configurado os campos antes (a
+    // prévia já mostrou que isso ia acontecer — ver camposPersonalizadosNovos
+    // em previaCsv).
     let proximaOrdemCampo = camposPorChave.size;
     let camposCriados = 0;
     for (const { i, nome } of extras) {
@@ -352,10 +371,11 @@ export async function importarCsv(req, res, next) {
       if (camposPorChave.has(chave)) continue;
       if (valoresDistintos(linhas, i).length === 0) continue;
       proximaOrdemCampo += 1;
+      const { tipo, opcoes } = defCampoNovo(nome);
       const { rows } = await client.query(
-        `INSERT INTO quadros_campos (quadro_id, nome, tipo, ordem)
-         VALUES ($1, $2, 'texto', $3) RETURNING id, nome, tipo, opcoes`,
-        [quadroId, limparNome(nome), proximaOrdemCampo],
+        `INSERT INTO quadros_campos (quadro_id, nome, tipo, opcoes, ordem)
+         VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id, nome, tipo, opcoes`,
+        [quadroId, limparNome(nome), tipo, opcoes ? JSON.stringify(opcoes) : null, proximaOrdemCampo],
       );
       camposPorChave.set(chave, rows[0]);
       camposCriados += 1;
@@ -611,5 +631,60 @@ export async function reordenarTermometro(req, res, next) {
     publicarMudanca(req.params.id, 'reordenado_termometro');
 
     res.json({ cards_avaliados: cards.length, cards_reordenados: alterados });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/quadros/:id/termometro-selecionavel
+ *
+ * Converte o campo "Termômetro" já existente (texto livre, de um import
+ * feito antes dessa opção existir) pra seleção — só Quente/Médio/Frio no
+ * <select>, sem digitar variação. Trocar o TIPO de um campo em uso é
+ * bloqueado de propósito em outro lugar do sistema (protege contra
+ * corromper valor gravado — ver atualizarCampo); aqui é seguro porque só
+ * mexe no Termômetro e qualquer valor que já esteja em uso e não seja um
+ * dos 3 padrão entra como opção extra, pra ninguém perder o que já tinha
+ * preenchido.
+ */
+export async function termometroSelecionavel(req, res, next) {
+  try {
+    const isAdmin = !!req.pessoa?.administrador;
+    const { pode, podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, req.params.id);
+    if (!pode) throw new NaoEncontradoError('Quadro não encontrado');
+    if (!podeEditar) throw new NaoAutorizadoError('Sem permissão para editar este quadro.');
+
+    const campos = await query(
+      'SELECT id, nome, tipo FROM quadros_campos WHERE quadro_id = $1', [req.params.id],
+    );
+    const campo = campos.rows.find((c) => chaveCampo(c.nome) === 'termometro');
+    if (!campo) throw new AppError('Este quadro não tem um campo personalizado "Termômetro".', 400);
+    if (campo.tipo === 'selecao') {
+      return res.json({ ja_era_selecao: true, opcoes: OPCOES_TERMOMETRO });
+    }
+
+    const { rows: valores } = await query(
+      `SELECT DISTINCT v.valor #>> '{}' AS valor
+         FROM cards_campos_valores v
+        WHERE v.campo_id = $1 AND v.valor IS NOT NULL`,
+      [campo.id],
+    );
+    const extras = valores
+      .map((v) => v.valor)
+      .filter((v) => v && !OPCOES_TERMOMETRO.some((o) => semAcento(o) === semAcento(v)));
+    const opcoes = [...OPCOES_TERMOMETRO, ...extras];
+
+    await query(
+      "UPDATE quadros_campos SET tipo = 'selecao', opcoes = $1::jsonb WHERE id = $2",
+      [JSON.stringify(opcoes), campo.id],
+    );
+
+    registrarAcao({
+      acao: 'quadro.termometro_virou_selecao',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: { quadro_id: req.params.id, campo_id: campo.id, opcoes },
+      req,
+    });
+
+    res.json({ ok: true, opcoes });
   } catch (err) { next(err); }
 }

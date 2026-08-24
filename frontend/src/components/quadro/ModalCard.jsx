@@ -38,6 +38,19 @@ const ABAS = [
   { id: 'historico', nome: 'Histórico', icone: History },
 ];
 
+// Colunas de estágio do funil (import CSV) que não agregam nada no dia a
+// dia do card — pedido explícito pra sumir da seção "Campos do quadro".
+// O campo continua existindo (Configurações → Campos personalizados);
+// isso só tira ele da vista no card.
+const CAMPOS_OCULTOS_NO_CARD = new Set([
+  'reuniao de apresentacao',
+  'data do ultimo contato',
+  'enviar onboarding e aguardar (2 dias)',
+  'reuniao de apresentacao do dashboard',
+  'em desenvolvimento (3 dias)',
+  'pronto para ativacao',
+].map(semAcento));
+
 export default function ModalCard({
   cardId, colunaId, quadro, onFechar, onSalvo, onExtrasMudou, aoAbrirCard,
 }) {
@@ -158,6 +171,12 @@ export default function ModalCard({
 
   const podeEditar = !!quadro.pode_editar;
   const camposDoQuadro = quadro.campos || [];
+  // Campos do funil comercial que não interessam no dia a dia do card —
+  // continuam existindo no quadro (histórico do import), só não aparecem
+  // mais aqui.
+  const camposVisiveisNoCard = camposDoQuadro.filter(
+    (c) => !CAMPOS_OCULTOS_NO_CARD.has(semAcento(c.nome)),
+  );
 
   // A ficha comercial é disparada pela etiqueta "Cliente" — e reage na hora
   // em que a pessoa marca a etiqueta, antes mesmo de salvar.
@@ -260,8 +279,9 @@ export default function ModalCard({
 
           {temTermometro && (
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
-              Prioridade, Estimativa, Pontos, Início e Prazo ficam ocultos enquanto o Termômetro
-              está preenchido — o card já está categorizado por ele.
+              Prioridade, Estimativa, Pontos e Início ficam ocultos enquanto o Termômetro está
+              preenchido — o card já está categorizado por ele. Prazo continua disponível, é só
+              informativo.
             </p>
           )}
 
@@ -318,7 +338,7 @@ export default function ModalCard({
             </div>
           )}
 
-          <div className={temTermometro ? '' : 'grid grid-cols-2 gap-3'}>
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-900 mb-1">
                 Responsáveis
@@ -337,8 +357,8 @@ export default function ModalCard({
                 <p className="mt-1 text-xs text-slate-500">Nenhuma pessoa ativa cadastrada.</p>
               )}
             </div>
-            {!temTermometro && (
-              <div className="space-y-2">
+            <div className="space-y-2">
+              {!temTermometro && (
                 <div>
                   <label className="block text-sm font-medium text-slate-900 mb-1">Início</label>
                   <input
@@ -348,27 +368,27 @@ export default function ModalCard({
                     onChange={(e) => setDataInicio(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-900 mb-1">Prazo</label>
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={dataPrazo}
-                    onChange={(e) => setDataPrazo(e.target.value)}
-                  />
-                  {dataPrazo && (
-                    <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={prazoConcluido}
-                        onChange={(e) => setPrazoConcluido(e.target.checked)}
-                      />
-                      Prazo concluído
-                    </label>
-                  )}
-                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-1">Prazo</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={dataPrazo}
+                  onChange={(e) => setDataPrazo(e.target.value)}
+                />
+                {dataPrazo && (
+                  <label className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={prazoConcluido}
+                      onChange={(e) => setPrazoConcluido(e.target.checked)}
+                    />
+                    Prazo concluído
+                  </label>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           <div>
@@ -449,7 +469,7 @@ export default function ModalCard({
             />
           </div>
 
-          {editando && camposDoQuadro.length > 0 && (
+          {editando && camposVisiveisNoCard.length > 0 && (
             <div className="border-t border-slate-200 pt-3">
               <h3 className="mb-1 text-sm font-semibold text-slate-900">
                 {ehCliente ? 'Dados do cliente' : 'Campos do quadro'}
@@ -461,7 +481,7 @@ export default function ModalCard({
               )}
               <CardCampos
                 cardId={cardId}
-                campos={camposDoQuadro}
+                campos={camposVisiveisNoCard}
                 valoresIniciais={valoresCampos}
                 pessoas={pessoas}
                 podeEditar={podeEditar}
