@@ -4,6 +4,54 @@ Referência rápida pra não redescobrir isso a cada sessão de teste. Passo a
 passo completo está em `testes/README.md`; aqui só o que muda de sessão pra
 sessão (credenciais, portas, comandos do dia a dia).
 
+## Estado do trabalho (atualizado 24/08/2026)
+
+Tudo abaixo está na branch **`fix/importar-csv-campos-personalizados`**
+(8 commits sobre `main`, push feito, **PR ainda não aberto** — perguntei
+duas vezes, sem resposta ainda). Se a próxima sessão for continuar isso,
+primeiro `git log --oneline main..fix/importar-csv-campos-personalizados`
+pra ver se algo mudou, e perguntar se já foi mergeado/deployado.
+
+O que já foi construído, nessa ordem:
+
+1. **Import de CSV reconhece campo personalizado do quadro** (não só os
+   campos fixos do card) e casa "Status Atual"/"Coluna" com coluna do
+   Kanban — sem casar, cai na descrição, nunca é descartado.
+2. **Import cria automaticamente** campo personalizado e coluna do Kanban
+   que faltam, pra qualquer quadro escolhido na hora — não exige setup
+   manual antes.
+3. **Termômetro (Quente/Médio/Frio)**: ordena os cards na coluna (quente
+   primeiro), vira prioridade padrão quando a planilha não tem coluna de
+   Prioridade, ganha selo colorido no card, e agora é campo de **seleção**
+   (não texto livre) — import novo já cria assim; quadro com campo antigo
+   (texto) tem botão "Tornar Termômetro selecionável" em Configurações.
+   Card com Termômetro preenchido esconde Prioridade/Estimativa/Pontos/
+   Início (Prazo NÃO esconde mais — pedido explícito, é só informativo).
+   Botão "Reordenar cards existentes por Termômetro" pra quem já existia
+   antes dessa regra.
+4. **6 campos de etapa do funil** (Reunião de apresentação, Data do último
+   contato, Enviar Onboarding e Aguardar, Reunião de Apresentação do
+   Dashboard, Em Desenvolvimento, Pronto para ativação) saem da tela do
+   card — continuam existindo no quadro, só não poluem mais a visão.
+5. **Mover card pra outro quadro** (`POST /cards/:id/mover-quadro`):
+   recusava antes ("Não é possível mover cards entre quadros"). Agora
+   preserva checklist/comentário/anexo; recusa se o card tem subtarefa;
+   etiqueta/campo personalizado do quadro de origem ficam órfãos (dado
+   não apaga, só some da tela).
+6. **Trocar a equipe dona do quadro** (`PUT /quadros/:id` aceita
+   `equipe_id`, só admin): o pedido real por trás do item 5 era "comercial
+   não consegue editar Atividade Comercial porque tá sob Desenvolvimento"
+   — resolvido trocando o dono do quadro, SEM mexer em nenhum dos 223
+   cards (mover card por card destruiria campo personalizado/etiqueta à
+   toa). Essa é a ferramenta certa pra esse tipo de pedido — se aparecer
+   de novo "preciso mover N cards pra outra equipe", provavelmente é isso
+   e não o item 5.
+
+O CSV real do usuário (228 linhas, cadastro de cartórios — nome, e-mail,
+telefone, faturamento) está em `docs/Pipeline Seu Cartório...csv`,
+propositalmente **fora do git** (dado real de cliente). Se sumir do disco,
+pedir de novo antes de continuar testando com dado real.
+
 ## Credenciais
 
 | | |
