@@ -41,7 +41,6 @@ export function CardSortable({ card, etiquetas, campos, aoClicar, marcado, aoMar
 }
 
 export default function Card({ card, etiquetas, campos = [], aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva }) {
-  const prazo = formatarPrazo(card.data_prazo);
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
     .filter(Boolean);
@@ -51,13 +50,19 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
   // personalizados aparecem no próprio card, sem precisar abrir.
   const cliente = ehCardCliente(etqs, campos);
 
-  // Termômetro do funil (Quente/Médio/Frio): selo colorido no topo do card,
-  // pra ver sem abrir. A Ficha de Cliente já mostra o mesmo campo quando o
-  // card tem a etiqueta "Cliente" — aqui só quando ela NÃO está sendo
-  // mostrada, senão a informação apareceria duas vezes.
-  const campoTermometro = !cliente && campos.find((c) => semAcento(c.nome) === 'termometro');
+  // Termômetro preenchido: o card já está categorizado por ele (quente/
+  // médio/frio pautam ordem e prioridade — ver ordenarPorTermometro no
+  // backend), então Prioridade e Prazo somem do card pra não duplicar
+  // sinal. Não apaga o dado, só para de mostrar aqui.
+  const campoTermometro = campos.find((c) => semAcento(c.nome) === 'termometro');
   const valorTermometro = campoTermometro ? card.campos?.[campoTermometro.id] : null;
-  const corSeloTermometro = valorTermometro ? corTermometro(valorTermometro) : null;
+  const temTermometro = !!String(valorTermometro || '').trim();
+  // A Ficha de Cliente já mostra o mesmo campo quando o card tem a
+  // etiqueta "Cliente" — o selo aqui só quando ela NÃO está sendo mostrada,
+  // senão a informação apareceria duas vezes.
+  const corSeloTermometro = !cliente && temTermometro ? corTermometro(valorTermometro) : null;
+
+  const prazo = temTermometro ? null : formatarPrazo(card.data_prazo);
 
   // Sprint 32
   const totalChk = Number(card.n_checklist_total || 0);
@@ -69,7 +74,7 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
 
   // Sprint 34
   const prio = prioridadeDe(card.prioridade);
-  const mostraPrio = Number(card.prioridade ?? 2) !== 2;
+  const mostraPrio = !temTermometro && Number(card.prioridade ?? 2) !== 2;
   const bloqueado = !!card.bloqueado || Number(card.n_bloqueadores || 0) > 0;
   const nBloqueia = Number(card.n_bloqueia || 0);
   const nSub = Number(card.n_subtarefas || 0);
