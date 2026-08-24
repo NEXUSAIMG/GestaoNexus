@@ -34,6 +34,28 @@ export function corForte(token, tom = '-400') {
   return base.replace('-100', tom);
 }
 
+/** Sem acento/caixa — pra casar "Termômetro"/"Termometro", "Médio"/"medio". */
+export function semAcento(s) {
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+// ---------------------------------------------------------------------------
+// Termômetro (campo personalizado do funil comercial: Quente/Médio/Frio)
+// ---------------------------------------------------------------------------
+// "Morno" é sinônimo de "Médio" — nomenclatura antiga da Ficha de Cliente
+// que ainda pode aparecer em quadro configurado antes dessa mudança.
+const COR_TERMOMETRO = {
+  quente: 'bg-red-100 text-red-800 border-red-200',
+  medio: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  morno: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  frio: 'bg-blue-100 text-blue-800 border-blue-200',
+};
+
+/** Classe do selo de Termômetro, ou null se o valor não é um dos 3 conhecidos. */
+export function corTermometro(valor) {
+  return COR_TERMOMETRO[semAcento(valor)] || null;
+}
+
 // ---------------------------------------------------------------------------
 // Sprint 34 — prioridade
 // ---------------------------------------------------------------------------
