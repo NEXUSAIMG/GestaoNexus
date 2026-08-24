@@ -850,6 +850,112 @@ export async function mover(req, res, next) {
   }
 }
 
+const moverQuadroSchema = z.object({
+  quadro_id: z.string().uuid(),
+  coluna_id: z.string().uuid(),
+});
+
+/**
+ * POST /api/cards/:id/mover-quadro
+ *
+ * Move o card pra outro quadro de verdade — não é o /mover (que só troca de
+ * coluna dentro do MESMO quadro; entre quadros ele recusa de propósito).
+ * Preserva título, descrição, checklists, comentários, anexos, histórico:
+ * só troca quadro_id/coluna_id.
+ *
+ * Não replica a lógica de fluxo do /mover (WIP limit, gate de bloqueador,
+ * automação, hook de instância de processo) — isso é workflow do quadro de
+ * ORIGEM; faz sentido pra "arrastar pra próxima coluna", não pra "relocar
+ * pra outro quadro/equipe".
+ *
+ * Etiqueta e campo personalizado são por quadro: o que o card tinha do
+ * quadro de origem fica órfão (o valor não é apagado do banco, só some da
+ * tela — quadro novo não conhece aquela etiqueta/campo). Se o card tiver
+ * subtarefa, a mudança é recusada: hierarquia cruzando quadro quebra a
+ * regra que já existe em "criarSubtarefa" (pai e filho no mesmo quadro).
+ */
+export async function moverQuadro(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const cAtual = await query(
+      'SELECT id, quadro_id, coluna_id FROM cards WHERE id = $1 AND arquivado_em IS NULL',
+      [req.params.id],
+    );
+    if (!cAtual.rows[0]) throw new NaoEncontradoError('Card não encontrado');
+
+    const isAdmin = !!req.pessoa?.administrador;
+    const origem = await podeVerQuadro(req.pessoa.id, isAdmin, cAtual.rows[0].quadro_id);
+    if (!origem.podeEditar) throw new NaoAutorizadoError('Sem permissão no quadro de origem.');
+
+    const { quadro_id: quadroDestinoId, coluna_id: colunaDestinoId } = moverQuadroSchema.parse(req.body);
+    if (quadroDestinoId === cAtual.rows[0].quadro_id) {
+      throw new AppError('O card já está nesse quadro.', 400);
+    }
+
+    const destino = await podeVerQuadro(req.pessoa.id, isAdmin, quadroDestinoId);
+    if (!destino.pode) throw new NaoEncontradoError('Quadro de destino não encontrado');
+    if (!destino.podeEditar) throw new NaoAutorizadoError('Sem permissão no quadro de destino.');
+
+    const colR = await query(
+      'SELECT id, nome, quadro_id FROM colunas WHERE id = $1 AND arquivada_em IS NULL',
+      [colunaDestinoId],
+    );
+    if (!colR.rows[0] || colR.rows[0].quadro_id !== quadroDestinoId) {
+      throw new AppError('Coluna de destino não pertence ao quadro escolhido.', 400);
+    }
+
+    const filhos = await query(
+      'SELECT COUNT(*)::int AS n FROM cards WHERE card_pai_id = $1 AND arquivado_em IS NULL',
+      [req.params.id],
+    );
+    if (filhos.rows[0].n > 0) {
+      throw new AppError(
+        'Este card tem subtarefa(s). Desvincule ou mova as subtarefas antes de mover o card.', 400,
+      );
+    }
+
+    await client.query('BEGIN');
+
+    const ordemR = await client.query(
+      'SELECT COALESCE(MAX(ordem), 0) AS m FROM cards WHERE coluna_id = $1 AND arquivado_em IS NULL',
+      [colunaDestinoId],
+    );
+    const novaOrdem = Number(ordemR.rows[0].m) + 1000;
+
+    await client.query(
+      `UPDATE cards
+          SET quadro_id = $1, coluna_id = $2, ordem = $3,
+              coluna_desde = NOW(), card_pai_id = NULL
+        WHERE id = $4`,
+      [quadroDestinoId, colunaDestinoId, novaOrdem, req.params.id],
+    );
+
+    await client.query('COMMIT');
+
+    registrarAcao({
+      acao: 'card.moveu_quadro',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: {
+        card_id: req.params.id,
+        de_quadro_id: cAtual.rows[0].quadro_id,
+        para_quadro_id: quadroDestinoId,
+        para_coluna: colR.rows[0].nome,
+      },
+      req,
+    });
+
+    publicarMudanca(cAtual.rows[0].quadro_id, 'card_saiu_para_outro_quadro');
+    publicarMudanca(quadroDestinoId, 'card_chegou_de_outro_quadro');
+
+    res.json({ ok: true, quadro_id: quadroDestinoId, coluna_id: colunaDestinoId, ordem: novaOrdem });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 /**
  * POST /api/cards/:id/arquivar
  */

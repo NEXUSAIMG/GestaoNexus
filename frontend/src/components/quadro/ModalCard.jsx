@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Archive, Palette, ListChecks, Paperclip, MessageSquare,
-  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag, History,
+  ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag, History, FolderInput,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import MultiSelectPessoas from '../MultiSelectPessoas.jsx';
@@ -76,6 +76,15 @@ export default function ModalCard({
   const [estimativa, setEstimativa] = useState('');
   const [pontos, setPontos] = useState('');
   const [valoresCampos, setValoresCampos] = useState({});
+
+  // Mover pra outro quadro (equipe/funil diferente) — painel à parte,
+  // aberto sob demanda; não carrega a lista de quadros à toa.
+  const [movendo, setMovendo] = useState(false);
+  const [quadrosDisponiveis, setQuadrosDisponiveis] = useState(null);
+  const [quadroDestinoId, setQuadroDestinoId] = useState('');
+  const [colunasDestino, setColunasDestino] = useState([]);
+  const [colunaDestinoId, setColunaDestinoId] = useState('');
+  const [movendoSalvando, setMovendoSalvando] = useState(false);
 
   useEffect(() => {
     api.get('/pessoas')
@@ -158,6 +167,49 @@ export default function ModalCard({
       onSalvo();
     } catch (err) {
       setErro(mensagemDeErro(err));
+    }
+  }
+
+  async function abrirMoverQuadro() {
+    setMovendo(true);
+    setErro('');
+    if (quadrosDisponiveis) return;
+    try {
+      const r = await api.get('/quadros');
+      setQuadrosDisponiveis((r.data || []).filter((q) => q.id !== quadro.id));
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    }
+  }
+
+  async function escolherQuadroDestino(id) {
+    setQuadroDestinoId(id);
+    setColunaDestinoId('');
+    setColunasDestino([]);
+    if (!id) return;
+    try {
+      const r = await api.get('/quadros/' + id);
+      setColunasDestino(r.data.colunas || []);
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    }
+  }
+
+  async function confirmarMoverQuadro() {
+    if (!quadroDestinoId || !colunaDestinoId) return;
+    setMovendoSalvando(true);
+    setErro('');
+    try {
+      await api.post('/cards/' + cardId + '/mover-quadro', {
+        quadro_id: quadroDestinoId,
+        coluna_id: colunaDestinoId,
+      });
+      onFechar();
+      onSalvo();
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    } finally {
+      setMovendoSalvando(false);
     }
   }
 
@@ -515,19 +567,83 @@ export default function ModalCard({
             </div>
           )}
 
+          {editando && movendo && (
+            <div className="space-y-2 rounded-lg border border-nexus-200 bg-nexus-50/50 p-3">
+              <div className="text-xs font-medium text-slate-900">Mover para outro quadro</div>
+              <p className="text-[11px] text-slate-500">
+                Título, descrição, checklists, comentários e anexos vão junto. Etiqueta e campo
+                personalizado são deste quadro e não seguem — ficam salvos, mas somem da tela.
+              </p>
+              {quadrosDisponiveis === null ? (
+                <p className="text-xs text-slate-500">Carregando quadros…</p>
+              ) : (
+                <>
+                  <select
+                    className={inputCls}
+                    value={quadroDestinoId}
+                    onChange={(e) => escolherQuadroDestino(e.target.value)}
+                  >
+                    <option value="">Escolha o quadro de destino…</option>
+                    {quadrosDisponiveis.map((q) => (
+                      <option key={q.id} value={q.id}>{q.equipe_nome ? q.equipe_nome + ' — ' : ''}{q.nome}</option>
+                    ))}
+                  </select>
+                  {quadroDestinoId && (
+                    <select
+                      className={inputCls}
+                      value={colunaDestinoId}
+                      onChange={(e) => setColunaDestinoId(e.target.value)}
+                    >
+                      <option value="">Escolha a coluna…</option>
+                      {colunasDestino.map((c) => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                    </select>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={confirmarMoverQuadro}
+                      disabled={!quadroDestinoId || !colunaDestinoId || movendoSalvando}
+                      className="rounded-md bg-nexus-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-nexus-800 disabled:opacity-50"
+                    >
+                      {movendoSalvando ? 'Movendo…' : 'Mover'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMovendo(false); setQuadroDestinoId(''); setColunaDestinoId(''); }}
+                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {erro && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</div>
           )}
 
           <div className="flex items-center justify-between gap-2 pt-2">
             {editando ? (
-              <button
-                type="button"
-                onClick={arquivar}
-                className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
-              >
-                <Archive size={12} /> Arquivar
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={arquivar}
+                  className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                >
+                  <Archive size={12} /> Arquivar
+                </button>
+                {!movendo && (
+                  <button
+                    type="button"
+                    onClick={abrirMoverQuadro}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <FolderInput size={12} /> Mover para outro quadro
+                  </button>
+                )}
+              </div>
             ) : <span />}
 
             <div className="flex gap-2">

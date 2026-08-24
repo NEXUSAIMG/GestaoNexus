@@ -81,6 +81,9 @@ function descreverAcao(item) {
   if (item.acao === 'card.anexo.criou' && d.nome) return `anexou "${d.nome}"`;
   if (item.acao === 'card.anexo.excluiu' && d.nome) return `removeu o anexo "${d.nome}"`;
   if (item.acao === 'card.checklist.criou' && d.titulo) return `adicionou o checklist "${d.titulo}"`;
+  if (item.acao === 'card.moveu_quadro') {
+    return `moveu para outro quadro${d.para_coluna ? ` (coluna "${d.para_coluna}")` : ''}`;
+  }
   return ROTULO_ACAO[item.acao] || item.acao;
 }
 
