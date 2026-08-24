@@ -7,7 +7,7 @@ import { podeVerQuadro } from './quadros.controller.js';
 import { publicarMudanca } from '../services/realtime.service.js';
 import {
   parseCSV, indexarCabecalho, semAcento,
-  colunasExtras, interpretarLinha, mapaCampos, chaveCampo, ordenarPorTermometro,
+  colunasExtras, interpretarLinha, mapaCampos, chaveCampo, ordenarPorTermometro, rankTermometro,
 } from '../utils/csv.js';
 
 /**
@@ -540,4 +540,76 @@ export async function importarCsv(req, res, next) {
     client.release();
     if (req.file) { try { await fs.unlink(req.file.path); } catch { /* já foi */ } }
   }
+}
+
+/**
+ * POST /api/quadros/:id/reordenar-termometro
+ *
+ * Reordena os cards JÁ EXISTENTES no quadro por Termômetro — pra quando o
+ * card nasceu antes dessa regra existir (import antigo, ou criado à mão).
+ * A ordenação automática do import só vale pra card novo, na hora em que é
+ * criado; card que já existia não muda de posição sozinho depois — isso
+ * aqui é o botão "reordenar agora" pra esse caso.
+ *
+ * Sem termômetro reconhecido, o card mantém a posição relativa que já
+ * tinha (ordena por rank e, em empate, pela ordem atual — não embaralha
+ * quem não tem nada a ver com a mudança).
+ */
+export async function reordenarTermometro(req, res, next) {
+  try {
+    const isAdmin = !!req.pessoa?.administrador;
+    const { pode, podeEditar } = await podeVerQuadro(req.pessoa.id, isAdmin, req.params.id);
+    if (!pode) throw new NaoEncontradoError('Quadro não encontrado');
+    if (!podeEditar) throw new NaoAutorizadoError('Sem permissão para editar este quadro.');
+
+    const campos = await query(
+      'SELECT id, nome FROM quadros_campos WHERE quadro_id = $1', [req.params.id],
+    );
+    const campoTermometro = campos.rows.find((c) => chaveCampo(c.nome) === 'termometro');
+    if (!campoTermometro) {
+      throw new AppError('Este quadro não tem um campo personalizado "Termômetro".', 400);
+    }
+
+    const { rows: cards } = await query(
+      `SELECT c.id, c.coluna_id, c.ordem, cv.valor
+         FROM cards c
+         LEFT JOIN cards_campos_valores cv ON cv.card_id = c.id AND cv.campo_id = $2
+        WHERE c.quadro_id = $1 AND c.arquivado_em IS NULL
+        ORDER BY c.coluna_id, c.ordem`,
+      [req.params.id, campoTermometro.id],
+    );
+
+    // Agrupa por coluna e ordena por rank; empate (mesmo rank, ou nenhum
+    // termômetro reconhecido) desempata pela ordem atual — só quem tem
+    // termômetro muda de lugar de verdade.
+    const porColuna = new Map();
+    for (const c of cards) {
+      if (!porColuna.has(c.coluna_id)) porColuna.set(c.coluna_id, []);
+      porColuna.get(c.coluna_id).push(c);
+    }
+
+    let alterados = 0;
+    for (const [, doColuna] of porColuna) {
+      doColuna.sort((a, b) => (
+        rankTermometro(a.valor) - rankTermometro(b.valor) || a.ordem - b.ordem
+      ));
+      for (let i = 0; i < doColuna.length; i += 1) {
+        const novaOrdem = (i + 1) * 1000;
+        if (doColuna[i].ordem === novaOrdem) continue;
+        await query('UPDATE cards SET ordem = $1 WHERE id = $2', [novaOrdem, doColuna[i].id]);
+        alterados += 1;
+      }
+    }
+
+    registrarAcao({
+      acao: 'quadro.reordenou_termometro',
+      pessoa_acesso_id: req.pessoa.id,
+      detalhes: { quadro_id: req.params.id, cards_reordenados: alterados },
+      req,
+    });
+
+    publicarMudanca(req.params.id, 'reordenado_termometro');
+
+    res.json({ cards_avaliados: cards.length, cards_reordenados: alterados });
+  } catch (err) { next(err); }
 }

@@ -17,7 +17,7 @@ import {
 } from '../controllers/projetos.controller.js';
 import { metricasDoQuadro, forcarSnapshot } from '../controllers/metricas.controller.js';
 import { importarTrello } from '../controllers/importar-trello.controller.js';
-import { importarCsv, previaCsv } from '../controllers/importar-csv.controller.js';
+import { importarCsv, previaCsv, reordenarTermometro } from '../controllers/importar-csv.controller.js';
 import { uploaderCards } from '../utils/uploads.js';
 import {
   listar as listarAutomacoes, criar as criarAutomacao,
@@ -45,6 +45,10 @@ router.post('/importar-csv/previa', uploadPlanilha.single('arquivo'), previaCsv)
 router.post('/importar-csv', uploadPlanilha.single('arquivo'), importarCsv);
 router.put('/:id', atualizarQuadro);
 router.post('/:id/arquivar', arquivarQuadro);
+
+// Reordena cards já existentes por Termômetro (card criado antes da regra
+// existir, ou criado à mão) — o import só ordena card novo, na hora.
+router.post('/:id/reordenar-termometro', reordenarTermometro);
 
 // Colunas (criação a partir do quadro pai — RESTful natural)
 router.post('/:id/colunas', criarColuna);

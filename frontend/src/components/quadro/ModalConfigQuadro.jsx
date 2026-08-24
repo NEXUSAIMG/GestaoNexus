@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import {
-  Archive, Tag as TagIcon, Trash2, Pencil, Plus, SlidersHorizontal, Zap, Palette,
+  Archive, Tag as TagIcon, Trash2, Pencil, Plus, SlidersHorizontal, Zap, Palette, ArrowDownUp,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import ModalFrame from './ModalFrame.jsx';
 import { GestorCampos } from './CardCampos.jsx';
 import Automacoes from './Automacoes.jsx';
-import { COR_CHIP, CORES, inputCls } from './ui.js';
+import {
+  COR_CHIP, CORES, inputCls, semAcento,
+} from './ui.js';
 import { CORES_KANBAN, COR_HEX, PRESETS_VISUAL, PRESETS_LISTA } from '../../constants/kanbanVisual.js';
 
 /**
@@ -22,6 +24,8 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
   const [etiquetas, setEtiquetas] = useState(quadro.etiquetas);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [reordenando, setReordenando] = useState(false);
+  const [msgReordenar, setMsgReordenar] = useState('');
 
   async function salvarMetadados() {
     setSalvando(true);
@@ -39,6 +43,28 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
       setErro(mensagemDeErro(err));
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // Card criado antes do campo "Termômetro" existir (ou importado pelo CSV
+  // antigo) não se reordena sozinho — só card NOVO nasce já na posição
+  // certa. Isso aqui é o "reordenar agora" pros que já existem.
+  async function reordenarPorTermometro() {
+    setReordenando(true);
+    setMsgReordenar('');
+    setErro('');
+    try {
+      const r = await api.post('/quadros/' + quadro.id + '/reordenar-termometro');
+      setMsgReordenar(
+        r.data.cards_reordenados > 0
+          ? r.data.cards_reordenados + ' card(s) reordenado(s) por Termômetro.'
+          : 'Já estavam na ordem certa — nada mudou.',
+      );
+      onRecarregar();
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+    } finally {
+      setReordenando(false);
     }
   }
 
@@ -154,6 +180,24 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
             campos={quadro.campos || []}
             onMudou={onRecarregar}
           />
+          {(quadro.campos || []).some((c) => semAcento(c.nome) === 'termometro') && (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+              <div className="mb-1.5 text-xs text-slate-600">
+                Card criado antes do campo Termômetro (ou importado por uma planilha antiga) não
+                se reordena sozinho — só card novo já nasce na posição certa.
+              </div>
+              <button
+                type="button"
+                onClick={reordenarPorTermometro}
+                disabled={reordenando}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <ArrowDownUp size={11} />
+                {reordenando ? 'Reordenando…' : 'Reordenar cards existentes por Termômetro'}
+              </button>
+              {msgReordenar && <div className="mt-1.5 text-xs text-emerald-700">{msgReordenar}</div>}
+            </div>
+          )}
         </div>
 
         {/* Sprint 36 — automações */}
