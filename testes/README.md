@@ -60,6 +60,7 @@ npm run ui     --prefix testes         # fluxos de tela + capturas em testes/cap
 | `t-historico.mjs` | Histórico do card: de-para com nome de coluna, quem, quando, filtros, sem duplicar movimento |
 | `t-arquivados.mjs` | Renomear coluna, arquivar e restaurar card e coluna, coluna de origem arquivada |
 | `t-csv.mjs` | Planilha: BOM, `;` vs `,`, aspas, acento, datas BR e ISO, idempotência, mensagens de erro |
+| `t-campos-csv.mjs` | Coluna extra da planilha casando com campo personalizado do quadro (Ficha de Cliente) ou caindo na descrição — sem servidor, só `node testes/t-campos-csv.mjs` |
 | `t-layout.mjs` | Barra de rolagem no documento, barras aninhadas e tabela cortada, em 3 larguras |
 | `t-quadro.mjs` | Ficha de cliente no card, aba Histórico, renomear coluna, gaveta de arquivados |
 | `t-import-ui.mjs` | Modal de importação: escolher formato, prévia, importar |

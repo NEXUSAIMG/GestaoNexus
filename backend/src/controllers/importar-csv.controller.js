@@ -6,7 +6,8 @@ import { ehMembroDaEquipe } from './equipes.controller.js';
 import { podeVerQuadro } from './quadros.controller.js';
 import { publicarMudanca } from '../services/realtime.service.js';
 import {
-  parseCSV, indexarCabecalho, mapPrioridade, parseHoras, parseData, semAcento,
+  parseCSV, indexarCabecalho, semAcento,
+  colunasExtras, interpretarLinha, mapaCampos, chaveCampo,
 } from '../utils/csv.js';
 
 /**
@@ -26,7 +27,25 @@ import {
  * Idempotente: card cujo título já existe no quadro (não arquivado) é
  * pulado. Rodar duas vezes não duplica — mesmo comportamento do importador
  * de linha de comando.
+ *
+ * Colunas que não são nenhum campo fixo do card (Título, Descrição,
+ * Prioridade, Tipo, Etiquetas, Categoria, Cliente, Coluna, Responsável,
+ * Prazo) não são mais simplesmente jogadas fora: se o nome bate com um
+ * *campo personalizado* já cadastrado no quadro (mesma tabela que alimenta a
+ * Ficha de Cliente — Origem, Termômetro, Faturamento, Site, etc., ver
+ * `FichaCliente.jsx`), o valor vai pro campo; senão, entra como texto extra
+ * na descrição, pra não sumir. Só quadro EXISTENTE tem campos pra casar —
+ * quadro novo nasce sem nenhum, então tudo cai na descrição.
  */
+
+/** Colunas padrão de um quadro criado por este import — mesma lista usada
+ * na tela. Compartilhada entre a prévia (pra saber contra o que casar
+ * "Status Atual" quando o quadro ainda nem existe) e a gravação. */
+const COLUNAS_PADRAO = [
+  { nome: 'A fazer', ordem: 1000, tipo: 'backlog' },
+  { nome: 'Em andamento', ordem: 2000, tipo: 'em_andamento' },
+  { nome: 'Concluído', ordem: 3000, tipo: 'concluida' },
+];
 
 /** Lê o arquivo do multer e devolve as linhas + o mapa de colunas. */
 async function lerPlanilha(arquivo) {
@@ -51,39 +70,8 @@ async function lerPlanilha(arquivo) {
     );
   }
 
-  return { cabecalho, col, corpo: linhas.slice(1), delimitador };
-}
-
-/** Transforma uma linha da planilha no card que ela vai virar. */
-function interpretarLinha(linha, col) {
-  const em = (i) => (i >= 0 && linha[i] != null ? String(linha[i]).trim() : '');
-
-  const etiquetas = [];
-  if (em(col.tipo)) etiquetas.push(em(col.tipo));
-  if (em(col.etiquetas)) {
-    for (const e of em(col.etiquetas).split(/[;,]/)) {
-      const t = e.trim();
-      if (t) etiquetas.push(t);
-    }
-  }
-
-  // Categoria e Cliente entram na descrição quando não há coluna própria de
-  // descrição — é onde a informação fica visível sem inventar campo.
-  let descricao = em(col.descricao);
-  const extras = [];
-  if (em(col.categoria)) extras.push('Categoria: ' + em(col.categoria));
-  if (em(col.cliente)) extras.push('Cliente: ' + em(col.cliente));
-  if (extras.length) descricao = (descricao ? descricao + '\n\n' : '') + extras.join('\n');
-
   return {
-    titulo: em(col.titulo).slice(0, 255),
-    descricao: descricao ? descricao.slice(0, 20000) : null,
-    prioridade: col.prioridade >= 0 ? mapPrioridade(em(col.prioridade)) : 2,
-    estimativa_horas: col.estimativa >= 0 ? parseHoras(em(col.estimativa)) : null,
-    data_prazo: col.prazo >= 0 ? parseData(em(col.prazo)) : null,
-    etiquetas: [...new Set(etiquetas.map((e) => e.slice(0, 50)))],
-    coluna: em(col.coluna),
-    responsavel: em(col.responsavel),
+    cabecalho, col, corpo: linhas.slice(1), delimitador, extras: colunasExtras(cabecalho, col),
   };
 }
 
@@ -110,7 +98,13 @@ async function resolverDestino(req, corpo) {
     if (colunas.rows.length === 0) {
       throw new AppError('Este quadro não tem nenhuma coluna ativa para receber os cards.', 400);
     }
-    return { novo: false, quadro: q.rows[0], colunas: colunas.rows };
+    const campos = await query(
+      'SELECT id, nome, tipo, opcoes FROM quadros_campos WHERE quadro_id = $1',
+      [corpo.quadro_id],
+    );
+    return {
+      novo: false, quadro: q.rows[0], colunas: colunas.rows, campos: campos.rows,
+    };
   }
 
   if (!corpo.equipe_id) {
@@ -124,7 +118,10 @@ async function resolverDestino(req, corpo) {
   if (!e.rows[0]) throw new NaoEncontradoError('Equipe não encontrada');
   if (e.rows[0].arquivada_em) throw new AppError('Equipe está arquivada', 400);
 
-  return { novo: true, quadro: null, colunas: [] };
+  // Quadro novo nasce sem campo personalizado nenhum — nada pra casar ainda.
+  return {
+    novo: true, quadro: null, colunas: [], campos: [],
+  };
 }
 
 /** Casa o valor da coluna "Coluna" da planilha com uma coluna do quadro. */
@@ -157,10 +154,14 @@ export async function previaCsv(req, res, next) {
   try {
     if (!req.file) throw new AppError('Nenhum arquivo enviado.', 400);
 
-    const { cabecalho, col, corpo: linhas, delimitador } = await lerPlanilha(req.file);
+    const {
+      cabecalho, col, corpo: linhas, delimitador, extras,
+    } = await lerPlanilha(req.file);
     const destino = await resolverDestino(req, req.body);
+    const camposPorChave = mapaCampos(destino.campos);
 
-    const itens = linhas.map((l) => interpretarLinha(l, col)).filter((c) => c.titulo);
+    const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
+      .filter((c) => c.titulo);
     const semTitulo = linhas.length - itens.length;
 
     // Quais já existem no quadro de destino (seriam pulados)?
@@ -178,15 +179,37 @@ export async function previaCsv(req, res, next) {
     const reconhecidas = Object.entries(col)
       .filter(([, i]) => i >= 0)
       .map(([nome, i]) => ({ campo: nome, coluna_do_arquivo: cabecalho[i] }));
-    const ignoradas = cabecalho.filter((h, i) => !Object.values(col).includes(i) && String(h).trim());
 
-    // Colunas da planilha que não casam com nenhuma coluna do quadro.
-    let colunasNaoCasadas = [];
-    if (!destino.novo && col.coluna >= 0) {
-      const nomesQuadro = new Set(destino.colunas.map((c) => semAcento(c.nome)));
-      colunasNaoCasadas = [...new Set(
-        itens.map((i) => i.coluna).filter((n) => n && !nomesQuadro.has(semAcento(n))),
-      )];
+    // Extras: casaram com campo personalizado do quadro, viraram texto na
+    // descrição (linha teve valor mas nada casou), ou seguem genuinamente
+    // vazias em toda a planilha (nada pra importar mesmo).
+    const camposPersonalizadosCasados = extras
+      .filter(({ nome }) => camposPorChave.has(chaveCampo(nome)))
+      .map(({ nome }) => ({ campo: camposPorChave.get(chaveCampo(nome)).nome, coluna_do_arquivo: nome }));
+    const nomesNaDescricao = new Set(itens.flatMap((i) => i.extras_na_descricao));
+    const colunasParaDescricao = extras.map((e) => e.nome).filter((n) => nomesNaDescricao.has(n));
+    const ignoradas = extras
+      .map((e) => e.nome)
+      .filter((n) => !camposPorChave.has(chaveCampo(n)) && !nomesNaDescricao.has(n));
+
+    // Colunas da planilha que não casam com nenhuma coluna do quadro: o
+    // valor (ex.: "Em prospecção") não pode ficar só implícito em qual
+    // coluna o card caiu — sem casar, também vira texto na descrição, senão
+    // desaparece de vez. Quadro novo usa a mesma lista padrão que será
+    // criada, pra prévia bater com o que a importação de fato vai fazer.
+    const colunasNaoCasadas = [];
+    if (col.coluna >= 0) {
+      const colunasAlvo = destino.novo ? COLUNAS_PADRAO : destino.colunas;
+      const rotuloColuna = cabecalho[col.coluna];
+      const vistas = new Set();
+      for (const item of itens) {
+        if (!item.coluna) continue;
+        const { casou } = acharColuna(colunasAlvo, item.coluna, null);
+        if (casou) continue;
+        if (!vistas.has(item.coluna)) { vistas.add(item.coluna); colunasNaoCasadas.push(item.coluna); }
+        item.descricao = ((item.descricao ? item.descricao + '\n\n' : '')
+          + rotuloColuna + ': ' + item.coluna).slice(0, 20000);
+      }
     }
 
     res.json({
@@ -196,6 +219,8 @@ export async function previaCsv(req, res, next) {
       linhas_sem_titulo: semTitulo,
       ja_existem: jaExistem,
       colunas_reconhecidas: reconhecidas,
+      campos_personalizados_casados: camposPersonalizadosCasados,
+      colunas_para_descricao: colunasParaDescricao,
       colunas_ignoradas: ignoradas,
       colunas_nao_casadas: colunasNaoCasadas,
       etiquetas: [...new Set(itens.flatMap((i) => i.etiquetas))],
@@ -222,10 +247,12 @@ export async function importarCsv(req, res, next) {
   try {
     if (!req.file) throw new AppError('Nenhum arquivo enviado.', 400);
 
-    const { col, corpo: linhas } = await lerPlanilha(req.file);
+    const { cabecalho, col, corpo: linhas, extras } = await lerPlanilha(req.file);
     const destino = await resolverDestino(req, req.body);
+    const camposPorChave = mapaCampos(destino.campos);
 
-    const itens = linhas.map((l) => interpretarLinha(l, col)).filter((c) => c.titulo);
+    const itens = linhas.map((l) => interpretarLinha(l, col, extras, camposPorChave))
+      .filter((c) => c.titulo);
     if (itens.length === 0) {
       throw new AppError('Nenhuma linha da planilha tem título preenchido.', 400);
     }
@@ -250,13 +277,8 @@ export async function importarCsv(req, res, next) {
 
       // Mesmas colunas padrão de um quadro novo pela tela — assim o board
       // importado já nasce com as métricas funcionando.
-      const padrao = [
-        { nome: 'A fazer', ordem: 1000, tipo: 'backlog' },
-        { nome: 'Em andamento', ordem: 2000, tipo: 'em_andamento' },
-        { nome: 'Concluído', ordem: 3000, tipo: 'concluida' },
-      ];
       colunas = [];
-      for (const c of padrao) {
+      for (const c of COLUNAS_PADRAO) {
         const r = await client.query(
           `INSERT INTO colunas (quadro_id, nome, ordem, tipo) VALUES ($1, $2, $3, $4)
            RETURNING id, nome, tipo, ordem`,
@@ -270,6 +292,7 @@ export async function importarCsv(req, res, next) {
     }
 
     const fallbackId = colunaPadrao(colunas, req.body.coluna_id || null);
+    const rotuloColuna = col.coluna >= 0 ? cabecalho[col.coluna] : null;
 
     // Etiquetas existentes do quadro, para reaproveitar em vez de duplicar.
     const etqR = await client.query(
@@ -319,6 +342,7 @@ export async function importarCsv(req, res, next) {
     let criados = 0;
     let pulados = 0;
     let comResponsavel = 0;
+    let camposPreenchidos = 0;
     let etiquetasCriadas = 0;
     const etiquetasAntes = etiquetaPorNome.size;
 
@@ -326,8 +350,16 @@ export async function importarCsv(req, res, next) {
       if (existentes.has(item.titulo.toLowerCase())) { pulados += 1; continue; }
       existentes.add(item.titulo.toLowerCase());
 
-      const { id: colunaId } = acharColuna(colunas, item.coluna, fallbackId);
+      const { id: colunaId, casou } = acharColuna(colunas, item.coluna, fallbackId);
       ordemPorColuna[colunaId] = (ordemPorColuna[colunaId] || 0) + 1000;
+
+      // Não casou com coluna nenhuma do quadro: o card cai na coluna padrão
+      // mesmo assim, mas o valor original (ex.: "Em prospecção") não pode
+      // só desaparecer — vira mais uma linha na descrição.
+      if (!casou && item.coluna && rotuloColuna) {
+        item.descricao = ((item.descricao ? item.descricao + '\n\n' : '')
+          + rotuloColuna + ': ' + item.coluna).slice(0, 20000);
+      }
 
       const { rows } = await client.query(
         `INSERT INTO cards (coluna_id, quadro_id, titulo, descricao, data_prazo,
@@ -363,6 +395,16 @@ export async function importarCsv(req, res, next) {
           comResponsavel += 1;
         }
       }
+
+      for (const [campoId, valor] of Object.entries(item.campos_valores)) {
+        await client.query(
+          `INSERT INTO cards_campos_valores (card_id, campo_id, valor, atualizado_em)
+           VALUES ($1, $2, $3::jsonb, NOW())
+           ON CONFLICT (card_id, campo_id) DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = NOW()`,
+          [cardId, campoId, JSON.stringify(valor)],
+        );
+        camposPreenchidos += 1;
+      }
     }
 
     etiquetasCriadas = etiquetaPorNome.size - etiquetasAntes;
@@ -374,6 +416,7 @@ export async function importarCsv(req, res, next) {
       cards_pulados: pulados,
       etiquetas_criadas: etiquetasCriadas,
       responsaveis: comResponsavel,
+      campos_preenchidos: camposPreenchidos,
     };
 
     registrarAcao({

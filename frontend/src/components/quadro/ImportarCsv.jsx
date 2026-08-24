@@ -97,7 +97,8 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
           <strong>{resultado.cards_criados}</strong> card(s) criado(s)
           {resultado.cards_pulados > 0 && <>, {resultado.cards_pulados} pulado(s) por já existirem</>}
           {resultado.etiquetas_criadas > 0 && <>, {resultado.etiquetas_criadas} etiqueta(s) nova(s)</>}
-          {resultado.responsaveis > 0 && <>, {resultado.responsaveis} responsável(is) atribuído(s)</>}.
+          {resultado.responsaveis > 0 && <>, {resultado.responsaveis} responsável(is) atribuído(s)</>}
+          {resultado.campos_preenchidos > 0 && <>, {resultado.campos_preenchidos} campo(s) personalizado(s) preenchido(s)</>}.
         </p>
         <div className="flex justify-center gap-2">
           <Link
@@ -209,9 +210,21 @@ export default function ImportarCsv({ equipes, quadros, onFechar, onImportado })
             Colunas reconhecidas:{' '}
             {previa.colunas_reconhecidas.map((c) => c.coluna_do_arquivo).join(', ') || '—'}
           </div>
+          {previa.campos_personalizados_casados?.length > 0 && (
+            <div className="text-[11px] text-slate-500">
+              Viram campo personalizado do quadro:{' '}
+              {previa.campos_personalizados_casados.map((c) => c.coluna_do_arquivo).join(', ')}
+            </div>
+          )}
+          {previa.colunas_para_descricao?.length > 0 && (
+            <div className="text-[11px] text-slate-500">
+              Sem campo correspondente, vão para a descrição do card:{' '}
+              {previa.colunas_para_descricao.join(', ')}
+            </div>
+          )}
           {previa.colunas_ignoradas.length > 0 && (
             <div className="text-[11px] text-slate-400">
-              Ignoradas: {previa.colunas_ignoradas.join(', ')}
+              Vazias, nada a importar: {previa.colunas_ignoradas.join(', ')}
             </div>
           )}
 
