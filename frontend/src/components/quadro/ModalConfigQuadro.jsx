@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Archive, Tag as TagIcon, Trash2, Pencil, Plus, SlidersHorizontal, Zap, Palette, ArrowDownUp,
+  Users2,
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import ModalFrame from './ModalFrame.jsx';
@@ -15,19 +16,31 @@ import { CORES_KANBAN, COR_HEX, PRESETS_VISUAL, PRESETS_LISTA } from '../../cons
  * Configurações do quadro: metadados, etiquetas e (Sprint 34) os campos
  * personalizados.
  */
-export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onRecarregar }) {
+export default function ModalConfigQuadro({
+  quadro, ehAdmin, onFechar, onAlterado, onRecarregar,
+}) {
   const [nome, setNome] = useState(quadro.nome);
   const [descricao, setDescricao] = useState(quadro.descricao || '');
   const [aberto, setAberto] = useState(quadro.aberto_a_socios);
   const [fundoCor, setFundoCor] = useState(quadro.fundo_cor || null);
   const [fundoPreset, setFundoPreset] = useState(quadro.fundo_preset || null);
   const [etiquetas, setEtiquetas] = useState(quadro.etiquetas);
+  const [equipeId, setEquipeId] = useState(quadro.equipe_id);
+  const [equipes, setEquipes] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [reordenando, setReordenando] = useState(false);
   const [msgReordenar, setMsgReordenar] = useState('');
   const [convertendo, setConvertendo] = useState(false);
   const [msgConverter, setMsgConverter] = useState('');
+
+  // Lista de equipes só interessa pra quem PODE trocar — administrador. Um
+  // membro comum de equipe não vê essa lista completa mesmo (GET /equipes
+  // só devolve as equipes dele), então nem tentamos carregar à toa.
+  useEffect(() => {
+    if (!ehAdmin) return;
+    api.get('/equipes').then((r) => setEquipes(r.data || [])).catch(() => setEquipes([]));
+  }, [ehAdmin]);
 
   async function salvarMetadados() {
     setSalvando(true);
@@ -39,6 +52,10 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
         aberto_a_socios: aberto,
         fundo_cor: fundoCor,
         fundo_preset: fundoPreset,
+        // Manda equipe_id só quando dá pra trocar — mandar sem ser admin
+        // faria o PUT inteiro falhar (backend recusa a troca), mesmo que o
+        // valor seja o mesmo de sempre.
+        ...(ehAdmin ? { equipe_id: equipeId } : {}),
       });
       onAlterado();
     } catch (err) {
@@ -112,6 +129,26 @@ export default function ModalConfigQuadro({ quadro, onFechar, onAlterado, onReca
             required
           />
         </div>
+
+        {ehAdmin && (
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-slate-900">
+              <Users2 size={13} /> Equipe dona do quadro
+            </label>
+            {equipes === null ? (
+              <p className="text-xs text-slate-500">Carregando equipes…</p>
+            ) : (
+              <select className={inputCls} value={equipeId} onChange={(e) => setEquipeId(e.target.value)}>
+                {equipes.map((e) => (<option key={e.id} value={e.id}>{e.nome}</option>))}
+              </select>
+            )}
+            <p className="mt-1 text-[11px] text-slate-400">
+              Só membros dessa equipe conseguem editar o quadro (ver, arrastar card, tudo). Trocar
+              aqui não mexe em nenhum card — título, checklist, campo personalizado, etiqueta,
+              tudo continua exatamente onde está.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-900 mb-1">Descrição</label>

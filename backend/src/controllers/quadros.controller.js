@@ -34,6 +34,11 @@ const atualizarSchema = z.object({
   // Sprint 39 — fundo do quadro (cor solida OU preset de gradiente).
   fundo_cor: corSchema,
   fundo_preset: presetSchema,
+  // Trocar a equipe dona do quadro — quem decide quem PODE EDITAR (ver
+  // podeVerQuadro). Card nenhum se mexe: título, checklist, campo
+  // personalizado, etiqueta, tudo continua exatamente onde estava. É só
+  // "quem manda aqui" que muda.
+  equipe_id: z.string().uuid().optional(),
 });
 
 /**
@@ -354,6 +359,21 @@ export async function atualizar(req, res, next) {
     if (!podeEditar) throw new NaoAutorizadoError('Sem permissão pra editar este quadro.');
 
     const d = atualizarSchema.parse(req.body);
+
+    // Trocar a equipe dona é mudar quem pode editar — mais sensível que
+    // renomear ou trocar a cor de fundo. Só admin, e a equipe destino
+    // precisa existir e não estar arquivada.
+    if (d.equipe_id !== undefined) {
+      if (!isAdmin) {
+        throw new NaoAutorizadoError('Só administradores podem trocar a equipe dona do quadro.');
+      }
+      const eq = await query(
+        'SELECT id, arquivada_em FROM equipes WHERE id = $1', [d.equipe_id],
+      );
+      if (!eq.rows[0]) throw new AppError('Equipe de destino não encontrada.', 400);
+      if (eq.rows[0].arquivada_em) throw new AppError('Equipe de destino está arquivada.', 400);
+    }
+
     const updates = [];
     const params = [];
     for (const [k, v] of Object.entries(d)) {
