@@ -49,10 +49,35 @@ export function tratadorDeErros(err, _req, res, _next) {
       LIMIT_FIELD_VALUE: 'Valor de campo longo demais.',
       LIMIT_FIELD_COUNT: 'Campos demais no envio.',
     };
+    // Card #83: loga o código do multer — é o que faltava para diagnosticar
+    // "anexar imagem dá erro" sem precisar reproduzir.
+    console.warn('[upload recusado]', {
+      codigo: err.code, campo: err.field, limiteMb: env.UPLOADS_MAX_MB, mensagem: err.message,
+    });
+    const extra = err.code === 'LIMIT_FILE_SIZE'
+      ? ' Reduza a imagem (ou envie um print em vez da foto) e tente de novo.'
+      : '';
     return res.status(413).json({
-      erro: mensagens[err.code] || 'Não consegui receber o arquivo enviado.',
+      erro: (mensagens[err.code] || 'Não consegui receber o arquivo enviado.') + extra,
       codigo: 'upload_recusado',
       detalhes: { motivo: err.code, limite_mb: env.UPLOADS_MAX_MB },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Card #83 — falha ao GRAVAR o arquivo: pasta de uploads inexistente, sem
+  // permissão ou disco cheio (ex.: Volume do Railway não montado; ver o
+  // cabeçalho de utils/uploads.js). Sem este bloco, aparecia como "Erro
+  // interno do servidor" — idêntico, para quem anexa, a um arquivo grande.
+  // -------------------------------------------------------------------------
+  if (['EACCES', 'EROFS', 'ENOSPC', 'ENOENT'].includes(err?.code) && err?.syscall) {
+    console.error('[upload: falha de filesystem]', {
+      codigo: err.code, syscall: err.syscall, caminho: err.path, uploadsDir: env.UPLOADS_DIR,
+    });
+    return res.status(503).json({
+      erro: 'Não foi possível gravar o arquivo no servidor. '
+        + 'A área de uploads está indisponível — avise o suporte.',
+      codigo: 'uploads_indisponivel',
     });
   }
 
