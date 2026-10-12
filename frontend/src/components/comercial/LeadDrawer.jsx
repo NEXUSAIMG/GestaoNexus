@@ -6,6 +6,7 @@ import {
   ToqueModal, EstornoModal, TextoModal, ReuniaoModal, DesfechoModal, PropostaModal, PagamentoModal,
 } from './Acoes.jsx';
 import { Dica } from './Ajuda.jsx';
+import { OndeEsta } from './Processo.jsx';
 import { proximaAcao, criteriosPara, CaixaProximaAcao, ListaCriterios, GuiaDaEtapa, OQueFalar } from './Orientacao.jsx';
 
 /**
@@ -220,6 +221,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
         </div>
       )}
 
+      {lead && <OndeEsta cfg={cfg} etapa={lead.etapa} />}
       {aviso && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</div>}
       {lead && <CaixaProximaAcao acao={proximaAcao(lead, cfg, admin)} onExecutar={executar} />}
       {lead && <ListaCriterios criterios={criteriosPara(lead, f, cfg)} onExecutar={executar} />}

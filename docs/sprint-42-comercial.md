@@ -197,5 +197,18 @@ Objetivo: a equipe se resolver sozinha, sem manual e sem perguntar à gestão.
 - **Funil:** vendedora abre filtrada na própria carteira; colunas vazias
   explicam o que entra nelas.
 
+- **Processo desenhado (aba Processo):** o caminho do cartório como fluxo
+  (Prospect → … → Ganho → Cliente pago), com "entra quando" em cada caixa e
+  quantos cartórios estão em cada etapa agora; clique na etapa para ver o que
+  fazer nela. Abaixo, a linha do tempo da cadência (8 toques em 12 dias
+  úteis, com o canal de cada dia), a do trial (D0–D14) e a rotina do dia da
+  equipe (8h30, 12h30, 17h e o 1:1 de sexta). Funciona no celular (fluxo
+  vertical). Na ficha, uma barra mostra "Etapa 4 de 7 · próxima: Trial".
+- **Portões x histórico:** etapa que o cartório já alcançou (marco registrado,
+  inclusive vindo da importação do quadro) não é cobrada de novo — os portões
+  valem para a primeira passagem e para etapas puladas. Sem isso, os cards
+  importados em Trial/Proposta ficariam presos. A orientação da ficha usa a
+  mesma regra e, se faltar algo, sugere resolver antes de avançar.
+
 Todo o texto fica em `frontend/src/components/comercial/guia.js` — para
 ajustar uma explicação, edite só esse arquivo.

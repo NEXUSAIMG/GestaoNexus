@@ -192,7 +192,12 @@ export function pendenciasPortao(lead, nova, ctx = {}) {
   const props = ctx.propostas || [];
   const diag = lead.diagnostico || {};
 
-  if (alvo >= ETAPA.qualificado.i) {
+  // Etapa que o lead já alcançou antes (marco registrado — inclusive vindo
+  // da importação do quadro) não é cobrada de novo: o portão vale para a
+  // primeira passagem e para etapas puladas.
+  const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]);
+
+  if (alvo >= ETAPA.qualificado.i && !jaPassou('qualificado')) {
     if (!reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada')) {
       p.push('reunião de diagnóstico marcada como realizada');
     }
@@ -200,13 +205,13 @@ export function pendenciasPortao(lead, nova, ctx = {}) {
       if (diag[c.k] == null || String(diag[c.k]).trim() === '') p.push('diagnóstico: ' + c.n.toLowerCase());
     });
   }
-  if (alvo >= ETAPA.trial.i) {
+  if (alvo >= ETAPA.trial.i && !jaPassou('trial')) {
     if (!lead.meta_sucesso || !String(lead.meta_sucesso).trim()) p.push('meta de sucesso do trial escrita');
     if (!reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status))) {
       p.push('reunião de ativação agendada');
     }
   }
-  if (alvo >= ETAPA.proposta.i) {
+  if (alvo >= ETAPA.proposta.i && !jaPassou('proposta')) {
     if (!props.some((x) => ['enviada', 'aceita'].includes(x.status))) p.push('proposta registrada (plano, valor e validade)');
   }
   if (nova === 'ganho') {

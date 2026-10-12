@@ -46,7 +46,11 @@ export function criteriosPara(lead, rascunho, cfg) {
     const ag = reun.some((r) => r.tipo === 'diagnostico' && ['agendada', 'realizada'].includes(r.status));
     itens.push({ ok: ag, txt: 'Reunião de diagnóstico agendada (registre um contato com "Agendou reunião")', acao: ag ? null : 'toque:avulso', rotulo: 'Registrar contato' });
   }
-  if (proxima === 'qualificado') {
+  // Os portões são cumulativos (igual ao servidor): para entrar em Proposta,
+  // também valem os critérios de Qualificado e de Trial.
+  const alvo = ORDEM.indexOf(proxima);
+  const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]); // mesma regra do servidor
+  if (alvo >= ORDEM.indexOf('qualificado') && !jaPassou('qualificado')) {
     const agendada = reun.find((r) => r.tipo === 'diagnostico' && r.status === 'agendada');
     const realizada = reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada');
     itens.push({
@@ -59,27 +63,27 @@ export function criteriosPara(lead, rascunho, cfg) {
       itens.push({ ok, txt: 'Diagnóstico: ' + c.n.toLowerCase(), acao: ok ? null : 'foco:campo-diag-' + c.k, rotulo: 'Preencher' });
     });
   }
-  if (proxima === 'trial') {
+  if (alvo >= ORDEM.indexOf('trial') && !jaPassou('trial')) {
     const ok1 = !!(meta && String(meta).trim());
     itens.push({ ok: ok1, txt: 'Meta de sucesso do trial escrita', acao: ok1 ? null : 'foco:campo-meta', rotulo: 'Escrever' });
     const ok2 = reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status));
     itens.push({ ok: ok2, txt: 'Reunião de ativação agendada', acao: ok2 ? null : 'reuniao:ativacao', rotulo: 'Agendar' });
   }
-  if (proxima === 'proposta') {
+  if (alvo >= ORDEM.indexOf('proposta') && !jaPassou('proposta')) {
     const ok = props.some((x) => ['enviada', 'aceita'].includes(x.status));
     itens.push({ ok, txt: 'Proposta registrada (plano, valor e validade)', acao: ok ? null : 'proposta', rotulo: 'Registrar proposta' });
   }
   if (proxima === 'ganho') {
     const ok = Number(rascunho?.valor_mensal ?? lead.valor_mensal) > 0;
     itens.push({ ok, txt: 'Valor mensal do contrato', acao: ok ? null : 'foco:campo-valor', rotulo: 'Preencher' });
-    itens.push({ ok: false, opcional: true, txt: 'Cliente assinou', acao: null });
+    itens.push({ ok: false, opcional: true, txt: 'Cliente assinou — você confirma ao mudar para Ganho', acao: null });
   }
   const pronto = itens.filter((x) => !x.opcional).every((x) => x.ok);
   return { proxima, nomeProxima: cfg.etapas.find((e) => e.k === proxima)?.n, itens, pronto };
 }
 
 /** A ação mais importante agora, em linguagem simples. */
-export function proximaAcao(lead, cfg, admin) {
+function proximaAcaoBase(lead, cfg, admin) {
   if (!lead) return null;
   const hoje = cfg.hoje;
   const feriados = new Set((cfg.feriados || []).map((x) => x.data));
@@ -148,6 +152,27 @@ export function proximaAcao(lead, cfg, admin) {
     default:
       return null;
   }
+}
+
+/**
+ * A ação mais importante agora. Se a sugestão for avançar de etapa mas ainda
+ * faltar algum critério (portões são cumulativos), sugere resolver o que falta
+ * primeiro — assim o botão nunca leva a um "não pode".
+ */
+export function proximaAcao(lead, cfg, admin) {
+  const r = proximaAcaoBase(lead, cfg, admin);
+  if (!r || !r.acao || !r.acao.startsWith('etapa:')) return r;
+  const destino = r.acao.split(':')[1];
+  if (['cadencia', 'perdido'].includes(destino)) return r;
+  const crit = criteriosPara(lead, null, cfg);
+  const falta = crit?.itens.find((x) => !x.ok && !x.opcional);
+  if (!falta) return r;
+  return {
+    nivel: 'warn',
+    titulo: `Antes de ir para ${crit.nomeProxima}, resolva: ${falta.txt.toLowerCase()}`,
+    texto: `Faltam ${crit.itens.filter((x) => !x.ok && !x.opcional).length} item(ns) na lista "Para avançar" logo abaixo.`,
+    acao: falta.acao, rotulo: falta.rotulo || 'Resolver',
+  };
 }
 
 const COR = {

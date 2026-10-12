@@ -10,6 +10,7 @@ import {
 } from '../components/comercial/Vistas.jsx';
 import { ToqueModal } from '../components/comercial/Acoes.jsx';
 import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.jsx';
+import { VistaProcesso } from '../components/comercial/Processo.jsx';
 
 /**
  * Comercial — Sprint 42.
@@ -21,7 +22,7 @@ import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.js
  */
 
 const ABAS = [
-  ['hoje', 'Hoje'], ['funil', 'Funil'], ['trials', 'Trials'],
+  ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['trials', 'Trials'],
   ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
   ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
 ];
@@ -118,7 +119,8 @@ export default function Comercial() {
               ))}
             </div>
           )}
-          {aba === 'ajuda' && <VistaAjuda cfg={cfg} onTour={() => setTour(true)} />}
+          {aba === 'ajuda' && <VistaAjuda cfg={cfg} onTour={() => setTour(true)} onProcesso={() => setAba('processo')} />}
+          {aba === 'processo' && <VistaProcesso cfg={cfg} painel={painel} />}
           {aba === 'scripts' && <VistaScripts cfg={cfg} />}
           {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
           {!['funil', 'scripts', 'controles'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}

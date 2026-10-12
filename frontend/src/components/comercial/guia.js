@@ -124,6 +124,14 @@ export const COMO_FUNCIONA = {
       'Comece o dia aqui e termine com a tela vazia.',
     ],
   },
+  processo: {
+    titulo: 'Processo: o mapa do trabalho',
+    itens: [
+      'O caminho completo de um cartório, da primeira ligação ao primeiro pagamento.',
+      'Clique numa etapa para ver o que fazer nela e o que faz o cartório avançar.',
+      'Abaixo: a cadência de 12 dias, o trial de 14 dias e a rotina do dia da equipe.',
+    ],
+  },
   funil: {
     titulo: 'Funil: onde está cada cartório',
     itens: [
@@ -214,7 +222,11 @@ export const TOUR = [
     texto: 'Abra qualquer cartório: no topo aparece o que fazer agora e o que falta para avançar de etapa, com botões. Não precisa decorar regra.',
   },
   {
-    titulo: '4. Errou? Tem conserto',
+    titulo: '4. Veja o processo desenhado',
+    texto: 'Na aba “Processo” está o caminho inteiro de um cartório até virar cliente, a cadência de 12 dias, o trial de 14 dias e a rotina do dia. Clique em cada etapa para ver o que fazer.',
+  },
+  {
+    titulo: '5. Errou? Tem conserto',
     texto: 'Nada é apagado, mas tudo pode ser corrigido com um estorno e um motivo. Dúvidas? Abra a aba "Ajuda" ou clique nos ícones (?) espalhados pela tela.',
   },
 ];

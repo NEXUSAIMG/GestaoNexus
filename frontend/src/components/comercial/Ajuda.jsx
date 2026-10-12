@@ -92,7 +92,7 @@ export function Tour({ forcar = false, onFechar }) {
   );
 }
 
-export function VistaAjuda({ cfg, onTour }) {
+export function VistaAjuda({ cfg, onTour, onProcesso }) {
   const [busca, setBusca] = useState('');
   const q = busca.trim().toLowerCase();
   const faq = FAQ.filter((f) => !q || (f.p + ' ' + f.r).toLowerCase().includes(q));
@@ -111,6 +111,7 @@ export function VistaAjuda({ cfg, onTour }) {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input type="search" className={inputCls + ' pl-8'} placeholder="Procure uma dúvida: desconto, estorno, reunião, meta…" value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
+        {onProcesso && <button type="button" className={btnPrimCls} onClick={onProcesso}>Ver o processo desenhado</button>}
         <button type="button" className={btnCls} onClick={onTour}>Rever o tour de 1 minuto</button>
       </div>
 
