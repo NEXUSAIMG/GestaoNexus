@@ -225,17 +225,94 @@ ok(fer.status === 201, 'gestão inclui feriado');
 ok((await V('POST', '/comercial/feriados', { data: '2026-12-09', nome: 'x' })).status === 403, 'vendedora não inclui feriado');
 await A('DELETE', '/comercial/feriados/2026-12-08');
 
-titulo('Gestão comercial sem ser admin (líder da equipe Comercial)');
+titulo('Gestão comercial sem ser admin (lista definida pelo admin)');
 const emailL = `lider.${sufixo}@local.test`;
 const lid = (await post('/pessoas', { nome: 'Líder ' + sufixo, email: emailL, senha: 'SenhaLocal123!', acesso_restrito: true })).dados;
 await post(`/equipes/${equipeId}/membros`, { pessoa_id: lid.id, papel: 'lider' });
 const ll = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: emailL, senha: 'SenhaLocal123!' }) }).then((r) => r.json());
 const L = (m, c, b) => como(ll.token, m, c, b);
+ok((await L('GET', '/comercial/config')).dados.eu.gestor === false, 'ser líder de equipe "Comercial" não basta (nome de equipe é texto livre)');
+ok((await V('PUT', '/comercial/gestores', { pessoas: [vend.id] })).status === 403, 'só admin define a gestão comercial');
+const gs = await A('PUT', '/comercial/gestores', { pessoas: [lid.id] });
+ok(gs.status === 200 && gs.dados.some((g) => g.pessoa_id === lid.id), 'admin marca a pessoa como gestão comercial');
 const cfgL = (await L('GET', '/comercial/config')).dados;
-ok(cfgL.eu.gestor === true && cfgL.eu.admin === false, 'líder da equipe Comercial é gestão comercial, sem ser admin');
-const chkL = await L('POST', '/comercial/checagens', { janela: 'meio', pessoa_id: vend.id, observacao: 'checagem feita pela líder' });
-ok(chkL.status === 201, 'líder registra checagem');
+ok(cfgL.eu.gestor === true && cfgL.eu.admin === false, 'pessoa marcada é gestão comercial, sem ser admin');
+const chkL = await L('POST', '/comercial/checagens', { janela: 'meio', pessoa_id: vend.id, observacao: 'checagem feita pela gestora' });
+ok(chkL.status === 201, 'gestora registra checagem');
 const pagL = await L('POST', `/comercial/leads/${id}/pagamento`, { pago_em: hoje, valor: 1, referencia: 'teste' });
 ok(pagL.status === 403, 'pagamento manual continua só admin');
 ok((await V('POST', '/comercial/checagens', { janela: 'meio', pessoa_id: vend.id, observacao: 'x' })).status === 403, 'membro comum não registra checagem');
+const u1L = await L('POST', '/comercial/1a1', { pessoa_id: lid.id, bloqueios: 'teste de escopo', combinados: 'manter a rotina de checagens', acoes: [] });
+const u1V = (await V('GET', '/comercial/1a1?pessoa_id=' + lid.id)).dados;
+ok(u1L.status === 201 && Array.isArray(u1V) && u1V.every((u) => u.pessoa_id === vend.id), 'vendedora só vê os próprios 1:1');
+const chV = (await V('GET', '/comercial/checagens')).dados;
+ok(chV.checagens.every((c) => c.pessoa_id === vend.id), 'vendedora só vê as próprias checagens');
+await A('PUT', '/comercial/gestores', { pessoas: [] });
 
+titulo('Varredura 42D: furos de controle fechados');
+// Duplicidade sem acento/maiúscula (cidade também)
+const ac = await V('POST', '/comercial/leads', { nome: `Cartório São José ${sufixo}`, cidade: 'São Paulo', uf: 'SP', origem: 'inbound' });
+const ac2 = await V('POST', '/comercial/leads', { nome: `CARTORIO SAO JOSE ${sufixo}`, cidade: 'SAO PAULO', uf: 'sp', origem: 'inbound' });
+ok(ac.status === 201 && ac2.status === 409 && ac2.dados.codigo === 'duplicado', 'duplicidade ignora acento e maiúscula no nome e na cidade');
+ok(ac.dados.dono_id === vend.id, 'quem cadastra fica responsável');
+
+// Não cria já fechado
+ok((await V('POST', '/comercial/leads', { nome: 'Já perdido ' + sufixo, origem: 'inbound', etapa: 'perdido', motivo_perda: 'Outro' })).status === 400, 'não cadastra direto como Perdido');
+
+// Reabrir perdido não pula portão
+const rp = (await V('POST', '/comercial/leads', { nome: 'Reabre ' + sufixo, cidade: 'Belém', uf: 'PA', origem: 'inbound' })).dados;
+await V('PUT', '/comercial/leads/' + rp.id, { etapa: 'perdido', motivo_perda: 'Outro' });
+const reab = await V('PUT', '/comercial/leads/' + rp.id, { etapa: 'proposta', justificativa: 'cliente voltou a conversar' });
+ok(reab.status === 400 && reab.dados.codigo === 'portao', 'reabrir Perdido → Proposta cobra os portões');
+const reab2 = await V('PUT', '/comercial/leads/' + rp.id, { etapa: 'cadencia', justificativa: 'cliente voltou a conversar' });
+ok(reab2.status === 200 && reab2.dados.etapa === 'cadencia', 'reabrir para Cadência (sem portão) funciona com justificativa');
+
+// Ganho → perdido exige justificativa
+const gp = await A('PUT', '/comercial/leads/' + id, { etapa: 'perdido', motivo_perda: 'Outro' });
+ok(gp.status === 400 && gp.dados.codigo === 'justificativa_obrigatoria', 'ganho → perdido exige justificativa');
+
+// Reunião retroativa
+const rr = await V('POST', `/comercial/leads/${rp.id}/reunioes`, { tipo: 'diagnostico', inicio: isoEm(-180) });
+ok(rr.status === 403 && rr.dados.codigo === 'retroativo', 'vendedora não registra reunião no passado');
+ok((await A('POST', `/comercial/leads/${rp.id}/reunioes`, { tipo: 'diagnostico', inicio: isoEm(-180) })).status === 201, 'gestão registra reunião retroativa');
+
+// Dono e origem
+const doAdmin = (await A('POST', '/comercial/leads', { nome: 'Do admin ' + sufixo, cidade: 'Ananindeua', uf: 'PA', origem: 'inbound' })).dados;
+const tomar = await V('PUT', '/comercial/leads/' + doAdmin.id, { dono_id: vend.id });
+ok(tomar.status === 403 && tomar.dados.codigo === 'dono_negado', 'vendedora não toma lead de outra pessoa');
+const ori = await V('PUT', '/comercial/leads/' + doAdmin.id, { origem: 'ex_cliente' });
+ok(ori.status === 403 && ori.dados.codigo === 'origem_negada', 'vendedora não muda a origem de lead alheio');
+ok((await V('PUT', '/comercial/leads/' + rp.id, { origem: 'indicacao' })).status === 200, 'quem cadastrou corrige a origem nas primeiras 24h');
+const repassa = await V('PUT', '/comercial/leads/' + rp.id, { dono_id: lid.id });
+ok(repassa.status === 200 && repassa.dados.dono_id === lid.id, 'vendedora repassa o próprio lead');
+
+// Toque duplicado não repete efeitos
+const cad = (await V('POST', '/comercial/leads', { nome: 'Duplo clique ' + sufixo, cidade: 'Belém', uf: 'PA', origem: 'inbound', etapa: 'cadencia' })).dados;
+const dc1 = await V('POST', `/comercial/leads/${cad.id}/toques`, { tipo: 'cadencia', dia: 1, resultado: 'nao_atendeu' });
+const dc2 = await V('POST', `/comercial/leads/${cad.id}/toques`, { tipo: 'cadencia', dia: 1, resultado: 'nao_atendeu' });
+ok(dc1.status === 201 && dc2.status === 200 && dc2.dados.duplicado === true, 'toque repetido do roteiro é ignorado (clique duplo)');
+
+// Importação: validação por linha, duplicata dentro da planilha, fila
+const campFila = 'Fila ' + sufixo;
+const impF = await A('POST', '/comercial/leads/importar-lista', {
+  origem: 'prospeccao', campanha: campFila, etapa: 'prospect',
+  linhas: [
+    { nome: 'Fila 1 ' + sufixo, cidade: 'Óbidos', uf: 'PA' },
+    { nome: 'Fila 2 ' + sufixo, cidade: 'Breves', uf: 'PA' },
+    { nome: 'FILA 2 ' + sufixo, cidade: 'breves', uf: 'pa' },
+    { nome: 'Fila 3 ' + sufixo, cidade: 'Soure', uf: 'PA', cnpj: '123' },
+    { nome: 'Fila 4 ' + sufixo, cidade: 'Salinópolis', uf: 'Pará' },
+    { nome: 'Fila 5 ' + sufixo, cidade: 'Bragança', uf: 'PA' },
+  ],
+});
+ok(impF.status === 201 && impF.dados.criados === 3, 'linha com CNPJ/UF inválido é recusada sem derrubar o lote');
+ok(impF.dados.recusados_por_motivo.invalido === 2 && impF.dados.recusados_por_motivo.duplicado === 1, 'duplicata dentro da própria planilha também é recusada');
+ok(impF.dados.lista_recusados.length === 3 && impF.dados.lista_recusados[0].linha > 0, 'devolve todas as recusas com o número da linha');
+const pnF = (await V('GET', '/comercial/painel')).dados;
+ok(pnF.fila >= 3 && !pnF.hoje_listas.parados.some((x) => x.lead.nome.startsWith('Fila ')), 'prospect sem dono é fila, não "parado"');
+const peg = await V('POST', '/comercial/leads/pegar', { quantidade: 2, campanha: campFila });
+ok(peg.status === 200 && peg.dados.pegos === 2, 'vendedora pega 2 leads da fila');
+const minha = (await V('GET', '/comercial/leads?campanha=' + encodeURIComponent(campFila) + '&dono_id=' + vend.id)).dados;
+ok(minha.total === 2 && minha.por_etapa.prospect === 2, 'leads pegos ficam com ela (e a lista devolve contagem por etapa)');
+ok((await V('POST', '/comercial/leads/importar-lista', { origem: 'prospeccao', etapa: 'cadencia', linhas: [{ nome: 'Sem dono ' + sufixo, cidade: 'Belém', uf: 'PA' }] })).status === 400,
+  'importar direto em Cadência exige responsável');

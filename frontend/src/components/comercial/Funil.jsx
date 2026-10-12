@@ -7,9 +7,10 @@ import { GUIA_ETAPAS } from './guia.js';
 
 const POR_COLUNA = 60;
 
-export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarLista, onImportarQuadro }) {
+export default function Funil({ cfg, admin, gestor, versao, onAbrir, onNovo, onImportarLista, onImportarQuadro }) {
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
+  const [porEtapa, setPorEtapa] = useState({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [busca, setBusca] = useState('');
@@ -18,7 +19,7 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
   // Quem não é gestão abre o funil já filtrado na própria carteira.
   const [dono, setDono] = useState(() => {
     try { const v = localStorage.getItem('comercial-dono'); if (v != null) return v; } catch { /* ok */ }
-    return admin ? '' : (cfg.eu?.id || '');
+    return gestor ? '' : (cfg.eu?.id || '');
   });
   const [mais, setMais] = useState({});
   const reqId = useRef(0);
@@ -34,7 +35,7 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
     if (origem) params.origem = origem;
     if (dono) params.dono_id = dono;
     api.get('/comercial/leads', { params })
-      .then((r) => { if (meu === reqId.current) { setLeads(r.data.leads); setTotal(r.data.total); } })
+      .then((r) => { if (meu === reqId.current) { setLeads(r.data.leads); setTotal(r.data.total); setPorEtapa(r.data.por_etapa || {}); } })
       .catch((err) => { if (meu === reqId.current) setErro(mensagemDeErro(err, 'Não consegui carregar o funil.')); })
       .finally(() => { if (meu === reqId.current) setCarregando(false); });
   }, [buscaD, origem, dono, versao]);
@@ -72,11 +73,13 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
           {cfg.etapas.map((e) => {
             const cs = leads.filter((l) => l.etapa === e.k);
             const lim = mais[e.k] || POR_COLUNA;
+            // Contagem real vem do servidor; a coluna pode ter mais do que foi carregado.
+            const real = porEtapa[e.k] ?? cs.length;
             return (
               <section key={e.k} aria-label={e.n} className="flex w-64 shrink-0 flex-col gap-2 rounded-lg bg-slate-100 p-2">
                 <div className="flex items-center justify-between px-1">
                   <b className="flex items-center gap-1 text-xs font-semibold text-slate-700">{e.n}<Dica texto={`${GUIA_ETAPAS[e.k].objetivo} ${GUIA_ETAPAS[e.k].avancar}${e.sla ? ` Prazo: ${e.sla} dias.` : ''}`} /></b>
-                  <Pill nivel="line">{cs.length}{e.sla ? ` · ${e.sla}d` : ''}</Pill>
+                  <Pill nivel="line">{real}{e.sla ? ` · ${e.sla}d` : ''}</Pill>
                 </div>
                 {cs.slice(0, lim).map((l) => (
                   <button key={l.id} type="button" onClick={() => onAbrir(l.id)}
@@ -97,6 +100,11 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
                   </button>
                 ))}
                 {!cs.length && <p className="px-1 py-2 text-[11px] leading-snug text-slate-400">{GUIA_ETAPAS[e.k].objetivo}</p>}
+                {cs.length <= lim && real > cs.length && (
+                  <p className="px-1 text-[11px] leading-snug text-slate-500">
+                    Mostrando {cs.length} de {real}. Use a busca ou os filtros para achar os demais.
+                  </p>
+                )}
                 {cs.length > lim && (
                   <button type="button" className="rounded-md py-1 text-xs font-medium text-nexus-700 hover:bg-white"
                     onClick={() => setMais({ ...mais, [e.k]: lim + POR_COLUNA })}>

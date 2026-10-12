@@ -11,7 +11,7 @@ import {
 import {
   SELECT_LEAD, enriquecer, carregarLead, reunioesDoLead, propostasDoLead,
   metasDoMes, pessoasAtivas, carregarFeriados, verificarBloqueios, exigirContatoLiberado,
-  calcularPainel, soDigitos,
+  calcularPainel, soDigitos, prepararBloqueiosLote,
 } from '../services/comercial.dados.js';
 
 /**
@@ -22,13 +22,18 @@ import {
  *   - PORTÕES de etapa (diagnóstico realizado e preenchido, meta de sucesso,
  *     ativação agendada, proposta registrada). Admin pode forçar, com
  *     justificativa registrada.
- *   - voltar etapa / reabrir ganho ou perdido exige justificativa
+ *   - portões valem também ao reabrir um perdido (só etapa já alcançada
+ *     antes fica dispensada)
+ *   - voltar etapa / reabrir ganho ou perdido / ganho → perdido exige justificativa
+ *   - reunião no passado (registro retroativo) só pela gestão
+ *   - responsável: quem não é gestão só pega lead sem dono ou repassa o seu
+ *   - origem só muda pela gestão (ou por quem cadastrou, nas primeiras 24h)
  *   - duplicidade (CNS, CNPJ, e-mail, telefone, nome+cidade+UF), já cliente
  *     e lista de não contatar bloqueiam cadastro, importação e contato
  *   - toque só é registrado HOJE e nunca é apagado: erro vira estorno
  *     com motivo (autor no mesmo dia, ou admin)
  *   - toda alteração de campo vai para comercial_alteracoes (de → para)
- *   - só admin arquiva (com motivo) e confirma pagamento manual
+ *   - só a gestão arquiva (com motivo); só admin confirma pagamento manual
  *   - meta de clientes conta PAGOS, não assinados
  */
 
@@ -131,16 +136,18 @@ const metasSchema = z.object({
 });
 
 const importarListaSchema = z.object({
+  // Limites folgados de propósito: linha ruim é recusada sozinha em
+  // problemaLinha(), sem derrubar a planilha inteira.
   linhas: z.array(z.object({
-    nome: z.string().trim().min(1).max(255),
-    cidade: txt(100),
-    uf: z.string().max(2).nullable().optional(),
-    telefone: txt(60),
-    email: txt(255),
-    segmento: txt(60),
-    contato: txt(255),
-    cns: z.string().max(20).nullable().optional(),
-    cnpj: z.string().max(20).nullable().optional(),
+    nome: z.string().trim().min(1).max(1000).transform((v) => v.slice(0, 255)),
+    cidade: txt(1000).transform((v) => (v ? v.slice(0, 100) : v)),
+    uf: z.string().max(100).nullable().optional(),
+    telefone: txt(1000).transform((v) => (v ? v.slice(0, 60) : v)),
+    email: txt(1000),
+    segmento: txt(1000),
+    contato: txt(1000).transform((v) => (v ? v.slice(0, 255) : v)),
+    cns: z.string().max(100).nullable().optional(),
+    cnpj: z.string().max(100).nullable().optional(),
   })).min(1).max(2000),
   dono_id: z.string().uuid().nullable().optional(),
   origem: z.enum(ORIGENS_CHAVES),
@@ -168,6 +175,22 @@ function exigirAdminLocal(req, msg) {
 const ehGestor = (req) => !!req.gestorComercial || ehAdmin(req);
 function exigirGestor(req, msg) {
   if (!ehGestor(req)) throw new AppError(msg || 'Só a gestão comercial pode fazer isso.', 403, 'so_gestao');
+}
+
+/** Reunião com início mais de 1h no passado = registro retroativo: só a gestão. */
+function checarRetroativo(req, inicio) {
+  if (new Date(inicio).getTime() < Date.now() - 3600_000 && !ehGestor(req)) {
+    throw new AppError('Reunião no passado só pode ser registrada pela gestão comercial (registro retroativo).', 403, 'retroativo');
+  }
+}
+
+/** Troca de responsável: gestão troca livre; os demais pegam lead sem dono ou repassam o próprio. */
+function checarDono(req, atual, novo) {
+  if (novo === undefined || (novo ?? null) === (atual.dono_id ?? null) || ehGestor(req)) return;
+  const eu = req.pessoa.id;
+  if (!atual.dono_id && novo === eu) return;          // pegar da fila
+  if (atual.dono_id === eu) return;                   // repassar o meu
+  throw new AppError('Este lead é de outra pessoa. Para trocar o responsável, fale com a gestão comercial.', 403, 'dono_negado');
 }
 
 function novoProtocolo(hoje = hojeBR()) {
@@ -267,16 +290,20 @@ export async function listar(req, res, next) {
       const i = '$' + params.length;
       partes.push(`(l.nome ILIKE ${i} OR l.cidade ILIKE ${i} OR l.protocolo ILIKE ${i} OR l.contato ILIKE ${i} OR l.email ILIKE ${i} OR l.cns ILIKE ${i} OR l.cnpj ILIKE ${i})`);
     }
-    const limite = Math.min(parseInt(req.query.limite, 10) || 3000, 20000);
+    const limite = Math.min(parseInt(req.query.limite, 10) || 1000, 5000);
     const filtro = partes.join(' AND ');
-    const { rows: cont } = await query(`SELECT count(*)::int AS n FROM comercial_leads l WHERE ${filtro}`, params);
+    const { rows: cont } = await query(
+      `SELECT etapa, count(*)::int AS n FROM comercial_leads l WHERE ${filtro} GROUP BY etapa`, params,
+    );
+    const porEtapa = Object.fromEntries(cont.map((c) => [c.etapa, c.n]));
+    const total = cont.reduce((a, c) => a + c.n, 0);
     params.push(limite);
     const { rows } = await query(
       SELECT_LEAD + ' WHERE ' + filtro + ' ORDER BY l.etapa_desde ASC, l.nome ASC LIMIT $' + params.length,
       params,
     );
     const hoje = hojeBR();
-    res.json({ total: cont[0].n, leads: rows.map((l) => enriquecer(l, hoje)) });
+    res.json({ total, por_etapa: porEtapa, limite, leads: rows.map((l) => enriquecer(l, hoje)) });
   } catch (err) { next(err); }
 }
 
@@ -324,6 +351,10 @@ export async function verificar(req, res, next) {
   try {
     const d = req.body || {};
     const r = await verificarBloqueios(d, { ignorarId: d.id || null, soVerificar: true });
+    // Situação do cliente (status no portfólio) é informação da gestão.
+    if (r && r.codigo === 'ja_cliente' && !ehGestor(req)) {
+      return res.json({ livre: false, codigo: r.codigo, msg: 'Este cartório já é cliente. Fale com a gestão antes de qualquer contato comercial.' });
+    }
     res.json({ livre: !r, ...(r || {}) });
   } catch (err) { next(err); }
 }
@@ -338,12 +369,14 @@ export async function criar(req, res, next) {
   try {
     const dados = criarSchema.parse(req.body);
     const etapa = dados.etapa || 'prospect';
-    validarFechamento(etapa, dados);
     // Novo lead entra no máximo em Diagnóstico: as etapas seguintes têm
-    // portões que dependem de registros (reunião, proposta) que ainda não existem.
-    if (ETAPA[etapa].i > ETAPA.diagnostico.i && etapa !== 'perdido') {
-      throw new AppError('Cadastre o cartório e avance pelas etapas: Qualificado, Trial e Proposta exigem reunião e registros.', 400, 'portao');
+    // portões que dependem de registros (reunião, proposta) que ainda não
+    // existem — e cadastrar já como Perdido/Ganho não deixaria rastro do funil.
+    if (!['prospect', 'cadencia', 'diagnostico'].includes(etapa)) {
+      throw new AppError('Cadastre o cartório em Prospect, Cadência ou Diagnóstico e avance pelas etapas.', 400, 'portao');
     }
+    // Quem cadastra fica responsável, a menos que escolha outra pessoa.
+    if (dados.dono_id === undefined) dados.dono_id = req.pessoa.id;
     await verificarBloqueios(dados, { client });
     await client.query('BEGIN');
     const id = await inserirLead(client, dados, req.pessoa.id);
@@ -376,6 +409,13 @@ export async function atualizar(req, res, next) {
     if (dados.sinais !== undefined) sets.sinais = { ...(atual.sinais || {}), ...dados.sinais };
     if (dados.diagnostico !== undefined) sets.diagnostico = { ...(atual.diagnostico || {}), ...dados.diagnostico };
     if (dados.indicado_por_id && dados.indicado_por_id === atual.id) throw new AppError('Um lead não pode indicar a si mesmo.');
+    checarDono(req, atual, dados.dono_id);
+    if (dados.origem !== undefined && dados.origem !== atual.origem && !ehGestor(req)) {
+      const recente = atual.criado_por_id === req.pessoa.id && Date.now() - new Date(atual.criado_em).getTime() < 86_400_000;
+      if (!recente) {
+        throw new AppError('A origem só muda pela gestão comercial (ou por quem cadastrou, nas primeiras 24h): ela define a apuração por canal e o desconto de ex-cliente.', 403, 'origem_negada');
+      }
+    }
 
     // Identificação mudou → checa duplicidade/bloqueio de novo
     const mudouIdent = ['nome', 'cidade', 'uf', 'email', 'telefone', 'cns', 'cnpj']
@@ -392,20 +432,27 @@ export async function atualizar(req, res, next) {
       sets.motivo_perda = etapaFinal === 'perdido' ? (dados.motivo_perda ?? atual.motivo_perda) : null;
     }
 
-    let justif = null;
+    let justif = null; let portaoForcado = false;
     if (novaEtapa) {
-      // Retrocesso / reabertura exige justificativa
-      if (ehRetrocesso(atual.etapa, novaEtapa)) {
-        if (!dados.justificativa) throw new AppError('Voltar etapa ou reabrir um lead exige justificativa.', 400, 'justificativa_obrigatoria');
+      // Retrocesso / reabertura / desfazer uma venda exige justificativa
+      const desfazGanho = atual.etapa === 'ganho' && novaEtapa === 'perdido';
+      if (ehRetrocesso(atual.etapa, novaEtapa) || desfazGanho) {
+        if (!dados.justificativa) {
+          throw new AppError(desfazGanho
+            ? 'Marcar como perdido um lead que já era ganho exige justificativa (o que aconteceu com a venda?).'
+            : 'Voltar etapa ou reabrir um lead exige justificativa.', 400, 'justificativa_obrigatoria');
+        }
         justif = dados.justificativa;
       }
-      // Portões
-      if (!ehRetrocesso(atual.etapa, novaEtapa)) {
+      // Portões — também ao reabrir: Perdido → Proposta sem nunca ter tido
+      // proposta é barrado. Etapa já alcançada antes não é cobrada de novo.
+      {
         const [reunioes, propostas] = await Promise.all([reunioesDoLead(atual.id, client), propostasDoLead(atual.id, client)]);
         const pend = pendenciasPortao(efetivo, novaEtapa, { reunioes, propostas, valor_mensal: efetivo.valor_mensal });
         if (pend.length) {
           if (dados.forcar_portao && ehGestor(req) && dados.justificativa) {
             justif = `[portão forçado pela gestão] ${dados.justificativa} — pendências: ${pend.join('; ')}`;
+            portaoForcado = true;
           } else {
             const e = new AppError(`Para ir a "${ETAPA[novaEtapa].n}" falta: ${pend.join('; ')}.`, 400, 'portao');
             e.detalhes = pend.map((x) => ({ campo: 'portao', mensagem: x }));
@@ -421,6 +468,8 @@ export async function atualizar(req, res, next) {
           }
         }
       }
+      // Lead da fila (sem dono) que anda no funil fica com quem moveu.
+      if (!atual.dono_id && sets.dono_id === undefined && novaEtapa !== 'perdido') sets.dono_id = req.pessoa.id;
       const mud = aplicarEtapa(atual, novaEtapa, hoje);
       sets.etapa = mud.etapa; sets.etapa_desde = mud.etapa_desde;
       sets.marcos = mud.marcos;
@@ -459,7 +508,7 @@ export async function atualizar(req, res, next) {
     if (novaEtapa) {
       await registrarAcao({
         pessoa_acesso_id: req.pessoa.id, acao: 'comercial.lead.etapa',
-        detalhes: { lead_id: req.params.id, de: atual.etapa, para: novaEtapa, justificativa: justif }, req,
+        detalhes: { lead_id: req.params.id, de: atual.etapa, para: novaEtapa, justificativa: justif, portao_forcado: portaoForcado }, req,
       });
     }
     res.json(enriquecer(await carregarLead(req.params.id)));
@@ -499,13 +548,9 @@ export async function registrarToque(req, res, next) {
   try {
     await carregarFeriados();
     const d = toqueSchema.parse(req.body);
-    const lead = await carregarLead(req.params.id);
-    exigirContatoLiberado(lead);
-    if (lead.etapa === 'ganho' && d.tipo === 'cadencia') throw new AppError('Lead já é ganho.');
     if (d.tipo !== 'avulso' && d.dia == null) throw new AppError('Informe o dia do roteiro.', 400, 'dia_obrigatorio');
     if (d.tipo === 'cadencia' && !CADENCIA.some((c) => c.d === d.dia)) throw new AppError('Dia fora da cadência.');
     if (d.tipo === 'marco' && !MARCOS_TRIAL.some((m) => m.d === d.dia)) throw new AppError('Marco inexistente.');
-    if (d.tipo === 'marco' && !lead.trial_inicio) throw new AppError('O trial ainda não começou.');
     // Contato sempre com resultado (marco do trial é atividade interna: opcional)
     if (d.tipo !== 'marco' && !d.resultado) {
       throw new AppError('Escolha o resultado do contato (atendeu, não atendeu, caixa postal...).', 400, 'resultado_obrigatorio');
@@ -514,20 +559,30 @@ export async function registrarToque(req, res, next) {
     if (d.resultado === 'agendou' && !d.reuniao) {
       throw new AppError('Resultado "agendou": informe data e hora da reunião.', 400, 'reuniao_obrigatoria');
     }
+    if (d.reuniao) checarRetroativo(req, d.reuniao.inicio);
     const hoje = hojeBR();
+    if (d.proxima_data && d.proxima_data < hoje) throw new AppError('A data do próximo passo não pode estar no passado.');
+    if (d.proximo_passo && !d.proxima_data) throw new AppError('Informe a data do próximo passo.', 400, 'proxima_data_obrigatoria');
+
+    // Tudo numa transação, com o lead travado: dois cliques (ou duas
+    // pessoas) no mesmo toque não duplicam etapa, reunião nem próximo passo.
+    await client.query('BEGIN');
+    await client.query('SELECT 1 FROM comercial_leads WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const lead = await carregarLead(req.params.id, client);
+    exigirContatoLiberado(lead);
+    if (lead.etapa === 'ganho' && d.tipo === 'cadencia') throw new AppError('Lead já é ganho.');
+    if (d.tipo === 'marco' && !lead.trial_inicio) throw new AppError('O trial ainda não começou.');
     // Etapas de negociação nunca ficam sem próximo passo datado
     const negociando = ['diagnostico', 'qualificado', 'trial', 'proposta'].includes(lead.etapa);
     const temFuturo = lead.proxima_data && lead.proxima_data >= hoje;
     if (d.tipo === 'avulso' && negociando && !temFuturo && !(d.proximo_passo && d.proxima_data)) {
       throw new AppError('Registre o próximo passo e a data (lead em negociação não pode ficar sem próximo passo).', 400, 'proximo_passo_obrigatorio');
     }
-    if (d.proxima_data && d.proxima_data < hoje) throw new AppError('A data do próximo passo não pode estar no passado.');
 
     const canal = d.canal
       || (d.tipo === 'cadencia' ? CADENCIA.find((c) => c.d === d.dia)?.canal : null)
       || null;
 
-    await client.query('BEGIN');
     const { rows } = await client.query(
       `INSERT INTO comercial_toques (lead_id, tipo, dia, canal, resultado, duracao_min, nota, data, pessoa_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -536,6 +591,11 @@ export async function registrarToque(req, res, next) {
       [lead.id, d.tipo, d.tipo === 'avulso' ? null : d.dia, canal, d.resultado ?? null, d.duracao_min ?? null,
         d.nota ?? null, hoje, req.pessoa.id],
     );
+    if (!rows.length) {
+      // Toque do roteiro já registrado (clique duplo): nada mais acontece.
+      await client.query('ROLLBACK');
+      return res.status(200).json({ ...enriquecer(await carregarLead(lead.id)), duplicado: true });
+    }
     const sets = ['atualizado_em = now()']; const vals = [lead.id];
     if (d.proximo_passo && d.proxima_data) {
       vals.push(d.proximo_passo, d.proxima_data);
@@ -543,6 +603,15 @@ export async function registrarToque(req, res, next) {
     } else if (d.tipo === 'cadencia' && d.dia === 12 && lead.etapa === 'cadencia' && !temFuturo) {
       vals.push('Cadência encerrada: decidir se volta em 90 dias', hoje);
       sets.push(`proximo_passo = $${vals.length - 1}`, `proxima_data = $${vals.length}`);
+    }
+    // Quem faz contato com lead da fila passa a ser o responsável.
+    if (!lead.dono_id) { vals.push(req.pessoa.id); sets.push(`dono_id = $${vals.length}`); }
+    // Agendou diagnóstico a partir de prospect/cadência → avança para Diagnóstico
+    const avanca = d.reuniao?.tipo === 'diagnostico' && ['prospect', 'cadencia'].includes(lead.etapa);
+    if (avanca) {
+      const mud = aplicarEtapa(lead, 'diagnostico', hoje);
+      vals.push('diagnostico', hoje, JSON.stringify(mud.marcos));
+      sets.push(`etapa = $${vals.length - 2}`, `etapa_desde = $${vals.length - 1}`, `marcos = $${vals.length}::jsonb`);
     }
     await client.query(`UPDATE comercial_leads SET ${sets.join(', ')} WHERE id = $1`, vals);
     if (d.reuniao) {
@@ -553,20 +622,14 @@ export async function registrarToque(req, res, next) {
           d.reuniao.responsavel_id || lead.dono_id || req.pessoa.id, req.pessoa.id],
       );
     }
-    await client.query('COMMIT');
-    // Agendou diagnóstico a partir de prospect/cadência → avança para Diagnóstico
-    if (d.reuniao?.tipo === 'diagnostico' && ['prospect', 'cadencia'].includes(lead.etapa)) {
-      const mud = aplicarEtapa(lead, 'diagnostico', hoje);
-      await query(
-        `UPDATE comercial_leads SET etapa = 'diagnostico', etapa_desde = $2, marcos = $3::jsonb WHERE id = $1`,
-        [lead.id, hoje, JSON.stringify(mud.marcos)],
-      );
-      await query(
+    if (avanca) {
+      await client.query(
         `INSERT INTO comercial_movimentos (lead_id, de_etapa, para_etapa, pessoa_id, justificativa) VALUES ($1,$2,'diagnostico',$3,'reunião agendada no contato')`,
         [lead.id, lead.etapa, req.pessoa.id],
       );
     }
-    res.status(rows.length ? 201 : 200).json(enriquecer(await carregarLead(lead.id)));
+    await client.query('COMMIT');
+    res.status(201).json(enriquecer(await carregarLead(lead.id)));
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
@@ -621,6 +684,7 @@ export async function estornarToqueRoteiro(req, res, next) {
 export async function agendarReuniao(req, res, next) {
   try {
     const d = reuniaoSchema.parse(req.body);
+    checarRetroativo(req, d.inicio);
     const lead = await carregarLead(req.params.id);
     exigirContatoLiberado(lead);
     const { rows } = await query(
@@ -640,14 +704,16 @@ export async function desfechoReuniao(req, res, next) {
     const { rows } = await query(`SELECT id, lead_id, inicio, status FROM comercial_reunioes WHERE id = $1`, [req.params.id]);
     if (!rows.length) throw new NaoEncontradoError('Reunião não encontrada');
     const r = rows[0];
-    if (r.status !== 'agendada') throw new AppError('Esta reunião já tem desfecho registrado.');
     if (b.status !== 'cancelada' && new Date(r.inicio) > new Date()) {
       throw new AppError('Só dá para marcar "realizada" ou "faltou" depois do horário da reunião.', 400, 'reuniao_futura');
     }
-    await query(
-      `UPDATE comercial_reunioes SET status = $2, nota = COALESCE($3, nota), desfecho_em = now(), desfecho_por_id = $4 WHERE id = $1`,
+    // Condicional: dois desfechos ao mesmo tempo → só o primeiro vale.
+    const { rowCount } = await query(
+      `UPDATE comercial_reunioes SET status = $2, nota = COALESCE($3, nota), desfecho_em = now(), desfecho_por_id = $4
+        WHERE id = $1 AND status = 'agendada'`,
       [r.id, b.status, b.nota ?? null, req.pessoa.id],
     );
+    if (!rowCount) throw new AppError('Esta reunião já tem desfecho registrado.', 409, 'ja_registrado');
     await query(`UPDATE comercial_leads SET atualizado_em = now() WHERE id = $1`, [r.lead_id]);
     await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.reuniao.desfecho', detalhes: { reuniao_id: r.id, lead_id: r.lead_id, status: b.status }, req });
     res.json({ reunioes: await reunioesDoLead(r.lead_id) });
@@ -659,11 +725,12 @@ export async function remarcarReuniao(req, res, next) {
   const client = await pool.connect();
   try {
     const b = z.object({ inicio: z.string().datetime({ offset: true }), nota: txt(2000) }).parse(req.body || {});
-    const { rows } = await client.query(`SELECT * FROM comercial_reunioes WHERE id = $1`, [req.params.id]);
+    checarRetroativo(req, b.inicio);
+    await client.query('BEGIN');
+    const { rows } = await client.query(`SELECT * FROM comercial_reunioes WHERE id = $1 FOR UPDATE`, [req.params.id]);
     if (!rows.length) throw new NaoEncontradoError('Reunião não encontrada');
     const r = rows[0];
-    if (r.status !== 'agendada') throw new AppError('Só reunião agendada pode ser remarcada.');
-    await client.query('BEGIN');
+    if (r.status !== 'agendada') throw new AppError('Só reunião agendada pode ser remarcada.', 409, 'ja_registrado');
     const { rows: nova } = await client.query(
       `INSERT INTO comercial_reunioes (lead_id, tipo, inicio, participantes, nota, responsavel_id, criado_por_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -704,6 +771,17 @@ export async function registrarProposta(req, res, next) {
     if (d.desconto === 'mes_gratis_ex_cliente') {
       if (lead.origem !== 'ex_cliente') throw new AppError('O mês grátis é só para ex-cliente que volta. Não há outro desconto.', 400, 'desconto_negado');
       if (!lead.cns && !lead.cnpj) throw new AppError('Informe o CNS ou o CNPJ do cartório: o mês grátis é controlado por cartório.', 400, 'desconto_negado');
+      // Ex-cliente de verdade: cancelado no portfólio (CNPJ ou e-mail). Sem
+      // esse registro (base sem sincronizar), só a gestão concede.
+      const { rows: ex } = await client.query(
+        `SELECT 1 FROM produtos_clientes pc WHERE pc.status = 'cancelado'
+           AND (($1::text IS NOT NULL AND regexp_replace(COALESCE(pc.documento,''), '\D', '', 'g') = $1)
+             OR ($2::text IS NOT NULL AND lower(pc.email) = lower($2))) LIMIT 1`,
+        [lead.cnpj, lead.email],
+      );
+      if (!ex.length && !ehGestor(req)) {
+        throw new AppError('Não achei este CNPJ/e-mail como cliente cancelado no portfólio. Peça à gestão comercial para conceder o mês grátis.', 403, 'desconto_negado');
+      }
       const { rows: usado } = await client.query(
         `SELECT 1 FROM comercial_propostas x JOIN comercial_leads l ON l.id = x.lead_id
           WHERE x.desconto = 'mes_gratis_ex_cliente' AND x.status IN ('enviada','aceita') AND x.lead_id <> $1
@@ -786,8 +864,17 @@ export async function recompensaIndicacao(req, res, next) {
 // ---------------------------------------------------------------------------
 
 /** GET /comercial/painel — Hoje, Trials, Supervisão e números */
-export async function painel(_req, res, next) {
-  try { res.json(await calcularPainel()); } catch (err) { next(err); }
+export async function painel(req, res, next) {
+  try {
+    const p = await calcularPainel();
+    // Observação de checagem é anotação da gestão sobre a pessoa:
+    // quem não é gestão só vê as que falam de si.
+    if (!ehGestor(req)) {
+      p.supervisao = p.supervisao.map((x) => (x.pessoa.id === req.pessoa.id ? x
+        : { ...x, checagens: x.checagens.map(({ observacao, ...c }) => c) }));
+    }
+    res.json(p);
+  } catch (err) { next(err); }
 }
 
 /** GET /comercial/metas?mes=YYYY-MM */
@@ -821,31 +908,91 @@ export async function salvarMetas(req, res, next) {
 // Importar lista
 // ---------------------------------------------------------------------------
 
+/** Valida uma linha da planilha; devolve a mensagem do problema ou null. */
+function problemaLinha(dados) {
+  if (dados.cns && (dados.cns.length < 5 || dados.cns.length > 7)) return `CNS "${dados.cns}" inválido (tem 6 dígitos)`;
+  if (dados.cnpj && dados.cnpj.length !== 14) return `CNPJ "${dados.cnpj}" inválido (tem 14 dígitos)`;
+  if (dados.uf && !/^[A-Z]{2}$/.test(dados.uf)) return `UF "${dados.uf}" inválida`;
+  if (dados.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dados.email)) return `e-mail "${dados.email}" inválido`;
+  if (dados.email && dados.email.length > 255) return 'e-mail longo demais';
+  if (!dados.cidade && !dados.cns && !dados.cnpj && !dados.email) return 'sem cidade, CNS, CNPJ ou e-mail: não dá para identificar o cartório';
+  return null;
+}
+
 /** POST /comercial/leads/importar-lista — colar planilha (prospecção) */
 export async function importarLista(req, res, next) {
   const client = await pool.connect();
   try {
     const d = importarListaSchema.parse(req.body);
-    await client.query('BEGIN');
-    let criados = 0; const recusados = [];
-    for (const ln of d.linhas) {
-      const seg = SEGMENTOS.find((s) => s.toLowerCase() === String(ln.segmento || '').toLowerCase());
-      const dados = {
-        nome: ln.nome, cidade: ln.cidade, uf: ln.uf ? String(ln.uf).toUpperCase().slice(0, 2) : null,
+    const linhas = d.linhas.map((ln) => {
+      const seg = SEGMENTOS.find((x) => x.toLowerCase() === String(ln.segmento || '').toLowerCase());
+      return {
+        nome: ln.nome, cidade: ln.cidade, uf: ln.uf ? String(ln.uf).trim().toUpperCase() || null : null,
         telefone: ln.telefone, email: ln.email ? ln.email.toLowerCase() : null, contato: ln.contato,
         cns: soDigitos(ln.cns), cnpj: soDigitos(ln.cnpj),
         segmento: seg || (ln.segmento ? 'Outro' : null),
         dono_id: d.dono_id ?? null, origem: d.origem, campanha: d.campanha, etapa: d.etapa,
       };
-      const bloq = await verificarBloqueios(dados, { soVerificar: true, client });
-      if (bloq) { recusados.push({ nome: ln.nome, motivo: bloq.codigo, mensagem: bloq.msg }); continue; }
+    });
+    // Cadência começa hoje e precisa de alguém tocando: sem dono, entra como prospect (fila).
+    if (d.etapa === 'cadencia' && !d.dono_id) throw new AppError('Para importar direto em Cadência, escolha o responsável. Sem responsável, importe como Prospect (fila).', 400, 'dono_obrigatorio');
+    await client.query('BEGIN');
+    const checar = await prepararBloqueiosLote(linhas, { client });
+    let criados = 0; const recusados = [];
+    for (let i = 0; i < linhas.length; i++) {
+      const dados = linhas[i];
+      const inval = problemaLinha(dados);
+      if (inval) { recusados.push({ linha: i + 1, nome: dados.nome, motivo: 'invalido', mensagem: inval }); continue; }
+      const bloq = checar(dados, i);
+      if (bloq) { recusados.push({ linha: i + 1, nome: dados.nome, motivo: bloq.codigo, mensagem: bloq.msg }); continue; }
       await inserirLead(client, dados, req.pessoa.id);
       criados++;
     }
     await client.query('COMMIT');
-    const por = recusados.reduce((a, r) => ({ ...a, [r.motivo]: (a[r.motivo] || 0) + 1 }), {});
+    const por = recusados.reduce((a, x) => ({ ...a, [x.motivo]: (a[x.motivo] || 0) + 1 }), {});
     await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.importar_lista', detalhes: { criados, recusados: por, origem: d.origem, campanha: d.campanha }, req });
-    res.status(201).json({ criados, recusados: recusados.length, recusados_por_motivo: por, exemplos: recusados.slice(0, 20) });
+    // Devolve TODAS as recusas: a tela oferece baixar o CSV para corrigir.
+    res.status(201).json({ criados, recusados: recusados.length, recusados_por_motivo: por, lista_recusados: recusados, exemplos: recusados.slice(0, 20) });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally { client.release(); }
+}
+
+/**
+ * POST /comercial/leads/pegar {quantidade} — pega os próximos prospects da
+ * fila (sem dono), os mais antigos primeiro. O prazo da etapa começa agora.
+ */
+export async function pegarDaFila(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const b = z.object({
+      quantidade: z.coerce.number().int().min(1).max(50),
+      campanha: txt(120),
+      uf: z.string().max(2).nullable().optional(),
+    }).parse(req.body || {});
+    const hoje = hojeBR();
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `UPDATE comercial_leads l SET dono_id = $1, etapa_desde = $2
+        WHERE l.id IN (
+          SELECT id FROM comercial_leads
+           WHERE arquivado_em IS NULL AND etapa = 'prospect' AND dono_id IS NULL
+             AND ($4::text IS NULL OR campanha = $4) AND ($5::text IS NULL OR uf = upper($5))
+           ORDER BY criado_em, nome
+           LIMIT $3 FOR UPDATE SKIP LOCKED)
+        RETURNING l.id`,
+      [req.pessoa.id, hoje, b.quantidade, b.campanha ?? null, b.uf || null],
+    );
+    for (const x of rows) {
+      await client.query(
+        `INSERT INTO comercial_alteracoes (lead_id, campo, de, para, pessoa_id) VALUES ($1, 'dono_id', NULL, $2::text, $3)`,
+        [x.id, req.pessoa.id, req.pessoa.id],
+      );
+    }
+    await client.query('COMMIT');
+    await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.fila.pegar', detalhes: { quantidade: rows.length }, req });
+    res.json({ pegos: rows.length, ids: rows.map((x) => x.id) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
@@ -901,7 +1048,7 @@ export async function previaImportarQuadro(req, res, next) {
     const { rows: colunas } = await query(
       `SELECT col.id, col.nome, col.tipo, col.ordem,
               (SELECT count(*)::int FROM cards c WHERE c.coluna_id = col.id AND c.arquivado_em IS NULL) AS cards
-         FROM colunas col WHERE col.quadro_id = $1 AND col.tipo <> 'sustentacao'
+         FROM colunas col WHERE col.quadro_id = $1 AND col.tipo <> 'sustentacao' AND col.arquivada_em IS NULL
         ORDER BY col.ordem`,
       [quadroId],
     );

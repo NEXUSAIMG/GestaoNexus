@@ -57,14 +57,14 @@ export default function Comercial() {
   useEffect(() => { try { localStorage.setItem('comercial-aba', aba); } catch { /* ok */ } }, [aba]);
 
   useEffect(() => {
-    api.get('/comercial/config').then((r) => setCfg(r.data)).catch((err) => setErro(mensagemDeErro(err, 'Não consegui abrir o Comercial.')));
+    api.get('/comercial/config').then((r) => { setCfg(r.data); setErro(''); }).catch((err) => setErro(mensagemDeErro(err, 'Não consegui abrir o Comercial.')));
   }, []);
 
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
     if (['funil', 'scripts', 'controles', 'ajuda'].includes(aba)) return;
-    api.get('/comercial/painel').then((r) => setPainel(r.data)).catch((err) => setErro(mensagemDeErro(err)));
+    api.get('/comercial/painel').then((r) => { setPainel(r.data); setErro(''); }).catch((err) => setErro(mensagemDeErro(err)));
   }, [aba, versao]);
 
   useEffect(() => { if (!aviso) return undefined; const t = setTimeout(() => setAviso(''), 4000); return () => clearTimeout(t); }, [aviso]);
@@ -104,7 +104,7 @@ export default function Comercial() {
       {!cfg ? <p className="text-sm text-slate-400">Carregando…</p> : (
         <>
           {aba === 'funil' && (
-            <Funil cfg={cfg} admin={admin} versao={versao} onAbrir={abrir}
+            <Funil cfg={cfg} admin={admin} gestor={!!cfg.eu?.gestor} versao={versao} onAbrir={abrir}
               onNovo={() => setAberto({ id: null })}
               onImportarLista={() => setModal('lista')}
               onImportarQuadro={() => setModal('quadro')} />
@@ -123,9 +123,10 @@ export default function Comercial() {
           {aba === 'processo' && <VistaProcesso cfg={cfg} painel={painel} />}
           {aba === 'scripts' && <VistaScripts cfg={cfg} />}
           {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
-          {!['funil', 'scripts', 'controles'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
+          {!['funil', 'scripts', 'controles', 'ajuda'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
           {painel && aba === 'hoje' && (
             <VistaHoje painel={escopo === 'meus' ? soMeus(painel, cfg.eu.id) : painel} escopo={escopo} cfg={cfg} onAbrir={abrir} onMudou={recarregar}
+              onAviso={setAviso}
               onToque={(lead, tipo, dia) => setToque({ lead, tipo, dia })} onMarco={marcarMarco} />
           )}
           {painel && aba === 'trials' && <VistaTrials painel={painel} cfg={cfg} onAbrir={abrir} />}
@@ -138,7 +139,8 @@ export default function Comercial() {
       {cfg && <Tour forcar={tour} onFechar={() => setTour(false)} />}
       {cfg && aberto && (
         <LeadDrawer id={aberto.id} cfg={cfg} padrao={{ origem: '', dono_id: pessoa?.id || '' }}
-          onFechar={() => setAberto(null)} onMudou={recarregar} />
+          onFechar={() => setAberto(null)} onMudou={recarregar}
+          onCriado={(novo) => { setAviso('Cartório cadastrado. Veja o próximo passo na ficha.'); setAberto({ id: novo }); }} />
       )}
       {cfg && toque && (
         <ToqueModal cfg={cfg} lead={toque.lead} tipo={toque.tipo} dia={toque.dia}

@@ -5,12 +5,12 @@ import {
   agendarReuniao, desfechoReuniao, remarcarReuniao,
   registrarProposta, statusProposta, confirmarPagamento, recompensaIndicacao,
   painel, obterMetas, salvarMetas,
-  importarLista, previaImportarQuadro, importarQuadro,
+  importarLista, previaImportarQuadro, importarQuadro, pegarDaFila,
 } from '../controllers/comercial.controller.js';
 import {
   listarNaoContatar, incluirNaoContatar, removerNaoContatar,
   registrarChecagem, listarChecagens, registrar1a1, listar1a1, criarAcao, atualizarAcao,
-  obterPlacar, incluirFeriado, removerFeriado,
+  obterPlacar, incluirFeriado, removerFeriado, listarGestores, salvarGestores,
 } from '../controllers/comercial-gestao.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
 import { marcarGestorComercial } from '../services/comercial.dados.js';
@@ -19,9 +19,10 @@ import { marcarGestorComercial } from '../services/comercial.dados.js';
  * Módulo Comercial — Sprint 42 / 42B.
  *
  * Liberado para qualquer pessoa logada (a equipe comercial costuma ter
- * acesso restrito). Ações de gestão (metas, arquivar, pagamento manual,
- * checagens, 1:1, remover da lista de não contatar, feriados, importar
- * quadro) exigem admin — checado no controller ou aqui.
+ * acesso restrito). Ações de gestão (metas, arquivar, checagens, 1:1,
+ * remover da lista de não contatar, feriados) exigem a gestão comercial
+ * (admin ou pessoa da lista comercial_gestores); pagamento manual, definir
+ * a gestão e importar o quadro exigem admin — checado no controller ou aqui.
  */
 const router = Router();
 router.use(autenticar);
@@ -39,6 +40,7 @@ router.get('/leads', listar);
 router.post('/leads', criar);
 router.post('/leads/verificar', verificar);
 router.post('/leads/importar-lista', importarLista);
+router.post('/leads/pegar', pegarDaFila);
 router.get('/leads/:id', obter);
 router.put('/leads/:id', atualizar);
 router.post('/leads/:id/arquivar', arquivar);
@@ -71,6 +73,10 @@ router.get('/1a1', listar1a1);
 router.post('/1a1', registrar1a1);
 router.post('/acoes', criarAcao);
 router.put('/acoes/:id', atualizarAcao);
+
+// Gestão comercial (lista definida pelo admin)
+router.get('/gestores', listarGestores);
+router.put('/gestores', salvarGestores);
 
 // Feriados
 router.post('/feriados', incluirFeriado);

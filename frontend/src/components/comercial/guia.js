@@ -187,9 +187,13 @@ export const COMO_FUNCIONA = {
 // Perguntas frequentes
 // ---------------------------------------------------------------------------
 export const FAQ = [
-  { p: 'Registrei um toque errado. Como corrijo?', r: 'Abra o cartório, desmarque o toque na cadência (ou use o histórico) e escreva o motivo. Isso é um estorno: o registro fica riscado, não some. No mesmo dia, você mesma estorna; depois disso, peça à gestão.' },
+  { p: 'Registrei um toque errado. Como corrijo?', r: 'Abra o cartório, desmarque o toque na cadência (contato avulso: abra o Histórico completo e clique em "estornar") e escreva o motivo. Isso é um estorno: o registro fica riscado, não some. No mesmo dia, você mesma estorna; depois disso, peça à gestão.' },
   { p: 'O sistema não me deixa mudar a etapa. Por quê?', r: 'Cada etapa tem um critério (portão). A ficha do cartório mostra a lista do que falta, com o botão para resolver cada item — por exemplo, "Agendar reunião" ou "Preencher diagnóstico". Resolva os itens e tente de novo.' },
-  { p: 'Quero voltar um cartório para uma etapa anterior.', r: 'Pode. Mude a etapa e escreva a justificativa quando o sistema pedir. Ela fica no histórico.' },
+  { p: 'Quero voltar um cartório para uma etapa anterior.', r: 'Pode. Mude a etapa e escreva a justificativa quando o sistema pedir. Ela fica no histórico. Ao reabrir um Perdido, os critérios valem de novo: só a etapa que ele já tinha alcançado antes fica dispensada.' },
+  { p: 'O que é a fila?', r: 'Listas importadas sem responsável ficam na fila (Prospect sem dono). Em Hoje, clique em "Pegar para mim" e escolha quantos: você recebe os mais antigos primeiro e o prazo de 2 dias começa a contar aí. Quem registra contato com um cartório sem responsável também passa a ser o responsável.' },
+  { p: 'Quero passar um cartório para a colega.', r: 'Na ficha, troque o Responsável e salve. Você pode repassar os seus e pegar os sem responsável; tirar um cartório de outra pessoa, só a gestão.' },
+  { p: 'Registrei a origem errada.', r: 'Quem cadastrou corrige nas primeiras 24 horas. Depois disso, peça à gestão: a origem decide a apuração por canal e o mês grátis de ex-cliente.' },
+  { p: 'Esqueci de registrar uma reunião que já aconteceu.', r: 'Reunião com data no passado é registro retroativo: só a gestão lança. Peça a ela com o dia e o horário — fica marcado no histórico.' },
   { p: 'Apareceu "Este cartório já está no funil".', r: 'Alguém já cadastrou esse cartório. A mensagem diz o nome, o protocolo e com quem ele está. Procure pelo nome no Funil e fale com a pessoa — não cadastre de novo com outro nome.' },
   { p: 'O cartório pediu para não ser mais contatado.', r: 'Vá em Controles → Lista de não contatar e inclua o e-mail ou o telefone com o motivo. Depois marque o cartório como Perdido. O sistema passa a bloquear qualquer contato.' },
   { p: 'O cliente pediu desconto.', r: 'A única concessão permitida é 1 mês grátis para ex-cliente que volta, uma vez por cartório. Qualquer outro pedido: leve para a gestão. Na conversa, compare com o custo de uma pessoa respondendo WhatsApp o dia todo.' },
@@ -199,7 +203,7 @@ export const FAQ = [
   { p: 'Por que o meu semáforo está vermelho?', r: 'Você fez menos de 70% do que estava previsto para hoje (toques e marcos pendentes) ou está abaixo da sua meta de novos ou de toques. Veja os alertas no seu cartão da Supervisão e os itens em Hoje.' },
   { p: 'Não sei o que falar na ligação.', r: 'Abra a aba Scripts. Dentro da ficha do cartório também aparece o roteiro do passo atual, com botão para copiar.' },
   { p: 'Quem pode arquivar um cartório?', r: 'Só a gestão, com motivo — arquivar tira o cartório das contas. Para encerrar uma negociação, use Perdido.' },
-  { p: 'Quem é a "gestão" no sistema?', r: 'Quem é administrador do Nexus ou líder da equipe Comercial (Equipes → membro → papel Líder). A gestão registra checagens e 1:1, define metas, arquiva e força etapa com justificativa. Confirmar pagamento manual é só do administrador.' },
+  { p: 'Quem é a "gestão" no sistema?', r: 'Quem é administrador do Nexus e as pessoas que o administrador marcar em Controles → Gestão comercial. A gestão registra checagens e 1:1, define metas, arquiva, troca responsável e força etapa com justificativa. Confirmar pagamento manual é só do administrador.' },
 ];
 
 // ---------------------------------------------------------------------------

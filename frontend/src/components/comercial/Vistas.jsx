@@ -21,7 +21,41 @@ function Lista({ itens, vazio, render }) {
 // ---------------------------------------------------------------------------
 // HOJE
 // ---------------------------------------------------------------------------
-export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMudou }) {
+/**
+ * Fila: prospects sem responsável (listas importadas). Ninguém "perde" lead
+ * da fila — cada pessoa pega um lote, e o prazo da etapa começa ao pegar.
+ */
+function Fila({ painel, onMudou, onAviso }) {
+  const [qtd, setQtd] = useState(10);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState('');
+  if (!painel.fila) return null;
+  async function pegar() {
+    setErro(''); setEnviando(true);
+    try {
+      const r = await api.post('/comercial/leads/pegar', { quantidade: Number(qtd) });
+      onAviso?.(r.data.pegos ? `${r.data.pegos} cartório(s) da fila agora são seus. Comece a cadência pelo Funil.` : 'A fila está vazia.');
+      onMudou();
+    } catch (err) { setErro(mensagemDeErro(err)); } finally { setEnviando(false); }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-nexus-200 bg-nexus-50 px-3 py-2 text-sm text-slate-700">
+      <span><b>{painel.fila}</b> cartório(s) na fila (Prospect sem responsável).</span>
+      <Dica texto="Listas importadas entram na fila. Cada pessoa pega um lote, os mais antigos primeiro; ao pegar, o prazo de 2 dias da etapa Prospect começa a contar." />
+      <span className="ml-auto flex items-center gap-1.5">
+        <select className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm" value={qtd} onChange={(e) => setQtd(e.target.value)} aria-label="Quantos pegar">
+          {[5, 10, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <button type="button" className="rounded-md bg-nexus-700 px-3 py-1 text-sm font-medium text-white hover:bg-nexus-800 disabled:opacity-50" disabled={enviando} onClick={pegar}>
+          {enviando ? 'Pegando…' : 'Pegar para mim'}
+        </button>
+      </span>
+      {erro && <span className="w-full text-red-700">{erro}</span>}
+    </div>
+  );
+}
+
+export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMudou, onAviso }) {
   const { numeros: n, metas: m, hoje_listas: h } = painel;
   const [desfecho, setDesfecho] = useState(null);
   const dataExt = new Date(painel.hoje + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -181,17 +215,19 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
         <Kpi rotulo="Clientes pagos no mês (equipe)" valor={n.pagos_mes} meta={m.metaClientes}
           sub={`${brl(n.receita_nova_mes)}/mês · ${n.aguardando_pagamento} aguardando pagamento`} />
       </div>
-      {painel.sem_dono > 0 && escopo !== 'meus' && (
+      {painel.sem_dono > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {painel.sem_dono} cartório(s) ativo(s) sem responsável. Abra no Funil (filtro "Sem responsável") e escolha quem cuida.
+          {painel.sem_dono} cartório(s) em andamento sem responsável{escopo === 'meus' ? ' — não aparecem em "Só os meus"' : ''}.
+          Abra no Funil (filtro "Sem responsável"): quem registra um contato vira o responsável.
         </div>
       )}
+      <Fila painel={painel} onMudou={onMudou} onAviso={onAviso} />
 
       {!total && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
           <p className="text-base font-semibold">Tudo em dia.</p>
           <p className="mt-1">Sem tarefas pendentes{escopo === 'meus' ? ' para você' : ''}. Bom momento para colocar mais cartórios em cadência:
-            abra o Funil, escolha cartórios em Prospect e clique em “Começar cadência hoje”. A meta da equipe é {m.metaNovosDia} novos por dia útil.</p>
+            {painel.fila ? 'pegue um lote da fila acima e ' : ''}abra o Funil, escolha cartórios em Prospect e clique em “Começar cadência hoje”. A meta da equipe é {m.metaNovosDia} novos por dia útil.</p>
         </div>
       )}
 
@@ -202,7 +238,7 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
             extra={<Pill nivel={b.nivel}>{b.itens.length}</Pill>}>
             <p className="-mt-1 text-xs text-slate-500">{b.porque}</p>
             <ul className="divide-y divide-slate-100">{b.itens.slice(0, 40).map(b.render)}</ul>
-            {b.itens.length > 40 && <p className="text-xs text-slate-500">e mais {b.itens.length - 40}</p>}
+            {b.itens.length > 40 && <p className="text-xs text-slate-500">e mais {b.itens.length - 40} — conclua estes e eles aparecem aqui.</p>}
           </Painel>
         ))}
       </div>
@@ -348,8 +384,16 @@ export function VistaMetas({ painel, cfg, onSalvo }) {
   const setPP = (pid, k, v) => setForm({ ...form, porPessoa: { ...form.porPessoa, [pid]: { ...(form.porPessoa[pid] || {}), [k]: v === '' ? 0 : Number(v) } } });
 
   async function salvar() {
-    setSalvando(true); setMsg('');
-    try { await api.put('/comercial/metas/' + mes, form); setMsg('Metas salvas.'); onSalvo(); } catch (err) { setMsg(mensagemDeErro(err)); } finally { setSalvando(false); }
+    setMsg('');
+    // Campo do mês vazio vira erro claro (antes ia '' e o servidor lia 0).
+    const vazio = CAMPOS_META.find(([k]) => form[k] === '' || form[k] == null);
+    if (vazio) { setMsg(`Preencha "${vazio[1]}".`); return; }
+    const corpo = Object.fromEntries(Object.entries(form).filter(([k]) => !k.startsWith('_')));
+    // Meta individual vazia = 0 (sem meta para aquela pessoa)
+    corpo.porPessoa = Object.fromEntries(Object.entries(form.porPessoa || {}).map(([pid, v]) => [pid,
+      Object.fromEntries(Object.entries(v || {}).map(([k, x]) => [k, x === '' || x == null ? 0 : Number(x)]))]));
+    setSalvando(true);
+    try { await api.put('/comercial/metas/' + mes, corpo); setMsg('Metas salvas.'); onSalvo(); } catch (err) { setMsg(mensagemDeErro(err)); } finally { setSalvando(false); }
   }
 
   return (
@@ -521,6 +565,7 @@ export function VistaControles({ cfg, onMudou }) {
     <div className="grid gap-4 xl:grid-cols-2">
       <NaoContatar cfg={cfg} admin={admin} onMudou={onMudou} />
       <div className="space-y-4">
+        {cfg.eu?.admin && <Gestores cfg={cfg} />}
         <Rotina cfg={cfg} />
         <Feriados cfg={cfg} admin={admin} />
       </div>
@@ -548,8 +593,10 @@ function NaoContatar({ cfg, admin, onMudou }) {
     }));
     if (itens.length) incluir({ itens });
   }
+  const [confirmar, setConfirmar] = useState(null);
   async function remover(id) {
-    try { await api.delete('/comercial/nao-contatar/' + id); carregar(); onMudou(); } catch (err) { setMsg(mensagemDeErro(err)); }
+    setConfirmar(null);
+    try { await api.delete('/comercial/nao-contatar/' + id); setMsg('Removido da lista. O contato volta a poder ser cadastrado.'); carregar(); onMudou(); } catch (err) { setMsg(mensagemDeErro(err)); }
   }
   return (
     <Painel titulo="Lista de não contatar (LGPD / descadastro)" extra={<Pill nivel="line">{lista.length}</Pill>}>
@@ -581,10 +628,52 @@ function NaoContatar({ cfg, admin, onMudou }) {
               <p className="break-all font-mono text-xs text-slate-800">{x.valor}</p>
               <p className="text-xs text-slate-500">{cfg.motivos_nao_contatar[x.motivo]} · {x.criado_por_nome} · {new Date(x.criado_em).toLocaleDateString('pt-BR')}</p>
             </div>
-            {admin && <button type="button" className="text-xs text-red-700 hover:underline" onClick={() => remover(x.id)}>remover</button>}
+            {admin && (confirmar === x.id ? (
+              <span className="flex shrink-0 items-center gap-2 text-xs">
+                <span className="text-slate-600">Remover? A pessoa pediu para não ser contatada.</span>
+                <button type="button" className="font-medium text-red-700 hover:underline" onClick={() => remover(x.id)}>sim, remover</button>
+                <button type="button" className="text-slate-500 hover:underline" onClick={() => setConfirmar(null)}>não</button>
+              </span>
+            ) : <button type="button" className="text-xs text-red-700 hover:underline" onClick={() => setConfirmar(x.id)}>remover</button>)}
           </li>
         ))}
       </ul>
+    </Painel>
+  );
+}
+
+/** Quem faz a gestão comercial (checagens, 1:1, metas, arquivar). Só o admin define. */
+function Gestores({ cfg }) {
+  const [sel, setSel] = useState(null);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    api.get('/comercial/gestores').then((r) => setSel(new Set(r.data.map((g) => g.pessoa_id)))).catch((err) => setMsg(mensagemDeErro(err)));
+  }, []);
+  if (!sel) return null;
+  const alternar = (id) => { const n = new Set(sel); if (n.has(id)) n.delete(id); else n.add(id); setSel(n); setMsg(''); };
+  async function salvar() {
+    try { await api.put('/comercial/gestores', { pessoas: [...sel] }); setMsg('Salvo. Vale a partir da próxima tela que a pessoa abrir.'); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  return (
+    <Painel titulo="Gestão comercial" extra={<Pill nivel="line">{sel.size}</Pill>}>
+      <p className="text-sm text-slate-500">
+        Quem faz a gestão do dia sem ser administrador do Nexus: registra checagens e 1:1, define metas, arquiva,
+        troca responsável e força etapa com justificativa. Não vê o financeiro. Confirmar pagamento continua só com o administrador.
+      </p>
+      <ul className="grid gap-1 sm:grid-cols-2">
+        {cfg.pessoas.filter((p) => p.id !== cfg.eu.id).map((p) => (
+          <li key={p.id}>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-nexus-700" checked={sel.has(p.id)} onChange={() => alternar(p.id)} />
+              {p.nome}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2">
+        <button type="button" className={btnPrimCls} onClick={salvar}>Salvar</button>
+        {msg && <span className="text-sm text-slate-600">{msg}</span>}
+      </div>
     </Painel>
   );
 }

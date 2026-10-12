@@ -26,21 +26,21 @@ export function normTelefone(v) {
 }
 
 // ---------------------------------------------------------------------------
-// Gestão comercial: admin OU líder de uma equipe "Comercial"
+// Gestão comercial: admin OU pessoa marcada pelo admin (comercial_gestores)
 // ---------------------------------------------------------------------------
 /**
  * Quem faz a gestão do dia (checagens, 1:1, metas) nem sempre é admin do
- * Nexus — e admin enxerga o financeiro inteiro. Por isso a gestão comercial
- * também vale para quem é LÍDER de uma equipe cujo nome contém "Comercial"
- * (Equipes → membro → papel Líder). Pagamento manual continua só admin.
+ * Nexus — e admin enxerga o financeiro inteiro. Por isso o admin marca, em
+ * Comercial → Controles, quem faz a gestão comercial. É uma lista explícita:
+ * antes valia "líder de equipe com 'comercial' no nome", e qualquer líder
+ * podia renomear a própria equipe e virar gestor. Pagamento manual continua só admin.
  */
 export async function marcarGestorComercial(req, _res, next) {
   try {
     if (req.pessoa?.administrador) { req.gestorComercial = true; return next(); }
     const { rows } = await query(
-      `SELECT 1 FROM equipes_membros em JOIN equipes e ON e.id = em.equipe_id
-        WHERE em.pessoa_id = $1 AND em.papel = 'lider' AND e.nome ILIKE '%comercial%'
-          AND e.arquivada_em IS NULL LIMIT 1`,
+      `SELECT 1 FROM comercial_gestores g JOIN pessoas_acesso p ON p.id = g.pessoa_id
+        WHERE g.pessoa_id = $1 AND p.ativo = TRUE`,
       [req.pessoa.id],
     );
     req.gestorComercial = rows.length > 0;
@@ -73,7 +73,7 @@ export const SELECT_LEAD = `
          l.proximo_passo, l.proxima_data::text AS proxima_data, l.notas,
          l.indicado_por_id, li.nome AS indicado_por_nome, l.recompensa_indicacao_em::text AS recompensa_indicacao_em,
          l.pago_em::text AS pago_em, l.pago_valor::float AS pago_valor, l.pago_fonte, l.pago_referencia,
-         l.origem_card_id, l.criado_em, l.atualizado_em,
+         l.origem_card_id, l.criado_por_id, l.criado_em, l.atualizado_em,
          to_char(l.atualizado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS atualizado_dia,
          COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text)
                      FROM comercial_toques t
@@ -88,7 +88,7 @@ export const SELECT_LEAD = `
               OR (nc.tipo = 'dominio'  AND nc.valor = split_part(lower(l.email), '@', 2))
               OR (nc.tipo = 'cns'      AND nc.valor = l.cns)
               OR (nc.tipo = 'cnpj'     AND nc.valor = l.cnpj)
-              OR (nc.tipo = 'telefone' AND nc.valor = regexp_replace(regexp_replace(COALESCE(l.telefone,''), '\\D', '', 'g'), '^55(\\d{10,11})$', '\\1'))
+              OR (nc.tipo = 'telefone' AND nc.valor = comercial_tel(l.telefone))
             )
          ) AS bloqueado_nc
     FROM comercial_leads l
@@ -159,15 +159,27 @@ export async function pessoasAtivas() {
 // ---------------------------------------------------------------------------
 // Bloqueios: duplicidade, já cliente, não contatar
 // ---------------------------------------------------------------------------
+const STATUS_CLIENTE = ['ativo', 'trial', 'pausado', 'inadimplente'];
+
+/** Chaves de identificação de um cadastro (já normalizadas em JS; nome+cidade+UF vai pelo SQL). */
+function chavesDe(d) {
+  const cns = soDigitos(d.cns); const cnpj = soDigitos(d.cnpj);
+  const email = normEmail(d.email); const tel = normTelefone(d.telefone);
+  return { cns, cnpj, email, dominio: dominioDe(email), tel: tel && tel.length >= 10 ? tel : null, telNc: tel };
+}
+
 /**
  * Lança 409 se o cartório já está no funil (CNS, CNPJ, e-mail, telefone ou
  * nome+cidade+UF), já é cliente ativo ou está na lista de não contatar.
- * `ignorarId` = o próprio lead (na edição).
+ * `ignorarId` = o próprio lead (na edição): aí "já é cliente" não se aplica
+ * — um lead ganho vira cliente e precisa continuar editável.
  * Devolve null se está livre; com `soVerificar` devolve o motivo em vez de lançar.
+ *
+ * nome+cidade+UF é comparado por comercial_chave() dos DOIS lados (função
+ * IMMUTABLE com índice, migração 036): JS e SQL nunca divergem por acento.
  */
 export async function verificarBloqueios(d, { ignorarId = null, soVerificar = false, client = { query } } = {}) {
-  const cns = soDigitos(d.cns); const cnpj = soDigitos(d.cnpj);
-  const email = normEmail(d.email); const tel = normTelefone(d.telefone);
+  const k = chavesDe(d);
   const falhar = (codigo, msg, detalhes) => {
     if (soVerificar) return { codigo, msg, detalhes };
     const e = new ConflitoError(msg); e.codigo = codigo; e.detalhes = detalhes; throw e;
@@ -175,11 +187,11 @@ export async function verificarBloqueios(d, { ignorarId = null, soVerificar = fa
 
   // 1) Não contatar
   const chaves = [];
-  if (email) chaves.push(['email', email]);
-  if (dominioDe(email)) chaves.push(['dominio', dominioDe(email)]);
-  if (tel) chaves.push(['telefone', tel]);
-  if (cns) chaves.push(['cns', cns]);
-  if (cnpj) chaves.push(['cnpj', cnpj]);
+  if (k.email) chaves.push(['email', k.email]);
+  if (k.dominio) chaves.push(['dominio', k.dominio]);
+  if (k.telNc) chaves.push(['telefone', k.telNc]);
+  if (k.cns) chaves.push(['cns', k.cns]);
+  if (k.cnpj) chaves.push(['cnpj', k.cnpj]);
   if (chaves.length) {
     const { rows } = await client.query(
       `SELECT tipo, valor, motivo FROM comercial_nao_contatar
@@ -192,32 +204,36 @@ export async function verificarBloqueios(d, { ignorarId = null, soVerificar = fa
     }
   }
 
-  // 2) Já é cliente (portfólio sincronizado do Seu Cartório)
-  if (cnpj || email) {
+  // 2) Já é cliente (portfólio sincronizado do Seu Cartório). Ex-cliente
+  //    (cancelado) não aparece aqui; cliente ATIVO não entra no funil mesmo
+  //    que alguém marque a origem como "ex-cliente".
+  if (!ignorarId && (k.cnpj || k.email)) {
     const { rows } = await client.query(
       `SELECT pc.nome, pc.status FROM produtos_clientes pc
-        WHERE pc.status IN ('ativo','trial','pausado','inadimplente')
+        WHERE pc.status = ANY($3)
           AND (($1::text IS NOT NULL AND regexp_replace(COALESCE(pc.documento,''), '\\D', '', 'g') = $1)
             OR ($2::text IS NOT NULL AND lower(pc.email) = $2))
         LIMIT 1`,
-      [cnpj, email],
+      [k.cnpj, k.email, STATUS_CLIENTE],
     );
-    if (rows.length && d.origem !== 'ex_cliente') {
+    if (rows.length) {
       return falhar('ja_cliente', `Este cartório já é cliente (${rows[0].nome}, status ${rows[0].status}).`, rows[0]);
     }
   }
 
   // 3) Duplicado no funil
   const conds = []; const params = [];
-  const add = (sql, v) => { params.push(v); conds.push(sql.replaceAll('$?', '$' + params.length)); };
-  if (cns) add('l.cns = $?', cns);
-  if (cnpj) add('l.cnpj = $?', cnpj);
-  if (email) add('lower(l.email) = $?', email);
-  if (tel && tel.length >= 10) add(`regexp_replace(regexp_replace(COALESCE(l.telefone,''), '\\D', '', 'g'), '^55(\\d{10,11})$', '\\1') = $?`, tel);
+  const add = (sql, ...v) => {
+    let t = sql;
+    v.forEach((x) => { params.push(x); t = t.replace('$?', '$' + params.length); });
+    conds.push(t);
+  };
+  if (k.cns) add('l.cns = $?', k.cns);
+  if (k.cnpj) add('l.cnpj = $?', k.cnpj);
+  if (k.email) add('lower(l.email) = $?', k.email);
+  if (k.tel) add('comercial_tel(l.telefone) = $?', k.tel);
   if (d.nome && d.cidade) {
-    add(`btrim(lower(regexp_replace(translate(l.nome, 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'), '[^a-zA-Z0-9]+', ' ', 'g')))
-         || '|' || lower(btrim(COALESCE(l.cidade,''))) || '|' || upper(COALESCE(l.uf,'')) = $?`,
-      normTexto(d.nome) + '|' + String(d.cidade).trim().toLowerCase() + '|' + String(d.uf || '').toUpperCase());
+    add('comercial_chave(l.nome, l.cidade, l.uf) = comercial_chave($?, $?, $?)', d.nome, d.cidade, d.uf || '');
   }
   if (conds.length) {
     params.push(ignorarId);
@@ -239,6 +255,67 @@ export async function verificarBloqueios(d, { ignorarId = null, soVerificar = fa
   return null;
 }
 
+/**
+ * Versão em lote para a importação: 4 consultas para a planilha inteira em
+ * vez de 3 por linha (11 mil leads × 2.000 linhas ficava em minutos).
+ * Devolve `checar(d, i)` → null | {codigo, msg}; cada linha aceita entra nos
+ * conjuntos, então duplicata DENTRO da própria planilha também é recusada.
+ */
+export async function prepararBloqueiosLote(linhas, { client = { query } } = {}) {
+  const ks = linhas.map(chavesDe);
+  const arr = (f) => [...new Set(ks.map(f).filter(Boolean))];
+  const nomes = linhas.map((d) => (d.nome && d.cidade ? d.nome : null));
+  const { rows: chavesNome } = await client.query(
+    `SELECT CASE WHEN n IS NULL THEN NULL ELSE comercial_chave(n, c, u) END AS k
+       FROM unnest($1::text[], $2::text[], $3::text[]) WITH ORDINALITY AS t(n, c, u, i) ORDER BY i`,
+    [nomes, linhas.map((d) => d.cidade || ''), linhas.map((d) => d.uf || '')],
+  );
+  const chaveNome = chavesNome.map((r) => r.k);
+
+  const [{ rows: nc }, { rows: cli }, { rows: dup }] = await Promise.all([
+    client.query(`SELECT tipo, valor FROM comercial_nao_contatar WHERE removido_em IS NULL`),
+    client.query(
+      `SELECT regexp_replace(COALESCE(documento,''), '\\D', '', 'g') AS doc, lower(email) AS email, nome, status
+         FROM produtos_clientes WHERE status = ANY($1)`, [STATUS_CLIENTE]),
+    client.query(
+      `SELECT l.nome, l.cns, l.cnpj, lower(l.email) AS email, comercial_tel(l.telefone) AS tel,
+              comercial_chave(l.nome, l.cidade, l.uf) AS chave
+         FROM comercial_leads l
+        WHERE l.arquivado_em IS NULL
+          AND (l.cns = ANY($1) OR l.cnpj = ANY($2) OR lower(l.email) = ANY($3)
+            OR comercial_tel(l.telefone) = ANY($4) OR comercial_chave(l.nome, l.cidade, l.uf) = ANY($5))`,
+      [arr((k) => k.cns), arr((k) => k.cnpj), arr((k) => k.email), arr((k) => k.tel), [...new Set(chaveNome.filter(Boolean))]],
+    ),
+  ]);
+  const ncSet = new Set(nc.map((r) => r.tipo + ':' + r.valor));
+  const cliDoc = new Map(cli.filter((r) => r.doc).map((r) => [r.doc, r]));
+  const cliEmail = new Map(cli.filter((r) => r.email).map((r) => [r.email, r]));
+  const vistos = { cns: new Map(), cnpj: new Map(), email: new Map(), tel: new Map(), chave: new Map() };
+  const marcar = (r, nome) => {
+    if (r.cns) vistos.cns.set(r.cns, nome);
+    if (r.cnpj) vistos.cnpj.set(r.cnpj, nome);
+    if (r.email) vistos.email.set(r.email, nome);
+    if (r.tel) vistos.tel.set(r.tel, nome);
+    if (r.chave) vistos.chave.set(r.chave, nome);
+  };
+  dup.forEach((r) => marcar(r, r.nome + ' (já no funil)'));
+
+  return function checar(d, i) {
+    const k = ks[i];
+    for (const [t, v] of [['email', k.email], ['dominio', k.dominio], ['telefone', k.telNc], ['cns', k.cns], ['cnpj', k.cnpj]]) {
+      if (v && ncSet.has(t + ':' + v)) return { codigo: 'nao_contatar', msg: `Na lista de não contatar (${t}: ${v}).` };
+    }
+    const c = (k.cnpj && cliDoc.get(k.cnpj)) || (k.email && cliEmail.get(k.email));
+    if (c) return { codigo: 'ja_cliente', msg: `Já é cliente (${c.nome}, status ${c.status}).` };
+    const ch = chaveNome[i];
+    const hit = (k.cns && vistos.cns.get(k.cns)) || (k.cnpj && vistos.cnpj.get(k.cnpj))
+      || (k.email && vistos.email.get(k.email)) || (k.tel && vistos.tel.get(k.tel)) || (ch && vistos.chave.get(ch));
+    if (hit) return { codigo: 'duplicado', msg: `Duplicado: ${hit}.` };
+    marcar({ ...k, chave: ch }, d.nome + ' (linha ' + (i + 1) + ' da planilha)');
+    return null;
+  };
+}
+
 /** Bloqueia atividade com lead na lista de não contatar. */
 export function exigirContatoLiberado(lead) {
   if (lead.bloqueado_nc) {
@@ -249,7 +326,19 @@ export function exigirContatoLiberado(lead) {
 // ---------------------------------------------------------------------------
 // Pagamentos — confere o ASAAS (cobrança paga com o CNPJ do lead)
 // ---------------------------------------------------------------------------
-export async function conferirPagamentosAsaas() {
+const ASAAS_PAGO = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'];
+const ASAAS_DESFEITO = ['REFUNDED', 'REFUND_REQUESTED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE', 'AWAITING_CHARGEBACK_REVERSAL', 'DELETED'];
+let asaasEm = 0;
+
+/**
+ * Cobrança paga com o CNPJ do lead, a partir de 7 dias antes do ganho (uma
+ * cobrança antiga de outro serviço não conta como pagamento da venda nova).
+ * Estorno/chargeback de uma cobrança já casada desfaz o "pago".
+ * Roda no máximo a cada 10 min (o painel é aberto o dia todo).
+ */
+export async function conferirPagamentosAsaas({ forcar = false } = {}) {
+  if (!forcar && Date.now() - asaasEm < 600_000) return 0;
+  asaasEm = Date.now();
   try {
     const { rowCount } = await query(
       `WITH achados AS (
@@ -257,9 +346,9 @@ export async function conferirPagamentosAsaas() {
            FROM comercial_leads l
            JOIN cobrancas_asaas ca
              ON ca.cliente_documento = l.cnpj
-            AND ca.status IN ('RECEIVED','CONFIRMED','RECEIVED_IN_CASH')
+            AND ca.status = ANY($1)
             AND ca.data_pagamento IS NOT NULL
-            AND ca.data_pagamento >= ((l.marcos->>'ganho')::date - 30)
+            AND ca.data_pagamento >= ((l.marcos->>'ganho')::date - 7)
           WHERE l.etapa = 'ganho' AND l.pago_em IS NULL AND l.cnpj IS NOT NULL
             AND l.arquivado_em IS NULL AND l.marcos ? 'ganho'
           ORDER BY l.id, ca.data_pagamento ASC
@@ -267,7 +356,22 @@ export async function conferirPagamentosAsaas() {
        UPDATE comercial_leads l
           SET pago_em = a.data_pagamento, pago_valor = a.valor, pago_fonte = 'asaas', pago_referencia = a.asaas_id
          FROM achados a WHERE a.id = l.id`,
+      [ASAAS_PAGO],
     );
+    const { rows: desfeitos } = await query(
+      `UPDATE comercial_leads l
+          SET pago_em = NULL, pago_valor = NULL, pago_fonte = NULL, pago_referencia = NULL
+         FROM cobrancas_asaas ca
+        WHERE l.pago_fonte = 'asaas' AND ca.asaas_id = l.pago_referencia AND ca.status = ANY($1)
+        RETURNING l.id, ca.asaas_id, ca.status`,
+      [ASAAS_DESFEITO],
+    );
+    for (const r of desfeitos) {
+      await query(
+        `INSERT INTO comercial_alteracoes (lead_id, campo, de, para, pessoa_id) VALUES ($1, 'pagamento', $2, $3, NULL)`,
+        [r.id, 'pago (ASAAS ' + r.asaas_id + ')', 'desfeito: cobrança ' + r.status],
+      );
+    }
     return rowCount;
   } catch (err) {
     // Base sem a tabela do ASAAS (ou sem sync) não pode derrubar o painel.
@@ -281,10 +385,18 @@ export async function conferirPagamentosAsaas() {
 // ---------------------------------------------------------------------------
 export async function calcularPainel() {
   const hoje = hojeBR();
+  const inicioMes = mesDe(hoje) + '-01';
   await carregarFeriados();
   await conferirPagamentosAsaas();
+  const totais = await totaisFunil();
   const [{ rows: leads }, { rows: toquesHoje }, metas, pessoas, { rows: reunioes }, { rows: propostas }, { rows: checagensHoje }, { rows: acoes }] = await Promise.all([
-    query(SELECT_LEAD + ' WHERE l.arquivado_em IS NULL'),
+    // Fila de prospects sem dono (listas importadas) e fechamentos antigos
+    // ficam fora: só contam nos agregados abaixo.
+    query(SELECT_LEAD + ` WHERE l.arquivado_em IS NULL AND (
+        (l.etapa IN ('cadencia','diagnostico','qualificado','trial','proposta'))
+     OR (l.etapa = 'prospect' AND l.dono_id IS NOT NULL)
+     OR (l.etapa = 'ganho' AND (l.pago_em IS NULL OR l.pago_em >= $1 OR l.marcos->>'ganho' >= $2))
+     OR (l.etapa = 'perdido' AND l.marcos->>'perdido' >= $2))`, [inicioMes, inicioMes]),
     query(`SELECT t.lead_id, t.pessoa_id, t.resultado FROM comercial_toques t
              JOIN comercial_leads l ON l.id = t.lead_id AND l.arquivado_em IS NULL
             WHERE t.data = $1 AND t.estornado_em IS NULL`, [hoje]),
@@ -308,7 +420,31 @@ export async function calcularPainel() {
     ...Object.keys(metas.porPessoa || {}).filter((k) => Object.values(metas.porPessoa[k] || {}).some((v) => Number(v) > 0)),
   ]);
   const sup = pessoas.filter((p) => comLead.has(p.id) || comMeta.has(p.id));
-  return montarPainel({ leads, toquesHoje, metas, pessoas: sup, hoje, reunioes, propostas, checagensHoje, acoes });
+  return montarPainel({ leads, toquesHoje, metas, pessoas: sup, hoje, reunioes, propostas, checagensHoje, acoes, totais });
+}
+
+/** Agregados do funil inteiro (não arquivado), calculados no banco. */
+export async function totaisFunil() {
+  const { rows: [t] } = await query(
+    `SELECT
+       COALESCE((SELECT jsonb_object_agg(etapa, n) FROM (SELECT etapa, count(*)::int n FROM comercial_leads
+                  WHERE arquivado_em IS NULL GROUP BY etapa) x), '{}'::jsonb) AS por_etapa,
+       jsonb_build_object(
+         'cadencia',    count(*) FILTER (WHERE marcos ? 'cadencia'),
+         'diagnostico', count(*) FILTER (WHERE marcos ? 'diagnostico'),
+         'qualificado', count(*) FILTER (WHERE marcos ? 'qualificado'),
+         'trial',       count(*) FILTER (WHERE marcos ? 'trial'),
+         'proposta',    count(*) FILTER (WHERE marcos ? 'proposta'),
+         'ganho',       count(*) FILTER (WHERE marcos ? 'ganho')) AS alcancou,
+       count(*) FILTER (WHERE pago_em IS NOT NULL)::int AS pagos,
+       count(*) FILTER (WHERE etapa = 'perdido')::int AS perdidos,
+       count(*) FILTER (WHERE dono_id IS NULL AND etapa IN ('cadencia','diagnostico','qualificado','trial','proposta'))::int AS sem_dono,
+       count(*) FILTER (WHERE dono_id IS NULL AND etapa = 'prospect')::int AS fila,
+       COALESCE((SELECT jsonb_object_agg(m, n) FROM (SELECT COALESCE(motivo_perda, 'Sem motivo') m, count(*)::int n
+                  FROM comercial_leads WHERE arquivado_em IS NULL AND etapa = 'perdido' GROUP BY 1) y), '{}'::jsonb) AS motivos
+     FROM comercial_leads WHERE arquivado_em IS NULL`,
+  );
+  return t;
 }
 
 // ---------------------------------------------------------------------------
@@ -328,15 +464,15 @@ export async function placar(de, ate) {
            AND (r.inicio AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $1 AND $2)::int AS reunioes_realizadas,
        (SELECT count(*) FROM comercial_reunioes r WHERE COALESCE(r.responsavel_id, r.criado_por_id) = p.id AND r.status = 'faltou'
            AND (r.inicio AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $1 AND $2)::int AS reunioes_faltou,
-       (SELECT count(*) FROM comercial_leads l WHERE l.dono_id = p.id AND l.trial_inicio BETWEEN $1 AND $2)::int AS trials,
+       (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND l.trial_inicio BETWEEN $1 AND $2)::int AS trials,
        (SELECT count(*) FROM comercial_propostas x JOIN comercial_leads l ON l.id = x.lead_id
-           WHERE l.dono_id = p.id AND x.enviada_em BETWEEN $1 AND $2)::int AS propostas,
-       (SELECT count(*) FROM comercial_leads l WHERE l.dono_id = p.id AND l.etapa = 'ganho'
+           WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND x.enviada_em BETWEEN $1 AND $2)::int AS propostas,
+       (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND l.etapa = 'ganho'
            AND (l.marcos->>'ganho')::date BETWEEN $1 AND $2)::int AS assinados,
-       (SELECT count(*) FROM comercial_leads l WHERE l.dono_id = p.id AND l.pago_em BETWEEN $1 AND $2)::int AS pagos,
+       (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND l.pago_em BETWEEN $1 AND $2)::int AS pagos,
        (SELECT COALESCE(sum(COALESCE(l.pago_valor, l.valor_mensal)), 0) FROM comercial_leads l
-           WHERE l.dono_id = p.id AND l.pago_em BETWEEN $1 AND $2)::float AS receita,
-       (SELECT count(*) FROM comercial_leads l WHERE l.dono_id = p.id AND l.etapa = 'perdido'
+           WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND l.pago_em BETWEEN $1 AND $2)::float AS receita,
+       (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.dono_id = p.id AND l.etapa = 'perdido'
            AND (l.marcos->>'perdido')::date BETWEEN $1 AND $2)::int AS perdidos
        FROM p ORDER BY p.nome`,
     [de, ate, RESULTADOS_CONECTAM],

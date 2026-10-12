@@ -11,6 +11,64 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42D — Comercial: varredura antes de ir ao ar
+
+Revisão completa do módulo (backend e telas) com correção de tudo que
+furava o controle ou travaria a equipe no primeiro dia.
+
+**Controle**
+- Gestão comercial agora é uma lista explícita definida pelo admin
+  (Comercial → Controles → Gestão comercial), tabela `comercial_gestores`.
+  Antes valia "líder de equipe com 'comercial' no nome", e qualquer líder
+  podia renomear a equipe e virar gestor.
+- Reabrir Perdido também cobra os portões (só a etapa já alcançada antes
+  fica dispensada); Ganho → Perdido exige justificativa; não se cadastra
+  direto como Perdido/Ganho.
+- Reunião com data no passado (registro retroativo) só pela gestão.
+- Responsável: quem não é gestão só pega lead sem dono ou repassa o
+  próprio. Origem só muda pela gestão (ou por quem cadastrou, em 24h).
+- Mês grátis de ex-cliente confere se o CNPJ/e-mail está cancelado no
+  portfólio; sem isso, só a gestão concede. Origem "ex-cliente" não fura
+  mais o bloqueio de cliente ativo.
+- ASAAS: só conta pagamento de até 7 dias antes do ganho; estorno ou
+  chargeback desfaz o "pago" (com registro no histórico); roda no máximo
+  a cada 10 min.
+- 1:1 e checagens: quem não é gestão vê só os próprios; a observação da
+  checagem de outra pessoa não aparece no painel.
+
+**Para a equipe não travar**
+- Fila: prospect sem responsável (lista importada) não conta como
+  "parado"; em Hoje, "Pegar para mim" entrega um lote, os mais antigos
+  primeiro, e o prazo começa aí. Quem registra contato ou move um lead sem
+  dono vira o responsável.
+- Ficha salva só os campos alterados (um CNPJ importado errado não trava
+  mais a troca de etapa), fica aberta depois de salvar, avisa antes de
+  descartar o que não foi salvo e não perde o rascunho quando um toque
+  recarrega a ficha. Contato avulso pode ser estornado pelo histórico.
+- Importação: linha inválida (CNS, CNPJ, UF, e-mail) ou repetida dentro da
+  própria planilha é recusada sozinha; a tela mostra todas as recusas com
+  a linha e baixa um CSV para corrigir. Checagem em lote (4 consultas para
+  a planilha inteira) em vez de 3 por linha.
+- Duplicidade nome+cidade+UF ignora acento e maiúscula dos dois lados
+  (função `comercial_chave` com índice, igual no JS e no SQL).
+- Toque repetido do roteiro (clique duplo) não repete efeitos; o toque,
+  a reunião e a mudança para Diagnóstico ficam numa transação só.
+- Painel carrega só o que está em andamento e calcula os totais no banco;
+  Funil mostra a contagem real por etapa.
+- Correções: aba Ajuda presa em "Carregando…", rótulo com dica roubando o
+  clique, Esc nos modais, desfecho de reunião futura, metas com campo vazio,
+  confirmação ao remover da lista de não contatar.
+
+**Arquivos**: `036_comercial_ajustes.sql`, `comercial.dados.js`,
+`comercial.regras.js`, `comercial.controller.js`,
+`comercial-gestao.controller.js`, `comercial.routes.js`, telas em
+`components/comercial/*` e `pages/Comercial.jsx`.
+
+**Testar**: `npm run migrate` e `cd testes && npm run api` (189 checagens;
+a seção "Varredura 42D" cobre cada furo acima).
+
+---
+
 ## Sprint 42B — Comercial: controle minucioso
 
 Resultado obrigatório em todo contato, reuniões com desfecho, portões de

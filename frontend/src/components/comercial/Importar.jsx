@@ -18,6 +18,17 @@ function Modal({ titulo, onFechar, children, rodape }) {
   );
 }
 
+const MOTIVO_RECUSA = { duplicado: 'já no funil (ou repetido na lista)', nao_contatar: 'na lista de não contatar', ja_cliente: 'já cliente', invalido: 'dado inválido' };
+const LIMITE = 2000;
+
+function baixarCsv(nome, linhas) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = '﻿' + linhas.map((l) => l.map(esc).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = nome; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Colar lista de cartórios (uma linha por cartório). */
 export function ImportarLista({ cfg, onFechar, onFeito }) {
   const [texto, setTexto] = useState('');
@@ -27,20 +38,55 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
   const [etapa, setEtapa] = useState('prospect');
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState(null);
 
   const linhas = texto.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
     .filter((s) => !/^nome\s*[;\t]/i.test(s))
-    .map((s) => { const p = s.split(/[;\t]/).map((x) => x.trim()); return { nome: p[0], cidade: p[1] || null, uf: (p[2] || '').slice(0, 2) || null, telefone: p[3] || null, email: p[4] || null, segmento: p[5] || null, contato: p[6] || null, cns: p[7] || null, cnpj: p[8] || null }; })
+    .map((s) => { const p = s.split(/[;\t]/).map((x) => x.trim()); return { nome: p[0], cidade: p[1] || null, uf: p[2] || null, telefone: p[3] || null, email: p[4] || null, segmento: p[5] || null, contato: p[6] || null, cns: p[7] || null, cnpj: p[8] || null }; })
     .filter((l) => l.nome);
 
   async function importar() {
     if (!linhas.length) { setMsg('Cole ao menos uma linha com o nome do cartório.'); return; }
+    if (linhas.length > LIMITE) { setMsg(`A lista tem ${linhas.length} linhas; o limite é ${LIMITE.toLocaleString('pt-BR')} por vez. Divida em partes.`); return; }
+    if (etapa === 'cadencia' && !dono) { setMsg('Para entrar direto em cadência, escolha o responsável (alguém precisa fazer o toque do dia 1 hoje).'); return; }
     setEnviando(true); setMsg('');
     try {
-      const r = await api.post('/comercial/leads/importar-lista', { linhas: linhas.slice(0, 2000), origem, campanha: campanha || null, dono_id: dono || null, etapa });
-      const rec = r.data.recusados ? ` ${r.data.recusados} recusado(s): ${Object.entries(r.data.recusados_por_motivo).map(([k, n]) => `${n} ${k === 'duplicado' ? 'já no funil' : k === 'nao_contatar' ? 'na lista de não contatar' : 'já cliente'}`).join(', ')}.` : '';
-      onFeito(`${r.data.criados} cartório(s) importado(s).${rec}`);
+      const r = await api.post('/comercial/leads/importar-lista', { linhas, origem, campanha: campanha || null, dono_id: dono || null, etapa });
+      setResultado(r.data);
     } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
+  }
+
+  if (resultado) {
+    const rec = resultado.lista_recusados || [];
+    const resumo = `${resultado.criados} cartório(s) importado(s)${rec.length ? `, ${rec.length} recusado(s)` : ''}.`;
+    return (
+      <Modal titulo="Resultado da importação" onFechar={() => onFeito(resumo)} rodape={<>
+        {rec.length > 0 && (
+          <button type="button" className={btnCls} onClick={() => baixarCsv('recusados.csv', [['Linha', 'Nome', 'Motivo', 'Detalhe'], ...rec.map((x) => [x.linha, x.nome, MOTIVO_RECUSA[x.motivo] || x.motivo, x.mensagem])])}>
+            Baixar recusados (CSV)
+          </button>
+        )}
+        <button type="button" className={btnPrimCls} onClick={() => onFeito(resumo)}>Concluir</button>
+      </>}>
+        <p className="text-sm text-slate-700"><b>{resultado.criados}</b> cartório(s) entraram {dono ? 'no funil' : 'na fila (Prospect sem responsável) — a equipe pega em Hoje → “Pegar para mim”'}.</p>
+        {rec.length > 0 && (
+          <>
+            <p className="text-sm text-slate-700">
+              <b>{rec.length}</b> recusado(s): {Object.entries(resultado.recusados_por_motivo).map(([k, n]) => `${n} ${MOTIVO_RECUSA[k] || k}`).join(' · ')}.
+              Corrija os inválidos e importe só eles de novo.
+            </p>
+            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200 text-xs">
+              {rec.map((x) => (
+                <li key={x.linha} className="flex gap-2 px-2 py-1">
+                  <span className="w-12 shrink-0 text-slate-400">linha {x.linha}</span>
+                  <span className="min-w-0 flex-1"><b className="text-slate-800">{x.nome}</b> — {x.mensagem}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Modal>
+    );
   }
 
   return (
@@ -48,7 +94,7 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
       <button type="button" className={btnCls} onClick={onFechar}>Cancelar</button>
       <button type="button" className={btnPrimCls} onClick={importar} disabled={enviando}>{enviando ? 'Importando…' : `Importar ${linhas.length || ''}`}</button>
     </>}>
-      <p className="text-sm text-slate-600">Cole uma linha por cartório, campos separados por ponto e vírgula ou tabulação (colar direto da planilha funciona). Até 2.000 linhas por vez.</p>
+      <p className="text-sm text-slate-600">Cole uma linha por cartório, campos separados por ponto e vírgula ou tabulação (colar direto da planilha funciona). Até 2.000 linhas por vez. Linha com dado inválido ou repetido é recusada sozinha e aparece no resultado.</p>
       <pre className="overflow-x-auto rounded-md bg-slate-50 p-2 text-xs text-slate-600">Nome; Cidade; UF; Telefone; E-mail; Segmento; Titular; CNS; CNPJ{'\n'}1º Ofício de Registro Civil; Castanhal; PA; (91) 99999-0000; contato@cartorio.com.br; Registro Civil; Dra. Ana; 067954; 00000000000100</pre>
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Origem *">
@@ -57,18 +103,22 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
           </select>
         </Campo>
         <Campo rotulo="Campanha / onda"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} placeholder="ex.: E-mail onda 1" /></Campo>
-        <Campo rotulo="Responsável">
-          <select className={inputCls} value={dono} onChange={(e) => setDono(e.target.value)}>
-            <option value="">Sem responsável</option>{cfg.pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
-        </Campo>
         <Campo rotulo="Entram como">
-          <select className={inputCls} value={etapa} onChange={(e) => setEtapa(e.target.value)}>
+          <select className={inputCls} value={etapa} onChange={(e) => { setEtapa(e.target.value); if (e.target.value === 'cadencia' && !dono) setDono(cfg.eu?.id || ''); }}>
             <option value="prospect">Prospect</option><option value="cadencia">Em cadência (começa hoje)</option>
           </select>
         </Campo>
+        <Campo rotulo={`Responsável${etapa === 'cadencia' ? ' *' : ''}`}>
+          <select className={inputCls} value={dono} onChange={(e) => setDono(e.target.value)}>
+            {etapa === 'prospect' && <option value="">Ninguém — vai para a fila</option>}
+            {etapa === 'cadencia' && !dono && <option value="">Escolha…</option>}
+            {cfg.pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </Campo>
       </div>
+      {etapa === 'prospect' && !dono && <p className="text-xs text-slate-500">Sem responsável, os cartórios ficam na fila: cada pessoa pega um lote em Hoje (“Pegar para mim”) e o prazo começa a contar aí.</p>}
       <Campo rotulo="Lista"><textarea className={inputCls + ' min-h-[200px] font-mono text-xs'} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Cole aqui" /></Campo>
+      {linhas.length > LIMITE && <p className="text-sm text-amber-800">{linhas.length} linhas — acima do limite de {LIMITE.toLocaleString('pt-BR')} por vez.</p>}
       {msg && <p className="text-sm text-red-700">{msg}</p>}
     </Modal>
   );

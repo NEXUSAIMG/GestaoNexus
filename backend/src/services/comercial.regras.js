@@ -329,9 +329,13 @@ export function metaPessoa(metas, pessoaId) {
 export function montarPainel({
   leads, toquesHoje, metas, pessoas, hoje = hojeBR(),
   reunioes = [], propostas = [], checagensHoje = [], acoes = [], agora = new Date(),
+  totais = null,
 }) {
   const mes = mesDe(hoje);
   const ativo = (l) => ETAPAS_ATIVAS.includes(l.etapa);
+  // Prospect sem dono é FILA (lista importada), não atraso: o prazo da
+  // etapa só começa a contar quando alguém pega o lead.
+  const naFila = (l) => l.etapa === 'prospect' && !l.dono_id;
   const leadDe = new Map(leads.map((l) => [l.id, l]));
   const resumo = (l) => ({
     id: l.id, nome: l.nome, protocolo: l.protocolo, etapa: l.etapa,
@@ -348,7 +352,7 @@ export function montarPainel({
       proximos.push({ lead: resumo(l), proximo_passo: l.proximo_passo, proxima_data: l.proxima_data, vencido: l.proxima_data < hoje });
     }
     const p = situacaoPrazo(l, hoje);
-    if (ativo(l) && p && p.nivel === 'crit') parados.push({ lead: resumo(l), ...p });
+    if (ativo(l) && !naFila(l) && p && p.nivel === 'crit') parados.push({ lead: resumo(l), ...p });
   }
   const porPrevisto = (a, b) => (a.previsto < b.previsto ? -1 : a.previsto > b.previsto ? 1 : 0);
   toques.sort(porPrevisto); marcos.sort(porPrevisto);
@@ -369,15 +373,17 @@ export function montarPainel({
     .sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0));
 
   // --- Números do funil
-  const alcancou = (k) => leads.filter((l) => l.marcos && l.marcos[k]).length;
+  // `totais` (agregados do banco) quando o painel não carrega todos os leads
+  const alcancou = (k) => (totais?.alcancou ? totais.alcancou[k] || 0 : leads.filter((l) => l.marcos && l.marcos[k]).length);
   const rCad = alcancou('cadencia'); const rDiag = alcancou('diagnostico');
   const rTrial = alcancou('trial'); const rGanho = alcancou('ganho');
-  const rPago = leads.filter((l) => l.pago_em).length;
+  const rPago = totais ? totais.pagos : leads.filter((l) => l.pago_em).length;
   const assinadosMes = leads.filter((l) => l.etapa === 'ganho' && String(l.marcos?.ganho || '').startsWith(mes));
   const pagosMes = leads.filter((l) => String(l.pago_em || '').startsWith(mes));
   const perdidos = leads.filter((l) => l.etapa === 'perdido');
   const motivos = {};
-  perdidos.forEach((l) => { const k = l.motivo_perda || 'Sem motivo'; motivos[k] = (motivos[k] || 0) + 1; });
+  if (totais?.motivos) Object.assign(motivos, totais.motivos);
+  else perdidos.forEach((l) => { const k = l.motivo_perda || 'Sem motivo'; motivos[k] = (motivos[k] || 0) + 1; });
   const taxa = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
   const conexoesHoje = toquesHoje.filter((t) => RESULTADOS_CONECTAM.includes(t.resultado)).length;
 
@@ -393,9 +399,9 @@ export function montarPainel({
     assinados_mes: assinadosMes.length,
     aguardando_pagamento: aguardandoPagamento.length,
     receita_nova_mes: pagosMes.reduce((s, l) => s + (Number(l.pago_valor ?? l.valor_mensal) || 0), 0),
-    perdidos: perdidos.length,
+    perdidos: totais ? totais.perdidos : perdidos.length,
     motivos_perda: Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo, n })),
-    por_etapa: Object.fromEntries(ETAPAS.map((e) => [e.k, leads.filter((l) => l.etapa === e.k).length])),
+    por_etapa: Object.fromEntries(ETAPAS.map((e) => [e.k, totais?.por_etapa ? totais.por_etapa[e.k] || 0 : leads.filter((l) => l.etapa === e.k).length])),
     taxas: {
       contato_diag: { de: rCad, para: rDiag, real: taxa(rDiag, rCad), meta: metas.taxaContatoDiag },
       diag_trial:   { de: rDiag, para: rTrial, real: taxa(rTrial, rDiag), meta: metas.taxaDiagTrial },
@@ -469,7 +475,8 @@ export function montarPainel({
     hoje_listas: { toques, marcos, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
     trials,
     supervisao,
-    sem_dono: leads.filter((l) => ativo(l) && !l.dono_id).length,
+    sem_dono: totais ? totais.sem_dono : leads.filter((l) => ativo(l) && !l.dono_id && !naFila(l)).length,
+    fila: totais ? totais.fila : leads.filter(naFila).length,
   };
 }
 

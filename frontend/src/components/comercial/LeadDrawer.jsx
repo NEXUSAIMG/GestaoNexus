@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Archive, CalendarPlus, FileSignature, Phone, BadgeCheck } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
-import { Pill, Campo, Erro, inputCls, btnCls, btnPrimCls, dataBr, dataHoraBr, nivelPontos, brl } from './ui.jsx';
+import { Pill, Campo, Erro, Modal, inputCls, btnCls, btnPrimCls, dataBr, dataHoraBr, nivelPontos, brl } from './ui.jsx';
 import {
   ToqueModal, EstornoModal, TextoModal, ReuniaoModal, DesfechoModal, PropostaModal, PagamentoModal,
 } from './Acoes.jsx';
@@ -36,7 +36,9 @@ function addDias(s, n) { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDat
 const ST_REUNIAO = { agendada: 'neu', realizada: 'ok', faltou: 'crit', remarcada: 'line', cancelada: 'line' };
 const ST_PROPOSTA = { enviada: 'info', aceita: 'ok', recusada: 'crit', expirada: 'warn', substituida: 'line' };
 
-export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
+const igual = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
+
+export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriado }) {
   const [lead, setLead] = useState(null);
   const [f, setF] = useState(null);
   const [erro, setErro] = useState('');
@@ -44,7 +46,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const [salvando, setSalvando] = useState(false);
   const [modal, setModal] = useState(null);
   const [aviso, setAviso] = useState('');
-  const [ganhos, setGanhos] = useState([]);
+  const [ganhos, setGanhos] = useState(null);
   const feriados = new Set((cfg.feriados || []).map((x) => x.data));
   const admin = !!cfg.eu?.admin;          // pagamento manual
   const gestor = !!(cfg.eu?.gestor ?? cfg.eu?.admin); // arquivar, forçar portão
@@ -56,19 +58,20 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
     return r;
   }
 
+  /**
+   * Recarrega do servidor SEM perder o que está sendo digitado: campo que a
+   * pessoa mexeu fica como está; o resto vem atualizado (ex.: um toque que
+   * mudou o próximo passo ou a etapa).
+   */
   async function recarregar() {
     const r = await api.get('/comercial/leads/' + id);
-    const antes = lead;
+    const base = lead ? paraRascunho(lead) : null;
+    const novo = paraRascunho(r.data);
     setF((atual) => {
-      if (!atual || !antes) return paraRascunho(r.data);
-      const editouEtapa = atual.etapa !== antes.etapa;
-      return {
-        ...atual,
-        etapa: editouEtapa ? atual.etapa : r.data.etapa,
-        valor_mensal: r.data.valor_mensal ?? atual.valor_mensal,
-        proximo_passo: r.data.proximo_passo ?? atual.proximo_passo,
-        proxima_data: r.data.proxima_data ?? atual.proxima_data,
-      };
+      if (!atual || !base) return novo;
+      const m = { ...novo };
+      Object.keys(VAZIO).forEach((k) => { if (!igual(atual[k], base[k])) m[k] = atual[k]; });
+      return m;
     });
     setLead(r.data);
     return r.data;
@@ -83,16 +86,24 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
     // eslint-disable-next-line
   }, [id]);
 
+  // Lista de clientes (para "indicado por") só uma vez, quando a origem é indicação.
+  const origemAtual = f?.origem;
   useEffect(() => {
-    if (!f || !['indicacao'].includes(f.origem) || ganhos.length) return;
-    api.get('/comercial/leads', { params: { etapa: 'ganho', limite: 2000 } }).then((r) => setGanhos(r.data.leads)).catch(() => {});
-  }, [f, ganhos.length]);
+    if (origemAtual !== 'indicacao' || ganhos) return;
+    setGanhos([]);
+    api.get('/comercial/leads', { params: { etapa: 'ganho', limite: 5000 } }).then((r) => setGanhos(r.data.leads)).catch(() => {});
+  }, [origemAtual, ganhos]);
+
+  // Rascunho com alteração não salva?
+  const sujo = !!f && (lead ? Object.keys(VAZIO).some((k) => !igual(f[k], paraRascunho(lead)[k]))
+    : Object.keys(VAZIO).some((k) => !igual(f[k], { ...VAZIO, ...padrao }[k])));
+  function tentarFechar() { if (sujo) setModal({ tipo: 'sair' }); else onFechar(); }
 
   useEffect(() => {
-    const k = (e) => { if (e.key === 'Escape' && !modal) onFechar(); };
+    const k = (e) => { if (e.key === 'Escape' && !modal) tentarFechar(); };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [onFechar, modal]);
+  });
 
   if (!f) return <Moldura onFechar={onFechar} titulo="Carregando…"><Erro>{erro}</Erro></Moldura>;
 
@@ -102,30 +113,49 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const idx = (k) => cfg.etapas.findIndex((e) => e.k === k);
   const pend = lead && f.etapa !== lead.etapa && f.etapa !== 'perdido' ? (lead.portoes?.[f.etapa] || []) : [];
 
-  async function salvar(extra = {}, manterAberto = false) {
-    setErro(''); setErroCodigo('');
-    if (!f.nome.trim()) { setErro('Informe o nome do cartório.'); return; }
-    if (!f.origem) { setErro('Escolha a origem do lead.'); return; }
-    if (f.etapa === 'perdido' && !f.motivo_perda) { setErro('Escolha o motivo da perda.'); return; }
-    const corpo = {
-      ...f, ...extra,
-      dono_id: f.dono_id || null, indicado_por_id: f.indicado_por_id || null,
-      valor_mensal: f.valor_mensal === '' || f.valor_mensal == null ? null : Number(f.valor_mensal),
-      motivo_perda: f.etapa === 'perdido' ? f.motivo_perda : null,
-      proxima_data: f.proxima_data || null,
-      cns: f.cns || null, cnpj: f.cnpj || null,
+  /**
+   * Salva e MANTÉM a ficha aberta (a orientação "o que fazer agora" é o
+   * passo seguinte). Na edição só vão os campos alterados: um dado antigo
+   * inválido (ex.: CNPJ importado errado) não trava quem só mudou a etapa.
+   */
+  async function salvar(extra = {}) {
+    setErro(''); setErroCodigo(''); setAviso('');
+    const g = { ...f, ...extra };
+    if (!g.nome.trim()) { setErro('Informe o nome do cartório.'); return; }
+    if (!g.origem) { setErro('Escolha a origem do lead.'); return; }
+    if (g.etapa === 'perdido' && !g.motivo_perda) { setErro('Escolha o motivo da perda.'); focar('campo-motivo'); return; }
+    if (g.proximo_passo && !g.proxima_data) { setErro('Informe a data do próximo passo (sem data ele não aparece em Hoje).'); focar('campo-proxima-data'); return; }
+    const limpo = {
+      ...g,
+      dono_id: g.dono_id || null, indicado_por_id: g.indicado_por_id || null,
+      valor_mensal: g.valor_mensal === '' || g.valor_mensal == null ? null : Number(g.valor_mensal),
+      motivo_perda: g.etapa === 'perdido' ? g.motivo_perda : null,
+      proxima_data: g.proxima_data || null,
+      cns: g.cns || null, cnpj: g.cnpj || null,
     };
-    if (lead && corpo.etapa === lead.etapa) delete corpo.etapa;
+    let corpo = limpo;
+    if (lead) {
+      const base = paraRascunho(lead);
+      corpo = {};
+      Object.keys(VAZIO).forEach((k) => { if (!igual(g[k], base[k])) corpo[k] = limpo[k]; });
+      ['justificativa', 'forcar_portao'].forEach((k) => { if (extra[k] !== undefined) corpo[k] = extra[k]; });
+      if (corpo.etapa === undefined && corpo.motivo_perda !== undefined && g.etapa !== 'perdido') delete corpo.motivo_perda;
+      if (corpo.etapa === 'perdido' || (g.etapa === 'perdido' && corpo.motivo_perda_obs !== undefined)) corpo.motivo_perda = limpo.motivo_perda;
+      if (!Object.keys(corpo).length) { setAviso('Nada para salvar.'); return; }
+    }
     setSalvando(true);
     try {
-      if (id) await api.put('/comercial/leads/' + id, corpo);
-      else await api.post('/comercial/leads', corpo);
-      onMudou();
-      if (manterAberto && id) {
-        const r = await api.get('/comercial/leads/' + id);
-        setLead(r.data); setF(paraRascunho(r.data));
-        setAviso('Salvo. Etapa atual: ' + (cfg.etapas.find((e) => e.k === r.data.etapa)?.n || r.data.etapa) + '.');
-      } else onFechar();
+      if (id) {
+        const r = await api.put('/comercial/leads/' + id, corpo);
+        onMudou();
+        const r2 = await api.get('/comercial/leads/' + id);
+        setLead(r2.data); setF(paraRascunho(r2.data));
+        setAviso('Salvo. Etapa atual: ' + (cfg.etapas.find((e) => e.k === r.data.etapa)?.n || r.data.etapa) + '. Veja abaixo o próximo passo.');
+      } else {
+        const r = await api.post('/comercial/leads', corpo);
+        onMudou();
+        if (onCriado) onCriado(r.data.id); else onFechar();
+      }
     } catch (err) {
       const cod = err?.response?.data?.codigo;
       if (cod === 'justificativa_obrigatoria') { setModal({ tipo: 'justificativa' }); return; }
@@ -156,7 +186,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
     else if (tipo === 'etapa') {
       setF({ ...f, etapa: a });
       if (a === 'perdido') focar('campo-motivo');
-      else salvar({ etapa: a }, true);
+      else salvar({ etapa: a });
     }
   }
 
@@ -177,10 +207,19 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const mostraDiag = idx(f.etapa) >= idx('diagnostico') && f.etapa !== 'perdido' || Object.values(f.diagnostico || {}).some(Boolean);
   const mostraTrial = ['trial', 'proposta', 'ganho'].includes(f.etapa) || !!trialInicio;
   const pontos = cfg.sinais.reduce((s, x) => s + (f.sinais[x.k] ? x.p : 0), 0);
-  const leadMin = lead ? { id: lead.id, nome: lead.nome, etapa: lead.etapa, origem: lead.origem, valor_mensal: lead.valor_mensal } : null;
+  const eu = cfg.eu?.id;
+  // Responsável: gestão troca livre; os demais pegam da fila ou repassam o próprio.
+  const podeTrocarDono = gestor || !lead || !lead.dono_id || lead.dono_id === eu;
+  const opcoesDono = gestor || !lead || lead.dono_id === eu ? cfg.pessoas
+    : cfg.pessoas.filter((p) => p.id === eu || p.id === lead.dono_id);
+  // Origem: gestão, ou quem cadastrou nas primeiras 24h.
+  const podeOrigem = gestor || !lead || (lead.criado_por_id === eu && Date.now() - new Date(lead.criado_em).getTime() < 86_400_000);
+  // Etapas oferecidas: novo cadastro entra até Diagnóstico.
+  const etapasOpcoes = lead ? cfg.etapas : cfg.etapas.filter((e) => ['prospect', 'cadencia', 'diagnostico'].includes(e.k));
+  const leadMin = lead ? { id: lead.id, nome: lead.nome, etapa: lead.etapa, origem: lead.origem, valor_mensal: lead.valor_mensal, proxima_data: lead.proxima_data } : null;
 
   return (
-    <Moldura onFechar={onFechar} sobre={lead ? lead.protocolo : 'Novo'} titulo={id ? (lead?.nome || 'Cartório') : 'Novo cartório'}
+    <Moldura onFechar={tentarFechar} sobre={lead ? lead.protocolo : 'Novo'} titulo={id ? (lead?.nome || 'Cartório') : 'Novo cartório'}
       selos={lead && (
         <>
           {lead.bloqueado_nc && <Pill nivel="crit">NÃO CONTATAR</Pill>}
@@ -195,8 +234,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             </button>
           ) : <span className="text-xs text-slate-400">{id ? 'Para encerrar, marque Perdido com o motivo.' : ''}</span>}
           <div className="flex gap-2">
-            <button type="button" className={btnCls} onClick={onFechar}>Cancelar</button>
-            <button type="button" className={btnPrimCls} onClick={() => salvar()} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+            <button type="button" className={btnCls} onClick={tentarFechar}>{lead && !sujo ? 'Fechar' : 'Cancelar'}</button>
+            <button type="button" className={btnPrimCls} onClick={() => salvar()} disabled={salvando || (lead && !sujo)}>{salvando ? 'Salvando…' : sujo || !lead ? 'Salvar' : 'Salvo'}</button>
           </div>
         </>
       )}>
@@ -241,27 +280,29 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             <option value="">—</option>{cfg.segmentos.map((s) => <option key={s}>{s}</option>)}
           </select>
         </Campo>
-        <Campo rotulo={<>Origem * <Dica termo="origem" /></>}>
-          <select className={inputCls} value={f.origem} onChange={set('origem')}>
+        <Campo rotulo="Origem *" dica={<Dica termo="origem" />}>
+          <select className={inputCls} value={f.origem} onChange={set('origem')} disabled={!podeOrigem}
+            title={podeOrigem ? undefined : 'A origem só muda pela gestão comercial (ou por quem cadastrou, nas primeiras 24h).'}>
             <option value="">Escolha…</option>{Object.entries(cfg.origens).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
           </select>
         </Campo>
         <Campo rotulo="Responsável">
-          <select className={inputCls} value={f.dono_id || ''} onChange={set('dono_id')}>
-            <option value="">Sem responsável</option>{cfg.pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          <select className={inputCls} value={f.dono_id || ''} onChange={set('dono_id')} disabled={!podeTrocarDono}
+            title={podeTrocarDono ? undefined : 'Lead de outra pessoa: para trocar o responsável, fale com a gestão comercial.'}>
+            <option value="">Sem responsável</option>{opcoesDono.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Campo>
-        <Campo rotulo={<>Campanha / onda <Dica termo="campanha" /></>}><input className={inputCls} value={f.campanha || ''} onChange={set('campanha')} placeholder="ex.: E-mail onda 1" /></Campo>
+        <Campo rotulo="Campanha / onda" dica={<Dica termo="campanha" />}><input className={inputCls} value={f.campanha || ''} onChange={set('campanha')} placeholder="ex.: E-mail onda 1" /></Campo>
         {f.origem === 'indicacao' && (
           <Campo rotulo="Indicado por (cliente)" className="col-span-2">
             <select className={inputCls} value={f.indicado_por_id || ''} onChange={set('indicado_por_id')}>
-              <option value="">—</option>{ganhos.filter((g) => g.id !== id).map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
+              <option value="">—</option>{(ganhos || []).filter((g) => g.id !== id).map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
             </select>
           </Campo>
         )}
         <Campo rotulo="Cidade"><input className={inputCls} value={f.cidade || ''} onChange={set('cidade')} /></Campo>
         <Campo rotulo="UF"><input className={inputCls} maxLength={2} value={f.uf || ''} onChange={(e) => setF({ ...f, uf: e.target.value.toUpperCase() })} /></Campo>
-        <Campo rotulo={<>CNS (código da serventia) <Dica termo="cns" /></>}><input className={inputCls} inputMode="numeric" value={f.cns || ''} onChange={set('cns')} placeholder="6 dígitos" /></Campo>
+        <Campo rotulo="CNS (código da serventia)" dica={<Dica termo="cns" />}><input className={inputCls} inputMode="numeric" value={f.cns || ''} onChange={set('cns')} placeholder="6 dígitos" /></Campo>
         <Campo rotulo="CNPJ"><input id="campo-cnpj" className={inputCls} inputMode="numeric" value={f.cnpj || ''} onChange={set('cnpj')} placeholder="14 dígitos — confere o pagamento no ASAAS" /></Campo>
         <Campo rotulo="Titular / responsável"><input className={inputCls} value={f.contato || ''} onChange={set('contato')} /></Campo>
         <Campo rotulo="Telefone / WhatsApp"><input className={inputCls} value={f.telefone || ''} onChange={set('telefone')} /></Campo>
@@ -270,9 +311,9 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
 
       <Bloco titulo="Etapa">
         <div className="grid grid-cols-2 gap-3">
-          <Campo rotulo={<>Etapa <Dica termo="portao" /></>}>
+          <Campo rotulo="Etapa" dica={<Dica termo="portao" />}>
             <select className={inputCls} value={f.etapa} onChange={set('etapa')}>
-              {cfg.etapas.map((e) => <option key={e.k} value={e.k}>{e.n}</option>)}
+              {etapasOpcoes.map((e) => <option key={e.k} value={e.k}>{e.n}</option>)}
             </select>
           </Campo>
           {f.etapa === 'perdido' ? (
@@ -287,8 +328,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             </Campo>
           )}
           {f.etapa === 'perdido' && <Campo rotulo="Detalhe da perda" className="col-span-2"><input className={inputCls} value={f.motivo_perda_obs || ''} onChange={set('motivo_perda_obs')} /></Campo>}
-          <Campo rotulo={<>Próximo passo <Dica termo="proximo_passo" /></>}><input id="campo-proximo" className={inputCls} value={f.proximo_passo || ''} onChange={set('proximo_passo')} placeholder="ex.: ligar para a titular" /></Campo>
-          <Campo rotulo="Data do próximo passo"><input type="date" className={inputCls} value={f.proxima_data || ''} onChange={set('proxima_data')} /></Campo>
+          <Campo rotulo="Próximo passo" dica={<Dica termo="proximo_passo" />}><input id="campo-proximo" className={inputCls} value={f.proximo_passo || ''} onChange={set('proximo_passo')} placeholder="ex.: ligar para a titular" /></Campo>
+          <Campo rotulo="Data do próximo passo"><input id="campo-proxima-data" type="date" min={hoje} className={inputCls} value={f.proxima_data || ''} onChange={set('proxima_data')} /></Campo>
         </div>
         {pend.length > 0 && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -421,7 +462,10 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
         <textarea className={inputCls + ' min-h-[80px]'} value={f.notas || ''} onChange={set('notas')} />
       </Campo>
 
-      {lead && <Historico cfg={cfg} lead={lead} />}
+      {lead && (
+        <Historico cfg={cfg} lead={lead} hoje={hoje} gestor={gestor}
+          onEstornar={(t) => setModal({ tipo: 'estornar', url: `/comercial/toques/${t.id}/estornar` })} />
+      )}
 
       {modal?.tipo === 'toque' && <ToqueModal cfg={cfg} lead={leadMin} tipo={modal.toqueTipo || 'avulso'} dia={modal.dia} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'estornar' && <EstornoModal url={modal.url} corpoExtra={modal.corpo} onFechar={() => setModal(null)} onFeito={aposModal} />}
@@ -430,8 +474,19 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
       {modal?.tipo === 'proposta' && <PropostaModal lead={leadMin} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'pagamento' && <PagamentoModal lead={leadMin} hoje={hoje} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'justificativa' && (
-        <TextoModal titulo="Justificar mudança de etapa" explicacao="Voltar etapa ou reabrir um lead ganho/perdido fica registrado com a justificativa."
+        <TextoModal titulo="Justificar mudança de etapa" explicacao="Voltar etapa, reabrir um lead ganho/perdido ou marcar como perdido uma venda já fechada fica registrado com a justificativa."
           onFechar={() => setModal(null)} onConfirmar={(t) => { setModal(null); salvar({ justificativa: t }); }} />
+      )}
+      {modal?.tipo === 'sair' && (
+        <Modal titulo="Descartar o que não foi salvo?" onFechar={() => setModal(null)}
+          rodape={(
+            <>
+              <button type="button" className={btnCls} onClick={() => { setModal(null); onFechar(); }}>Descartar e fechar</button>
+              <button type="button" className={btnPrimCls} onClick={() => { setModal(null); salvar(); }}>Salvar</button>
+            </>
+          )}>
+          <p className="text-sm text-slate-700">Você mudou campos desta ficha e ainda não salvou.</p>
+        </Modal>
       )}
       {modal?.tipo === 'forcar' && (
         <TextoModal titulo="Forçar etapa (gestão)" explicacao="A mudança passa sem cumprir o portão. A justificativa e as pendências ficam no histórico."
@@ -455,7 +510,7 @@ const ROTULO_CAMPO = {
   pagamento: 'Pagamento', arquivado: 'Arquivado', recompensa_indicacao: 'Indicação', indicado_por_id: 'Indicado por',
 };
 
-function Historico({ cfg, lead }) {
+function Historico({ cfg, lead, hoje, gestor, onEstornar }) {
   const [aberto, setAberto] = useState(false);
   const nomeEtapa = (k) => cfg.etapas.find((e) => e.k === k)?.n || k;
   const nomePessoa = (id) => cfg.pessoas.find((p) => p.id === id)?.nome || id;
@@ -464,6 +519,8 @@ function Historico({ cfg, lead }) {
     ...(lead.movimentos || []).map((m) => ({ em: m.em, quem: m.pessoa_nome, txt: `${m.de_etapa ? nomeEtapa(m.de_etapa) + ' → ' : 'Entrou em '}${nomeEtapa(m.para_etapa)}${m.justificativa ? ` — “${m.justificativa}”` : ''}` })),
     ...(lead.toques || []).map((t) => ({
       em: t.criado_em, quem: t.pessoa_nome, riscado: !!t.estornado_em,
+      // Contato avulso não tem caixinha no roteiro: o estorno é por aqui.
+      estornavel: !t.estornado_em && t.tipo === 'avulso' && (gestor || (t.pessoa_id === cfg.eu?.id && t.data === hoje)) ? t : null,
       txt: `${t.tipo === 'cadencia' ? `Toque dia ${t.dia}` : t.tipo === 'marco' ? `Marco do trial D${t.dia}` : 'Contato'}${t.canal ? ' · ' + t.canal : ''}${t.resultado ? ' · ' + res(t.resultado) : ''}${t.duracao_min ? ` · ${t.duracao_min} min` : ''}${t.nota ? ': ' + t.nota : ''}`
         + (t.estornado_em ? ` [ESTORNADO por ${t.estornado_por_nome || '—'}: ${t.estorno_motivo}]` : ''),
     })),
@@ -482,6 +539,7 @@ function Historico({ cfg, lead }) {
             <li key={i} className={h.riscado ? 'text-slate-400 line-through decoration-red-400' : ''}>
               <span className="font-mono text-slate-400">{new Date(h.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span> · {h.txt}
               {h.quem ? <span className="text-slate-400"> · {h.quem}</span> : null}
+              {h.estornavel && <button type="button" className="ml-2 font-medium text-red-700 hover:underline" onClick={() => onEstornar(h.estornavel)}>estornar</button>}
             </li>
           ))}
         </ul>

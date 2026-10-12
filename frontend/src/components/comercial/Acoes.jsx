@@ -45,6 +45,10 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
   function registrar() {
     if (!resultado) { setErro('Escolha o resultado.'); return; }
     if (resultado === 'agendou' && !reuniao.inicio) { setErro('Informe data e hora da reunião.'); return; }
+    if (proximo.passo && !proximo.data) { setErro('Informe a data do próximo passo (sem data ele não aparece em Hoje).'); return; }
+    if (pedeProximo && 'proxima_data' in lead && !(proximo.passo && proximo.data) && !(lead.proxima_data && lead.proxima_data >= cfg.hoje)) {
+      setErro('Lead em negociação: registre o próximo passo e a data.'); return;
+    }
     const corpo = {
       tipo, dia: tipo === 'avulso' ? null : dia, canal, resultado,
       duracao_min: duracao === '' ? null : Number(duracao), nota: nota || null,
@@ -71,7 +75,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
       </div>
       <fieldset>
         <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-600">Resultado * <Dica termo="conexao" /></legend>
-        <p className="mb-2 text-xs text-slate-500">Escolha o que aconteceu, mesmo que não tenha atendido. “Agendou reunião” já pede data e hora e move o cartório para Diagnóstico.</p>
+        <p className="mb-2 text-xs text-slate-500">Escolha o que aconteceu, mesmo que não tenha atendido. “Agendou reunião” já pede data e hora{['prospect', 'cadencia'].includes(lead.etapa) ? '; se for reunião de diagnóstico, o cartório passa para Diagnóstico' : ''}.</p>
         <div className="grid grid-cols-2 gap-1.5">
           {cfg.resultados.map((r) => (
             <label key={r.k} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm ${resultado === r.k ? 'border-nexus-500 bg-nexus-50' : 'border-slate-200'}`}>
@@ -89,6 +93,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
             </select>
           </Campo>
           <Campo rotulo="Data e hora *"><input type="datetime-local" className={inputCls} value={reuniao.inicio} onChange={(e) => setReuniao({ ...reuniao, inicio: e.target.value })} /></Campo>
+          <AvisoRetroativo inicio={reuniao.inicio} cfg={cfg} />
         </div>
       )}
       <Campo rotulo="Observação"><input className={inputCls} value={nota} onChange={(e) => setNota(e.target.value)} placeholder="O que foi dito, objeção, quem atendeu" /></Campo>
@@ -99,6 +104,16 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Reunião mais de 1h no passado é registro retroativo: só a gestão. */
+function AvisoRetroativo({ inicio, cfg }) {
+  if (!inicio || new Date(inicio).getTime() >= Date.now() - 3600_000) return null;
+  return (
+    <p className="col-span-2 text-xs text-amber-800">
+      Data no passado = registro retroativo. {cfg.eu?.gestor ? 'Você é gestão: fica registrado como retroativo no histórico.' : 'Só a gestão comercial pode registrar; peça a ela.'}
+    </p>
   );
 }
 
@@ -149,6 +164,7 @@ export function ReuniaoModal({ cfg, lead, tipoPadrao = 'diagnostico', onFechar, 
           </select>
         </Campo>
         <Campo rotulo="Data e hora *"><input type="datetime-local" className={inputCls} value={f.inicio} onChange={(e) => setF({ ...f, inicio: e.target.value })} /></Campo>
+        <AvisoRetroativo inicio={f.inicio} cfg={cfg} />
         <Campo rotulo="Participantes" className="col-span-2"><input className={inputCls} value={f.participantes} onChange={(e) => setF({ ...f, participantes: e.target.value })} placeholder="titular, escrevente, TI…" /></Campo>
         <Campo rotulo="Pauta / observação" className="col-span-2"><input className={inputCls} value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} /></Campo>
       </div>
@@ -157,11 +173,12 @@ export function ReuniaoModal({ cfg, lead, tipoPadrao = 'diagnostico', onFechar, 
 }
 
 export function DesfechoModal({ reuniao, onFechar, onFeito }) {
-  const [status, setStatus] = useState('realizada');
+  const futura = new Date(reuniao.inicio) > new Date();
+  // Reunião futura: "realizada/faltou" ficam desabilitadas, então o padrão é remarcar.
+  const [status, setStatus] = useState(futura ? 'remarcar' : 'realizada');
   const [nota, setNota] = useState('');
   const [nova, setNova] = useState('');
   const { erro, setErro, enviando, enviar } = useEnvio(onFeito);
-  const futura = new Date(reuniao.inicio) > new Date();
   return (
     <Modal titulo="Desfecho da reunião" onFechar={onFechar}
       rodape={<Botoes onFechar={onFechar} enviando={enviando} onClick={() => {

@@ -229,3 +229,11 @@ com responsável, prazo, prioridade e critério de pronto. Importe em Tarefas �
 novo quadro → Importar planilha: cada frente vira etiqueta e "Decisão
 pendente" vira coluna.
 
+
+## Sprint 42D — varredura antes de ir ao ar
+
+Ver CHANGELOG (Sprint 42D). Mudanças de regra que a equipe precisa saber:
+gestão comercial é definida pelo admin em Controles; listas importadas sem
+responsável viram fila ("Pegar para mim" em Hoje); reabrir Perdido cobra
+portões; reunião retroativa e troca de responsável/origem de lead alheio
+ficam com a gestão.

@@ -1,3 +1,5 @@
+import { cloneElement, isValidElement, useEffect, useId } from 'react';
+
 /**
  * Peças visuais do módulo Comercial (Sprint 42).
  * Semáforo: ok = verde, warn = âmbar, crit = vermelho, neu = neutro.
@@ -82,12 +84,23 @@ export const inputCls = 'w-full rounded-md border border-slate-300 bg-white px-2
 export const btnCls = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50';
 export const btnPrimCls = 'inline-flex items-center justify-center gap-1.5 rounded-md bg-nexus-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-nexus-800 disabled:opacity-50';
 
-export function Campo({ rotulo, children, className = '' }) {
+/**
+ * Rótulo + campo. A dica (botão "?") fica FORA do <label>: dentro dele o
+ * clique na dica ia para o campo e o leitor de tela lia tudo junto.
+ */
+export function Campo({ rotulo, dica, children, className = '' }) {
+  const idGerado = useId();
+  const nativo = isValidElement(children) && typeof children.type === 'string';
+  const alvo = nativo ? (children.props.id || idGerado) : undefined;
+  const filho = nativo && !children.props.id ? cloneElement(children, { id: idGerado }) : children;
   return (
-    <label className={`flex flex-col gap-1 text-xs font-medium text-slate-600 ${className}`}>
-      <span className="inline-flex items-center gap-1">{rotulo}</span>
-      {children}
-    </label>
+    <div className={`flex flex-col gap-1 text-xs font-medium text-slate-600 ${className}`}>
+      <span className="inline-flex items-center gap-1">
+        {alvo ? <label htmlFor={alvo}>{rotulo}</label> : <span>{rotulo}</span>}
+        {dica}
+      </span>
+      {filho}
+    </div>
   );
 }
 
@@ -103,6 +116,12 @@ export function NomeLead({ lead, onAbrir }) {
 // Modal genérico + campos de data/hora
 // ---------------------------------------------------------------------------
 export function Modal({ titulo, onFechar, children, rodape, largura = 'max-w-lg' }) {
+  // Esc fecha (o fundo não fecha: clique fora sem querer perdia o que foi digitado)
+  useEffect(() => {
+    const tecla = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onFechar?.(); } };
+    window.addEventListener('keydown', tecla, true);
+    return () => window.removeEventListener('keydown', tecla, true);
+  }, [onFechar]);
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-16">
       <div className={`w-full ${largura} rounded-lg bg-white shadow-xl`} role="dialog" aria-modal="true" aria-label={titulo}>

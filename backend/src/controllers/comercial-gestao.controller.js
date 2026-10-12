@@ -15,13 +15,15 @@ import {
  *   - Placar do período por pessoa (atividade × resultado)
  *   - Feriados
  *
- * "Gestão" = administrador do Nexus.
+ * "Gestão" = administrador do Nexus OU pessoa marcada pelo admin em
+ * comercial_gestores (Comercial → Controles → Gestão comercial).
  */
 
 const ehAdmin = (req) => !!req.pessoa?.administrador;
 function exigirGestao(req) {
-  if (!req.gestorComercial && !ehAdmin(req)) throw new AppError('Só a gestão (admin) pode fazer isso.', 403, 'so_admin');
+  if (!req.gestorComercial && !ehAdmin(req)) throw new AppError('Só a gestão comercial pode fazer isso.', 403, 'so_gestao');
 }
+const ehGestao = (req) => !!req.gestorComercial || ehAdmin(req);
 const dataISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const txt = (max) => z.string().max(max).nullable().optional()
   .transform((v) => (v == null || String(v).trim() === '' ? null : String(v).trim()));
@@ -135,8 +137,10 @@ export async function listarChecagens(req, res, next) {
          FROM comercial_checagens c
          JOIN pessoas_acesso p ON p.id = c.pessoa_id
          LEFT JOIN pessoas_acesso g ON g.id = c.gestor_id
-        WHERE c.data BETWEEN $1 AND $2 ORDER BY c.data DESC, c.janela, p.nome`,
-      [de, ate],
+        WHERE c.data BETWEEN $1 AND $2 AND ($3::uuid IS NULL OR c.pessoa_id = $3)
+        ORDER BY c.data DESC, c.janela, p.nome`,
+      // Quem não é gestão vê só as próprias checagens.
+      [de, ate, ehGestao(req) ? null : req.pessoa.id],
     );
     res.json({ de, ate, checagens: rows });
   } catch (err) { next(err); }
@@ -185,7 +189,9 @@ export async function registrar1a1(req, res, next) {
 export async function listar1a1(req, res, next) {
   try {
     const params = []; let filtro = 'TRUE';
-    if (req.query.pessoa_id) { params.push(req.query.pessoa_id); filtro = 'u.pessoa_id = $1'; }
+    // 1:1 é conversa individual: quem não é gestão só vê os próprios.
+    const alvo = ehGestao(req) ? req.query.pessoa_id : req.pessoa.id;
+    if (alvo) { params.push(alvo); filtro = 'u.pessoa_id = $1'; }
     const { rows } = await query(
       `SELECT u.id, u.data::text AS data, u.pessoa_id, p.nome AS pessoa_nome, g.nome AS gestor_nome,
               u.numeros, u.bloqueios, u.combinados,
@@ -289,4 +295,53 @@ export async function removerFeriado(req, res, next) {
     await carregarFeriados(true);
     res.status(204).end();
   } catch (err) { next(err); }
+}
+
+// ---------------------------------------------------------------------------
+// Gestão comercial (quem faz checagens, 1:1, metas) — só admin define
+// ---------------------------------------------------------------------------
+
+/** GET /comercial/gestores */
+export async function listarGestores(_req, res, next) {
+  try {
+    const { rows } = await query(
+      `SELECT g.pessoa_id, p.nome, p.ativo, g.definido_em, d.nome AS definido_por_nome
+         FROM comercial_gestores g JOIN pessoas_acesso p ON p.id = g.pessoa_id
+         LEFT JOIN pessoas_acesso d ON d.id = g.definido_por_id
+        ORDER BY p.nome`,
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+}
+
+/** PUT /comercial/gestores {pessoas: [uuid]} — substitui a lista; só admin */
+export async function salvarGestores(req, res, next) {
+  const client = await pool.connect();
+  try {
+    if (!ehAdmin(req)) throw new AppError('Só o administrador define quem faz a gestão comercial.', 403, 'so_admin');
+    const b = z.object({ pessoas: z.array(z.string().uuid()).max(20) }).parse(req.body || {});
+    const ids = [...new Set(b.pessoas)];
+    await client.query('BEGIN');
+    const { rows: antes } = await client.query(`SELECT pessoa_id FROM comercial_gestores`);
+    await client.query(`DELETE FROM comercial_gestores WHERE NOT (pessoa_id = ANY($1::uuid[]))`, [ids]);
+    for (const id of ids) {
+      await client.query(
+        `INSERT INTO comercial_gestores (pessoa_id, definido_por_id) VALUES ($1, $2) ON CONFLICT (pessoa_id) DO NOTHING`,
+        [id, req.pessoa.id],
+      );
+    }
+    await client.query('COMMIT');
+    await registrarAcao({
+      pessoa_acesso_id: req.pessoa.id, acao: 'comercial.gestores.salvar',
+      detalhes: { antes: antes.map((r) => r.pessoa_id), depois: ids }, req,
+    });
+    const { rows } = await query(
+      `SELECT g.pessoa_id, p.nome, p.ativo, g.definido_em FROM comercial_gestores g
+         JOIN pessoas_acesso p ON p.id = g.pessoa_id ORDER BY p.nome`,
+    );
+    res.json(rows);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally { client.release(); }
 }
