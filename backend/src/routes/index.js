@@ -33,6 +33,7 @@ import documentosEmpresaRoutes from './documentos-empresa.routes.js';
 import contratosRoutes from './contratos.routes.js';
 import relatoriosRoutes from './relatorios.routes.js';
 import custosCloudRoutes from './custos-cloud.routes.js';
+import comercialRoutes from './comercial.routes.js';
 
 const router = Router();
 
@@ -43,7 +44,7 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.8', // bump a cada deploy novo
+    versao: '1.9', // bump a cada deploy novo
     sprints_ativas: 'até 34 (Projetos: subtarefas, dependências, campos personalizados, '
       + 'WIP, tipo de coluna, vínculos de negócio, apontamento de horas)',
   });
@@ -62,6 +63,7 @@ router.use('/auth', authRoutes);
 //   /processos                            → Processos
 //   /instancias                           → Em andamento
 //   /cartorios                            → Cartórios
+//   /comercial                            → Comercial (funil de vendas)
 //
 // Mais 2 que são infra liberada pra todos:
 //   /pessoas       → leitura pra autocomplete (escrita já é admin)
@@ -93,6 +95,9 @@ router.use('/instancias', instanciasRoutes);
 
 // Sprint 20 — Cartórios
 router.use('/cartorios', cartoriosRoutes);
+
+// Sprint 42 — Comercial (funil de vendas do Seu Cartório)
+router.use('/comercial', comercialRoutes);
 
 // ============================================================================
 // BLOQUEADAS PRA ACESSO RESTRITO (admin sempre passa)

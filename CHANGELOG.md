@@ -11,6 +11,22 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42 — Módulo Comercial (funil de vendas do Seu Cartório)
+
+Menu **Comercial** com Hoje, Funil, Trials, Supervisão, Metas e Scripts —
+a metodologia de venda SaaS (cadência de 12 dias, trial guiado de 14 dias,
+semáforo diário por pessoa). Origem obrigatória, perdido exige motivo,
+ganho exige valor. Importa os cards do quadro "Atividade Comercial" sem
+alterá-lo. Detalhes em `docs/sprint-42-comercial.md`.
+
+**Arquivos:** migration `034_comercial.sql`; `services/comercial.regras.js`;
+`controllers/comercial.controller.js`; `routes/comercial.routes.js`;
+`pages/Comercial.jsx`; `components/comercial/*`; `testes/t-comercial.mjs`.
+
+**Testar:** `node testes/t-comercial.mjs` (43 verificações).
+
+---
+
 ## Sprint 31 — Acesso restrito por pessoa
 
 Feature de controle granular: permite marcar pessoas como **"acesso restrito"**

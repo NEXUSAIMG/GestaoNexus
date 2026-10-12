@@ -23,6 +23,7 @@ import {
   Tag,
   Cloud,
   Settings,
+  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -42,6 +43,7 @@ const itensBase = [
   { to: '/tarefas',       rotulo: 'Tarefas',         icone: KanbanSquare, liberadoRestrito: true },
   { to: '/processos',     rotulo: 'Processos',       icone: Workflow,     liberadoRestrito: true },
   { to: '/instancias',    rotulo: 'Em andamento',    icone: Activity,     liberadoRestrito: true },
+  { to: '/comercial',     rotulo: 'Comercial',       icone: TrendingUp,   liberadoRestrito: true },
   { to: '/cartorios',     rotulo: 'Cartórios',       icone: Building2,    liberadoRestrito: true },
   { to: '/portfolio',     rotulo: 'Portfólio',        icone: Package },
   { to: '/inventario',    rotulo: 'Inventário',       icone: Boxes },

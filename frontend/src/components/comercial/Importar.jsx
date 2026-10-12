@@ -1,0 +1,172 @@
+import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
+import { api, mensagemDeErro } from '../../api/client.js';
+import { Campo, inputCls, btnCls, btnPrimCls } from './ui.jsx';
+
+function Modal({ titulo, onFechar, children, rodape }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/30 p-4 pt-12">
+      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl" role="dialog" aria-modal="true" aria-label={titulo}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>
+          <button type="button" onClick={onFechar} className="rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="space-y-3 px-5 py-4">{children}</div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">{rodape}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Colar lista de cartórios (uma linha por cartório). */
+export function ImportarLista({ cfg, onFechar, onFeito }) {
+  const [texto, setTexto] = useState('');
+  const [origem, setOrigem] = useState('prospeccao');
+  const [campanha, setCampanha] = useState('');
+  const [dono, setDono] = useState('');
+  const [etapa, setEtapa] = useState('prospect');
+  const [msg, setMsg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const linhas = texto.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+    .filter((s) => !/^nome\s*[;\t]/i.test(s))
+    .map((s) => { const p = s.split(/[;\t]/).map((x) => x.trim()); return { nome: p[0], cidade: p[1] || null, uf: (p[2] || '').slice(0, 2) || null, telefone: p[3] || null, email: p[4] || null, segmento: p[5] || null, contato: p[6] || null }; })
+    .filter((l) => l.nome);
+
+  async function importar() {
+    if (!linhas.length) { setMsg('Cole ao menos uma linha com o nome do cartório.'); return; }
+    setEnviando(true); setMsg('');
+    try {
+      const r = await api.post('/comercial/leads/importar-lista', { linhas: linhas.slice(0, 2000), origem, campanha: campanha || null, dono_id: dono || null, etapa });
+      onFeito(`${r.data.criados} cartório(s) importado(s).`);
+    } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
+  }
+
+  return (
+    <Modal titulo="Importar lista de cartórios" onFechar={onFechar} rodape={<>
+      <button type="button" className={btnCls} onClick={onFechar}>Cancelar</button>
+      <button type="button" className={btnPrimCls} onClick={importar} disabled={enviando}>{enviando ? 'Importando…' : `Importar ${linhas.length || ''}`}</button>
+    </>}>
+      <p className="text-sm text-slate-600">Cole uma linha por cartório, campos separados por ponto e vírgula ou tabulação (colar direto da planilha funciona). Até 2.000 linhas por vez.</p>
+      <pre className="overflow-x-auto rounded-md bg-slate-50 p-2 text-xs text-slate-600">Nome; Cidade; UF; Telefone; E-mail; Segmento; Titular{'\n'}1º Ofício de Registro Civil; Castanhal; PA; (91) 99999-0000; contato@cartorio.com.br; Registro Civil; Dra. Ana</pre>
+      <div className="grid grid-cols-2 gap-3">
+        <Campo rotulo="Origem *">
+          <select className={inputCls} value={origem} onChange={(e) => setOrigem(e.target.value)}>
+            {Object.entries(cfg.origens).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+          </select>
+        </Campo>
+        <Campo rotulo="Campanha / onda"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} placeholder="ex.: E-mail onda 1" /></Campo>
+        <Campo rotulo="Responsável">
+          <select className={inputCls} value={dono} onChange={(e) => setDono(e.target.value)}>
+            <option value="">Sem responsável</option>{cfg.pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </Campo>
+        <Campo rotulo="Entram como">
+          <select className={inputCls} value={etapa} onChange={(e) => setEtapa(e.target.value)}>
+            <option value="prospect">Prospect</option><option value="cadencia">Em cadência (começa hoje)</option>
+          </select>
+        </Campo>
+      </div>
+      <Campo rotulo="Lista"><textarea className={inputCls + ' min-h-[200px] font-mono text-xs'} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Cole aqui" /></Campo>
+      {msg && <p className="text-sm text-red-700">{msg}</p>}
+    </Modal>
+  );
+}
+
+/** Trazer os cards do quadro Kanban (ex.: "Atividade Comercial"). Só admin. */
+export function ImportarQuadro({ cfg, onFechar, onFeito }) {
+  const [quadros, setQuadros] = useState([]);
+  const [quadroId, setQuadroId] = useState('');
+  const [previa, setPrevia] = useState(null);
+  const [mapa, setMapa] = useState({});
+  const [origem, setOrigem] = useState('prospeccao');
+  const [campanha, setCampanha] = useState('');
+  const [etiqueta, setEtiqueta] = useState('');
+  const [msg, setMsg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    api.get('/comercial/importar-quadro/previa').then((r) => {
+      setQuadros(r.data.quadros);
+      const ac = r.data.quadros.find((q) => /comercial/i.test(q.nome));
+      if (ac) setQuadroId(ac.id);
+    }).catch((err) => setMsg(mensagemDeErro(err)));
+  }, []);
+
+  useEffect(() => {
+    if (!quadroId) { setPrevia(null); return; }
+    api.get('/comercial/importar-quadro/previa', { params: { quadro_id: quadroId } }).then((r) => {
+      setPrevia(r.data);
+      setMapa(Object.fromEntries(r.data.colunas.map((c) => [c.id, c.etapa_sugerida])));
+      const cli = (r.data.etiquetas || []).find((e) => e.nome.trim().toLowerCase() === 'cliente');
+      setEtiqueta(cli ? cli.nome : '');
+    }).catch((err) => setMsg(mensagemDeErro(err)));
+  }, [quadroId]);
+
+  async function importar() {
+    setEnviando(true); setMsg('');
+    try {
+      const r = await api.post('/comercial/importar-quadro', { quadro_id: quadroId, mapa, origem_padrao: origem, campanha: campanha || null, somente_etiqueta: etiqueta || null }, { timeout: 120_000 });
+      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s).`);
+    } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
+  }
+
+  return (
+    <Modal titulo="Importar cards do quadro Kanban" onFechar={onFechar} rodape={<>
+      <button type="button" className={btnCls} onClick={onFechar}>Cancelar</button>
+      <button type="button" className={btnPrimCls} onClick={importar} disabled={enviando || !previa}>{enviando ? 'Importando…' : 'Importar'}</button>
+    </>}>
+      <p className="text-sm text-slate-600">
+        Cada card vira um cartório no funil. Nome = título; responsável = primeiro responsável do card; Cidade/UF, E-mail, Telefone,
+        Representante e Origem vêm dos campos personalizados; Termômetro, Faturamento e descrição vão para as anotações.
+        O quadro não é alterado. Pode rodar de novo: card já importado é pulado.
+      </p>
+      <Campo rotulo="Quadro">
+        <select className={inputCls} value={quadroId} onChange={(e) => setQuadroId(e.target.value)}>
+          <option value="">Escolha…</option>
+          {quadros.map((q) => <option key={q.id} value={q.id}>{q.nome} ({q.cards} cards)</option>)}
+        </select>
+      </Campo>
+      {previa && (
+        <>
+          {previa.ja_importados > 0 && <p className="text-xs text-amber-700">{previa.ja_importados} card(s) deste quadro já estão no funil e serão pulados.</p>}
+          <div className="rounded-md border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Coluna do quadro</th><th className="px-3 py-2">Cards</th><th className="px-3 py-2">Vira a etapa</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {previa.colunas.map((c) => (
+                  <tr key={c.id}>
+                    <td className="px-3 py-1.5">{c.nome}</td>
+                    <td className="px-3 py-1.5 font-mono">{c.cards}</td>
+                    <td className="px-3 py-1.5">
+                      <select className={inputCls} value={mapa[c.id] || 'ignorar'} onChange={(e) => setMapa({ ...mapa, [c.id]: e.target.value })}>
+                        {cfg.etapas.map((e) => <option key={e.k} value={e.k}>{e.n}</option>)}
+                        <option value="ignorar">Não importar</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Campo rotulo="Quais cards importar">
+            <select className={inputCls} value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)}>
+              <option value="">Todos os cards das colunas mapeadas</option>
+              {(previa.etiquetas || []).map((e) => <option key={e.nome} value={e.nome}>Só os com a etiqueta “{e.nome}” ({e.cards})</option>)}
+            </select>
+          </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo rotulo="Origem quando o card não tiver">
+              <select className={inputCls} value={origem} onChange={(e) => setOrigem(e.target.value)}>
+                {Object.entries(cfg.origens).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+              </select>
+            </Campo>
+            <Campo rotulo="Campanha (opcional)"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} /></Campo>
+          </div>
+          <p className="text-xs text-slate-500">Colunas mapeadas para “Perdido” entram com motivo “Outro”; para “Ganho”, sem valor — completem depois no funil. As datas das etapas vêm do card (criação e entrada na coluna), então ganhos antigos não contam como ganhos deste mês.</p>
+        </>
+      )}
+      {msg && <p className="text-sm text-red-700">{msg}</p>}
+    </Modal>
+  );
+}

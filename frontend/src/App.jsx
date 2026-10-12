@@ -36,6 +36,7 @@ import Inventario from './pages/Inventario.jsx';
 import InventarioItem from './pages/InventarioItem.jsx';
 import Cartorios from './pages/Cartorios.jsx';
 import Cartorio from './pages/Cartorio.jsx';
+import Comercial from './pages/Comercial.jsx';
 import Apresentacao from './pages/Apresentacao.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -151,6 +152,8 @@ export default function App() {
         {/* Sprint 20 — Cartórios */}
         <Route path="/cartorios" element={<Cartorios />} />
         <Route path="/cartorios/:id" element={<Cartorio />} />
+        {/* Sprint 42 — Comercial (liberado também para acesso restrito) */}
+        <Route path="/comercial" element={<Comercial />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
