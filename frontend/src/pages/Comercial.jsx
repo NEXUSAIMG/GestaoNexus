@@ -5,7 +5,10 @@ import { useAuth } from '../context/AuthContext.jsx';
 import Funil from '../components/comercial/Funil.jsx';
 import LeadDrawer from '../components/comercial/LeadDrawer.jsx';
 import { ImportarLista, ImportarQuadro } from '../components/comercial/Importar.jsx';
-import { VistaHoje, VistaTrials, VistaSupervisao, VistaMetas, VistaScripts } from '../components/comercial/Vistas.jsx';
+import {
+  VistaHoje, VistaTrials, VistaSupervisao, VistaMetas, VistaScripts, VistaPlacar, VistaControles,
+} from '../components/comercial/Vistas.jsx';
+import { ToqueModal } from '../components/comercial/Acoes.jsx';
 
 /**
  * Comercial — Sprint 42.
@@ -18,7 +21,8 @@ import { VistaHoje, VistaTrials, VistaSupervisao, VistaMetas, VistaScripts } fro
 
 const ABAS = [
   ['hoje', 'Hoje'], ['funil', 'Funil'], ['trials', 'Trials'],
-  ['supervisao', 'Supervisão'], ['metas', 'Metas e indicadores'], ['scripts', 'Scripts'],
+  ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
+  ['controles', 'Controles'], ['scripts', 'Scripts'],
 ];
 
 export default function Comercial() {
@@ -32,6 +36,7 @@ export default function Comercial() {
   const [aberto, setAberto] = useState(null); // undefined = fechado; null = novo; id
   const [modal, setModal] = useState(null);   // 'lista' | 'quadro'
   const [aviso, setAviso] = useState('');
+  const [toque, setToque] = useState(null); // {lead, tipo, dia}
 
   useEffect(() => { try { localStorage.setItem('comercial-aba', aba); } catch { /* ok */ } }, [aba]);
 
@@ -42,14 +47,14 @@ export default function Comercial() {
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
-    if (aba === 'funil' || aba === 'scripts') return;
+    if (['funil', 'scripts', 'controles'].includes(aba)) return;
     api.get('/comercial/painel').then((r) => setPainel(r.data)).catch((err) => setErro(mensagemDeErro(err)));
   }, [aba, versao]);
 
   useEffect(() => { if (!aviso) return undefined; const t = setTimeout(() => setAviso(''), 4000); return () => clearTimeout(t); }, [aviso]);
 
-  async function marcarToque(leadId, tipo, dia) {
-    try { await api.post(`/comercial/leads/${leadId}/toques`, { tipo, dia }); recarregar(); } catch (err) { setAviso(mensagemDeErro(err)); }
+  async function marcarMarco(leadId, dia) {
+    try { await api.post(`/comercial/leads/${leadId}/toques`, { tipo: 'marco', dia }); recarregar(); } catch (err) { setAviso(mensagemDeErro(err)); }
   }
 
   const abrir = (id) => setAberto({ id });
@@ -84,10 +89,15 @@ export default function Comercial() {
               onImportarQuadro={() => setModal('quadro')} />
           )}
           {aba === 'scripts' && <VistaScripts cfg={cfg} />}
-          {!['funil', 'scripts'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
-          {painel && aba === 'hoje' && <VistaHoje painel={painel} cfg={cfg} onAbrir={abrir} onToque={marcarToque} />}
+          {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
+          {!['funil', 'scripts', 'controles'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
+          {painel && aba === 'hoje' && (
+            <VistaHoje painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar}
+              onToque={(lead, tipo, dia) => setToque({ lead, tipo, dia })} onMarco={marcarMarco} />
+          )}
           {painel && aba === 'trials' && <VistaTrials painel={painel} cfg={cfg} onAbrir={abrir} />}
-          {painel && aba === 'supervisao' && <VistaSupervisao painel={painel} onAbrir={abrir} />}
+          {painel && aba === 'supervisao' && <VistaSupervisao painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar} />}
+          {painel && aba === 'placar' && <VistaPlacar painel={painel} cfg={cfg} versao={versao} />}
           {painel && aba === 'metas' && <VistaMetas painel={painel} cfg={cfg} onSalvo={recarregar} />}
         </>
       )}
@@ -95,6 +105,10 @@ export default function Comercial() {
       {cfg && aberto && (
         <LeadDrawer id={aberto.id} cfg={cfg} padrao={{ origem: '', dono_id: pessoa?.id || '' }}
           onFechar={() => setAberto(null)} onMudou={recarregar} />
+      )}
+      {cfg && toque && (
+        <ToqueModal cfg={cfg} lead={toque.lead} tipo={toque.tipo} dia={toque.dia}
+          onFechar={() => setToque(null)} onFeito={() => { setToque(null); setAviso('Toque registrado.'); recarregar(); }} />
       )}
       {cfg && modal === 'lista' && <ImportarLista cfg={cfg} onFechar={() => setModal(null)} onFeito={(m) => { setModal(null); setAviso(m); recarregar(); }} />}
       {cfg && modal === 'quadro' && <ImportarQuadro cfg={cfg} onFechar={() => setModal(null)} onFeito={(m) => { setModal(null); setAviso(m); recarregar(); }} />}

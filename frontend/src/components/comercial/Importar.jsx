@@ -30,7 +30,7 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
 
   const linhas = texto.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
     .filter((s) => !/^nome\s*[;\t]/i.test(s))
-    .map((s) => { const p = s.split(/[;\t]/).map((x) => x.trim()); return { nome: p[0], cidade: p[1] || null, uf: (p[2] || '').slice(0, 2) || null, telefone: p[3] || null, email: p[4] || null, segmento: p[5] || null, contato: p[6] || null }; })
+    .map((s) => { const p = s.split(/[;\t]/).map((x) => x.trim()); return { nome: p[0], cidade: p[1] || null, uf: (p[2] || '').slice(0, 2) || null, telefone: p[3] || null, email: p[4] || null, segmento: p[5] || null, contato: p[6] || null, cns: p[7] || null, cnpj: p[8] || null }; })
     .filter((l) => l.nome);
 
   async function importar() {
@@ -38,7 +38,8 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
     setEnviando(true); setMsg('');
     try {
       const r = await api.post('/comercial/leads/importar-lista', { linhas: linhas.slice(0, 2000), origem, campanha: campanha || null, dono_id: dono || null, etapa });
-      onFeito(`${r.data.criados} cartório(s) importado(s).`);
+      const rec = r.data.recusados ? ` ${r.data.recusados} recusado(s): ${Object.entries(r.data.recusados_por_motivo).map(([k, n]) => `${n} ${k === 'duplicado' ? 'já no funil' : k === 'nao_contatar' ? 'na lista de não contatar' : 'já cliente'}`).join(', ')}.` : '';
+      onFeito(`${r.data.criados} cartório(s) importado(s).${rec}`);
     } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
   }
 
@@ -48,7 +49,7 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
       <button type="button" className={btnPrimCls} onClick={importar} disabled={enviando}>{enviando ? 'Importando…' : `Importar ${linhas.length || ''}`}</button>
     </>}>
       <p className="text-sm text-slate-600">Cole uma linha por cartório, campos separados por ponto e vírgula ou tabulação (colar direto da planilha funciona). Até 2.000 linhas por vez.</p>
-      <pre className="overflow-x-auto rounded-md bg-slate-50 p-2 text-xs text-slate-600">Nome; Cidade; UF; Telefone; E-mail; Segmento; Titular{'\n'}1º Ofício de Registro Civil; Castanhal; PA; (91) 99999-0000; contato@cartorio.com.br; Registro Civil; Dra. Ana</pre>
+      <pre className="overflow-x-auto rounded-md bg-slate-50 p-2 text-xs text-slate-600">Nome; Cidade; UF; Telefone; E-mail; Segmento; Titular; CNS; CNPJ{'\n'}1º Ofício de Registro Civil; Castanhal; PA; (91) 99999-0000; contato@cartorio.com.br; Registro Civil; Dra. Ana; 067954; 00000000000100</pre>
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Origem *">
           <select className={inputCls} value={origem} onChange={(e) => setOrigem(e.target.value)}>
@@ -107,7 +108,7 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
     setEnviando(true); setMsg('');
     try {
       const r = await api.post('/comercial/importar-quadro', { quadro_id: quadroId, mapa, origem_padrao: origem, campanha: campanha || null, somente_etiqueta: etiqueta || null }, { timeout: 120_000 });
-      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s).`);
+      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s); ${r.data.bloqueados || 0} bloqueado(s) (não contatar ou já cliente).`);
     } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
   }
 

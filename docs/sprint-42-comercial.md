@@ -62,21 +62,24 @@ restrito (a equipe comercial). Seis abas:
 ## API
 
 ```
-GET    /api/comercial/config
-GET    /api/comercial/painel
-GET    /api/comercial/metas?mes=AAAA-MM
-PUT    /api/comercial/metas/:mes
+GET    /api/comercial/config | painel | placar?de=&ate=
+GET    /api/comercial/metas?mes=AAAA-MM        PUT /api/comercial/metas/:mes (gestão)
 GET    /api/comercial/leads?etapa=&origem=&dono_id=(uuid|sem)&campanha=&busca=
-POST   /api/comercial/leads
+POST   /api/comercial/leads                    POST /api/comercial/leads/verificar
 POST   /api/comercial/leads/importar-lista
-GET    /api/comercial/leads/:id
-PUT    /api/comercial/leads/:id
-POST   /api/comercial/leads/:id/arquivar
-POST   /api/comercial/leads/:id/toques          {tipo: cadencia|marco|avulso, dia?, canal?, nota?}
-DELETE /api/comercial/leads/:id/toques?tipo=&dia=
-DELETE /api/comercial/toques/:id
-GET    /api/comercial/importar-quadro/previa[?quadro_id=]   (admin)
-POST   /api/comercial/importar-quadro                       (admin)
+GET    /api/comercial/leads/:id                PUT  /api/comercial/leads/:id
+POST   /api/comercial/leads/:id/arquivar       {motivo} (gestão)
+POST   /api/comercial/leads/:id/toques         {tipo, dia?, canal?, resultado, duracao_min?, nota?, proximo_passo?, proxima_data?, reuniao?}
+POST   /api/comercial/leads/:id/toques/estornar {tipo, dia, motivo}
+POST   /api/comercial/toques/:id/estornar      {motivo}
+POST   /api/comercial/leads/:id/reunioes       POST /api/comercial/reunioes/:id/desfecho | /remarcar
+POST   /api/comercial/leads/:id/propostas      POST /api/comercial/propostas/:id/status
+POST   /api/comercial/leads/:id/pagamento      (gestão)   POST /api/comercial/leads/:id/recompensa-indicacao (gestão)
+GET|POST /api/comercial/nao-contatar           DELETE /api/comercial/nao-contatar/:id (gestão)
+GET|POST /api/comercial/checagens  (POST gestão)
+GET|POST /api/comercial/1a1        (POST gestão)   POST /api/comercial/acoes   PUT /api/comercial/acoes/:id
+POST   /api/comercial/feriados  DELETE /api/comercial/feriados/:data (gestão)
+GET    /api/comercial/importar-quadro/previa[?quadro_id=]   POST /api/comercial/importar-quadro (admin)
 ```
 
 ## Como testar
@@ -94,10 +97,15 @@ node testes/t-comercial.mjs
 1. Comercial → Funil → **Importar do quadro** → "Atividade Comercial".
    Conferir o mapa coluna → etapa e escolher "Só os com a etiqueta Cliente"
    se o quadro misturar tarefas internas.
-2. Completar o valor dos ganhos importados (aparecem com "sem valor").
-3. Metas e indicadores → conferir as metas do mês e preencher **novos por
-   pessoa** (Alexia 15, Rodrigo 10, pelo plano).
-4. Avisar a equipe que a Mesa Comercial foi aposentada.
+2. Completar o valor e o **CNPJ** dos ganhos importados (aparecem com "sem
+   valor" / "aguardando pagamento"); com o CNPJ, o ASAAS confirma o pagamento.
+   Preencher o **CNS** dos cartórios em negociação (barra duplicidade).
+3. Metas e indicadores → conferir as metas do mês e preencher as **metas por
+   pessoa** (Alexia 15 novos/dia, Rodrigo 10, pelo plano; toques, reuniões e
+   pagos de cada um).
+4. Controles → incluir na lista de não contatar os descadastros que já
+   existirem e conferir os feriados municipais de Belém.
+5. Avisar a equipe que a Mesa Comercial foi aposentada.
 
 ## Próximas entregas
 
@@ -107,3 +115,54 @@ node testes/t-comercial.mjs
 - **Entrega 3 — Saúde e ritmo:** risco de cancelamento pelo uso vindo do Seu
   Cartório (exige estender o endpoint de integração de lá), relatório
   automático toda segunda às 8h e auditoria da qualidade do registro.
+
+---
+
+# Sprint 42B — Controle minucioso
+
+Feita antes do primeiro deploy, para a equipe já começar no formato definitivo.
+Migration `035_comercial_controle.sql` (aditiva). Abas novas: **Placar** e
+**Controles**.
+
+## O que o servidor passa a exigir
+
+| Regra | Como funciona |
+|---|---|
+| **Resultado em todo contato** | Atendeu, agendou, pediu retorno, recusou, respondeu (contam como *conexão*); não atendeu, caixa postal, número errado, mensagem enviada. Ligação tem duração opcional. |
+| **"Agendou" cria a reunião** | Exige data e hora; cria a reunião e, se for diagnóstico, move o lead para *Diagnóstico agendado*. |
+| **Reuniões com desfecho** | Realizada, faltou, remarcada (gera nova, a antiga fica registrada) ou cancelada. "Realizada"/"faltou" só depois do horário. Reunião passada sem desfecho vira alerta. |
+| **Portões de etapa** (cumulativos) | *Qualificado*: diagnóstico realizado + campos do diagnóstico (mensagens/dia, atendentes, dor, decisor, prazo). *Trial*: meta de sucesso escrita + ativação agendada. *Proposta*: proposta registrada. *Ganho*: valor. Lead novo entra no máximo em Diagnóstico. A gestão pode forçar, com justificativa registrada junto com as pendências. |
+| **Voltar etapa / reabrir** | Exige justificativa (fica no histórico). |
+| **Proposta** | Plano, valor, envio, validade (padrão 7 dias). Nova proposta substitui a anterior. Única concessão aceita: 1 mês grátis para **ex-cliente**, **uma vez por cartório** (exige CNS ou CNPJ). Ganho aceita a proposta e herda o valor. |
+| **Assinado × pago** | A meta conta **pagos**. Com o CNPJ preenchido, o Nexus confere sozinho no ASAAS (cobrança RECEIVED/CONFIRMED do mesmo CNPJ). Senão, a gestão confirma com comprovante. Assinado há mais de 7 dias sem pagamento vira alerta. |
+| **Duplicidade** | Barra cadastro/importação com mesmo CNS, CNPJ, e-mail, telefone (com ou sem +55) ou nome+cidade+UF, e quem já é cliente ativo no portfólio. A mensagem diz com quem o cartório está. |
+| **Lista de não contatar** | E-mail, domínio, telefone, CNS ou CNPJ. Bloqueia cadastro, importação, toque, reunião e proposta. Qualquer um inclui (também em lote); só a gestão remove — e a remoção fica registrada. |
+| **Registro não se apaga** | Toque só é registrado com a data de hoje. Desmarcar vira **estorno** com motivo: o autor, no mesmo dia; depois, só a gestão. Estornos aparecem no placar. |
+| **Histórico campo a campo** | Toda alteração (de → para, quem, quando), além de etapas, toques, estornos e reuniões. |
+| **Só a gestão** | Arquivar (com motivo), confirmar pagamento manual, definir metas, checagens, 1:1, cancelar ação, feriados, importar quadro. |
+| **Próximo passo obrigatório** | Lead em negociação (diagnóstico → proposta) não fica sem próximo passo datado depois de um contato. |
+
+## Gestão
+
+- **Supervisão:** semáforo considera também a meta de toques/dia da pessoa;
+  mostra conexões; alertas de reunião sem desfecho, proposta vencendo e
+  assinado sem pagamento; botões **registrar checagem** (8h30/12h30/17h —
+  fotografa o semáforo; fora do verde exige o que foi combinado) e
+  **registrar 1:1** (bloqueios, combinados, plano de ação com prazo; congela o
+  placar da semana). Ações abertas aparecem no card da pessoa, vencidas em
+  vermelho; a pessoa marca como feita.
+- **Placar:** por pessoa e período (mês, 7 dias, mês anterior): toques,
+  conexões, % conexão, reuniões agendadas/realizadas/faltou, %
+  comparecimento, trials, propostas, assinados, pagos, receita, perdidos,
+  estornos, checagens recebidas, ações vencidas — contra as metas individuais.
+- **Metas por pessoa:** novos/dia, toques/dia, reuniões/mês, pagos/mês.
+- **Controles:** lista de não contatar, cumprimento da rotina (3 checagens ×
+  dias úteis), últimos 1:1, feriados (2026–2027 nacionais + Adesão do Pará já
+  carregados; a cadência e os dias úteis das metas pulam feriados).
+
+## Testes
+
+`testes/t-comercial.mjs` — 67 verificações, com uma vendedora de acesso
+restrito criada no teste para conferir as permissões. Bateria `npm run api`:
+156 verificações passando. Conferência do ASAAS testada com cobrança
+simulada no banco.

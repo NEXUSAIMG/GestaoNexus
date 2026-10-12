@@ -11,6 +11,18 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42B — Comercial: controle minucioso
+
+Resultado obrigatório em todo contato, reuniões com desfecho, portões de
+etapa, propostas com política de desconto travada, assinado × pago (ASAAS
+confere pelo CNPJ), duplicidade por CNS/CNPJ/e-mail/telefone, lista de não
+contatar, estorno no lugar de apagar, histórico campo a campo, checagens
+diárias, 1:1 com plano de ação, placar por pessoa, metas individuais e
+feriados. Migration `035_comercial_controle.sql`. Detalhes em
+`docs/sprint-42-comercial.md`. Testes: `node testes/t-comercial.mjs` (67).
+
+---
+
 ## Sprint 42 — Módulo Comercial (funil de vendas do Seu Cartório)
 
 Menu **Comercial** com Hoje, Funil, Trials, Supervisão, Metas e Scripts —

@@ -88,6 +88,35 @@ export const METAS_PADRAO = {
   novosPorPessoa: {},
 };
 
+// Resultado de cada toque. `conecta` = falou com alguém (base da taxa de conexão).
+export const RESULTADOS = [
+  { k: 'atendeu',       n: 'Atendeu / conversou',      conecta: true },
+  { k: 'agendou',       n: 'Agendou reunião',          conecta: true },
+  { k: 'pediu_retorno', n: 'Pediu retorno',            conecta: true },
+  { k: 'recusou',       n: 'Recusou',                  conecta: true },
+  { k: 'respondeu',     n: 'Respondeu (mensagem)',     conecta: true },
+  { k: 'nao_atendeu',   n: 'Não atendeu',              conecta: false },
+  { k: 'caixa_postal',  n: 'Caixa postal',             conecta: false },
+  { k: 'numero_errado', n: 'Número/contato errado',    conecta: false },
+  { k: 'enviado',       n: 'Mensagem enviada',         conecta: false },
+];
+export const RESULTADOS_CHAVES = RESULTADOS.map((r) => r.k);
+export const RESULTADOS_CONECTAM = RESULTADOS.filter((r) => r.conecta).map((r) => r.k);
+
+export const TIPOS_REUNIAO = { diagnostico: 'Diagnóstico', ativacao: 'Ativação do trial', resultado: 'Reunião de resultado (D7)', outra: 'Outra' };
+export const MOTIVOS_NAO_CONTATAR = { descadastro: 'Pediu descadastro', pedido_lgpd: 'Pedido LGPD (titular de dados)', pediu_nao_contatar: 'Pediu para não ligar', outro: 'Outro' };
+export const JANELAS = { abertura: '8h30 · abertura', meio: '12h30 · meio do dia', fechamento: '17h · fechamento' };
+
+// Campos do diagnóstico exigidos para passar a Qualificado.
+export const DIAGNOSTICO_CAMPOS = [
+  { k: 'msgs_dia',      n: 'Mensagens de WhatsApp por dia',      obrigatorio: true },
+  { k: 'atendentes',    n: 'Pessoas que respondem hoje',          obrigatorio: true },
+  { k: 'dor',           n: 'Dor principal (nas palavras do cliente)', obrigatorio: true },
+  { k: 'decisor',       n: 'Quem decide a compra',                obrigatorio: true },
+  { k: 'prazo',         n: 'Prazo para resolver',                 obrigatorio: true },
+  { k: 'sistema_atual', n: 'Como atendem hoje / sistema atual',   obrigatorio: false },
+];
+
 // ---------------------------------------------------------------------------
 // Datas — sempre 'YYYY-MM-DD' no fuso de Brasília
 // ---------------------------------------------------------------------------
@@ -100,10 +129,23 @@ export const mesDe = (iso) => String(iso).slice(0, 7);
 function parse(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); }
 function iso(d) { return d.toISOString().slice(0, 10); }
 export function addDias(s, n) { const d = parse(s); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
+// Feriados carregados do banco pelo controller (comercial_feriados).
+let FERIADOS = new Set();
+export function definirFeriados(lista) { FERIADOS = new Set(lista); }
+export function ehDiaUtil(s) {
+  const w = parse(s).getUTCDay();
+  return w !== 0 && w !== 6 && !FERIADOS.has(s);
+}
 export function addDiasUteis(s, n) {
   const d = parse(s); let k = 0;
-  while (k < n) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) k++; }
+  while (k < n) { d.setUTCDate(d.getUTCDate() + 1); if (ehDiaUtil(iso(d))) k++; }
   return iso(d);
+}
+export function diasUteisDoMes(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1)); let n = 0;
+  while (d.getUTCMonth() === m - 1) { if (ehDiaUtil(iso(d))) n++; d.setUTCDate(d.getUTCDate() + 1); }
+  return n;
 }
 export function diffDias(a, b) { return Math.round((parse(b) - parse(a)) / 864e5); }
 
@@ -129,6 +171,55 @@ export function aplicarEtapa(lead, nova, hoje = hojeBR()) {
   if (nova === 'cadencia' && !lead.cadencia_inicio) mud.cadencia_inicio = hoje;
   if (nova === 'trial' && !lead.trial_inicio) mud.trial_inicio = hoje;
   return mud;
+}
+
+// ---------------------------------------------------------------------------
+// Portões de etapa (critérios de saída)
+// ---------------------------------------------------------------------------
+/**
+ * O que falta para o lead entrar na etapa `nova`. Os portões são
+ * cumulativos: ir de Prospect direto para Trial exige também o que
+ * Qualificado exige.
+ *
+ * @param ctx { reunioes: [{tipo,status}], propostas: [{status}], valor_mensal }
+ * @returns lista de pendências (vazia = pode avançar)
+ */
+export function pendenciasPortao(lead, nova, ctx = {}) {
+  const p = [];
+  if (nova === 'perdido') return p;
+  const alvo = ETAPA[nova].i;
+  const reun = ctx.reunioes || [];
+  const props = ctx.propostas || [];
+  const diag = lead.diagnostico || {};
+
+  if (alvo >= ETAPA.qualificado.i) {
+    if (!reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada')) {
+      p.push('reunião de diagnóstico marcada como realizada');
+    }
+    DIAGNOSTICO_CAMPOS.filter((c) => c.obrigatorio).forEach((c) => {
+      if (diag[c.k] == null || String(diag[c.k]).trim() === '') p.push('diagnóstico: ' + c.n.toLowerCase());
+    });
+  }
+  if (alvo >= ETAPA.trial.i) {
+    if (!lead.meta_sucesso || !String(lead.meta_sucesso).trim()) p.push('meta de sucesso do trial escrita');
+    if (!reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status))) {
+      p.push('reunião de ativação agendada');
+    }
+  }
+  if (alvo >= ETAPA.proposta.i) {
+    if (!props.some((x) => ['enviada', 'aceita'].includes(x.status))) p.push('proposta registrada (plano, valor e validade)');
+  }
+  if (nova === 'ganho') {
+    if (!(Number(ctx.valor_mensal ?? lead.valor_mensal) > 0)) p.push('valor mensal do contrato');
+  }
+  return p;
+}
+
+/** Mudança que volta no funil (ou reabre ganho/perdido) exige justificativa. */
+export function ehRetrocesso(de, para) {
+  if (!de || de === para || para === 'perdido') return false;
+  if (de === 'perdido' || de === 'ganho') return true;
+  return ETAPA[para].i < ETAPA[de].i;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,17 +295,39 @@ export function desdobrarMeta(m) {
 }
 
 // ---------------------------------------------------------------------------
+// Metas por pessoa
+// ---------------------------------------------------------------------------
+/** Metas individuais: porPessoa[id] = {novosDia, toquesDia, reunioesMes, pagosMes}. */
+export function metaPessoa(metas, pessoaId) {
+  const pp = (metas.porPessoa || {})[pessoaId] || {};
+  return {
+    novosDia: Number(pp.novosDia ?? (metas.novosPorPessoa || {})[pessoaId] ?? 0),
+    toquesDia: Number(pp.toquesDia ?? 0),
+    reunioesMes: Number(pp.reunioesMes ?? 0),
+    pagosMes: Number(pp.pagosMes ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Painel: Hoje + Trials + Supervisão + números (um cálculo só)
 // ---------------------------------------------------------------------------
 /**
- * @param leads   leads não arquivados (com toques_cadencia/toques_marco/atualizado_dia)
- * @param toquesHoje linhas de comercial_toques com data = hoje [{lead_id, pessoa_id}]
- * @param metas   metas do mês
- * @param pessoas [{id, nome}] — pessoas que aparecem na supervisão
+ * @param leads          leads não arquivados (com toques_cadencia/toques_marco/atualizado_dia)
+ * @param toquesHoje     toques vivos (não estornados) de hoje [{lead_id, pessoa_id, resultado}]
+ * @param metas          metas do mês
+ * @param pessoas        [{id, nome}] — quem aparece na supervisão
+ * @param reunioes       reuniões de hoje em diante + agendadas no passado sem desfecho
+ * @param propostas      propostas com status 'enviada'
+ * @param checagensHoje  [{pessoa_id, janela, sinal, gestor_nome, observacao, criado_em}]
+ * @param acoes          planos de ação abertos [{id, pessoa_id, acao, prazo}]
  */
-export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR() }) {
+export function montarPainel({
+  leads, toquesHoje, metas, pessoas, hoje = hojeBR(),
+  reunioes = [], propostas = [], checagensHoje = [], acoes = [], agora = new Date(),
+}) {
   const mes = mesDe(hoje);
   const ativo = (l) => ETAPAS_ATIVAS.includes(l.etapa);
+  const leadDe = new Map(leads.map((l) => [l.id, l]));
   const resumo = (l) => ({
     id: l.id, nome: l.nome, protocolo: l.protocolo, etapa: l.etapa,
     cidade: l.cidade, uf: l.uf, dono_id: l.dono_id, dono_nome: l.dono_nome,
@@ -223,6 +336,7 @@ export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR(
   // --- Hoje
   const toques = []; const marcos = []; const proximos = []; const parados = [];
   for (const l of leads) {
+    if (l.bloqueado_nc) continue; // na lista de não contatar: some das filas
     const t = toqueDevido(l, hoje); if (t) toques.push({ lead: resumo(l), ...t });
     const m = marcoDevido(l, hoje); if (m) marcos.push({ lead: resumo(l), ...m, pontos: pontuacao(l) });
     if (ativo(l) && l.proxima_data && l.proxima_data <= hoje) {
@@ -236,23 +350,44 @@ export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR(
   proximos.sort((a, b) => (a.proxima_data < b.proxima_data ? -1 : 1));
   parados.sort((a, b) => b.dias - a.dias);
 
-  // --- Números do funil (taxas desde o início do registro)
+  const dataDe = (ts) => hojeBR(new Date(ts));
+  const comLead = (r) => ({ ...r, lead: leadDe.get(r.lead_id) ? resumo(leadDe.get(r.lead_id)) : { id: r.lead_id, nome: '(arquivado)' } });
+  const reunioesHoje = reunioes.filter((r) => r.status === 'agendada' && dataDe(r.inicio) === hoje).map(comLead)
+    .sort((a, b) => (a.inicio < b.inicio ? -1 : 1));
+  const semDesfecho = reunioes.filter((r) => r.status === 'agendada' && new Date(r.inicio) < agora && dataDe(r.inicio) < hoje).map(comLead);
+  const propostasVencendo = propostas
+    .filter((x) => x.status === 'enviada' && x.validade <= addDias(hoje, 2) && leadDe.get(x.lead_id) && ativo(leadDe.get(x.lead_id)))
+    .map((x) => ({ ...comLead(x), vencida: x.validade < hoje }));
+  const aguardandoPagamento = leads
+    .filter((l) => l.etapa === 'ganho' && !l.pago_em)
+    .map((l) => ({ lead: resumo(l), assinado_em: l.marcos?.ganho, dias: l.marcos?.ganho ? diffDias(l.marcos.ganho, hoje) : null, valor_mensal: l.valor_mensal }))
+    .sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0));
+
+  // --- Números do funil
   const alcancou = (k) => leads.filter((l) => l.marcos && l.marcos[k]).length;
   const rCad = alcancou('cadencia'); const rDiag = alcancou('diagnostico');
   const rTrial = alcancou('trial'); const rGanho = alcancou('ganho');
-  const ganhosMes = leads.filter((l) => l.etapa === 'ganho' && String(l.marcos?.ganho || '').startsWith(mes));
+  const rPago = leads.filter((l) => l.pago_em).length;
+  const assinadosMes = leads.filter((l) => l.etapa === 'ganho' && String(l.marcos?.ganho || '').startsWith(mes));
+  const pagosMes = leads.filter((l) => String(l.pago_em || '').startsWith(mes));
   const perdidos = leads.filter((l) => l.etapa === 'perdido');
   const motivos = {};
   perdidos.forEach((l) => { const k = l.motivo_perda || 'Sem motivo'; motivos[k] = (motivos[k] || 0) + 1; });
   const taxa = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const conexoesHoje = toquesHoje.filter((t) => RESULTADOS_CONECTAM.includes(t.resultado)).length;
 
   const numeros = {
     novos_hoje: leads.filter((l) => l.marcos?.cadencia === hoje).length,
     toques_hoje: toquesHoje.length,
+    conexoes_hoje: conexoesHoje,
     trials_ativos: leads.filter((l) => l.etapa === 'trial').length,
     propostas: leads.filter((l) => l.etapa === 'proposta').length,
-    ganhos_mes: ganhosMes.length,
-    receita_nova_mes: ganhosMes.reduce((s, l) => s + (Number(l.valor_mensal) || 0), 0),
+    // Meta conta PAGOS. Assinado sem pagamento aparece separado.
+    ganhos_mes: pagosMes.length,
+    pagos_mes: pagosMes.length,
+    assinados_mes: assinadosMes.length,
+    aguardando_pagamento: aguardandoPagamento.length,
+    receita_nova_mes: pagosMes.reduce((s, l) => s + (Number(l.pago_valor ?? l.valor_mensal) || 0), 0),
     perdidos: perdidos.length,
     motivos_perda: Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo, n })),
     por_etapa: Object.fromEntries(ETAPAS.map((e) => [e.k, leads.filter((l) => l.etapa === e.k).length])),
@@ -260,6 +395,7 @@ export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR(
       contato_diag: { de: rCad, para: rDiag, real: taxa(rDiag, rCad), meta: metas.taxaContatoDiag },
       diag_trial:   { de: rDiag, para: rTrial, real: taxa(rTrial, rDiag), meta: metas.taxaDiagTrial },
       trial_pago:   { de: rTrial, para: rGanho, real: taxa(rGanho, rTrial), meta: metas.taxaTrialPago },
+      assinado_pago: { de: rGanho, para: rPago, real: taxa(rPago, rGanho), meta: 100 },
     },
   };
 
@@ -270,44 +406,53 @@ export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR(
     .sort((a, b) => ((a.trial_inicio || '') < (b.trial_inicio || '') ? -1 : 1));
 
   // --- Supervisão (semáforo por pessoa)
-  const leadDe = new Map(leads.map((l) => [l.id, l]));
   const supervisao = pessoas.map((p) => {
     const meus = leads.filter((l) => l.dono_id === p.id);
     const ativos = meus.filter(ativo);
-    const feitos = toquesHoje.filter((t) => leadDe.get(t.lead_id)?.dono_id === p.id).length;
+    const meusToques = toquesHoje.filter((t) => t.pessoa_id === p.id);
+    const feitos = meusToques.length;
+    const conexoes = meusToques.filter((t) => RESULTADOS_CONECTAM.includes(t.resultado)).length;
     const pendentes = toques.filter((x) => x.lead.dono_id === p.id).length
       + marcos.filter((x) => x.lead.dono_id === p.id).length;
     const novos = meus.filter((l) => l.marcos?.cadencia === hoje).length;
-    const metaNovos = Number((metas.novosPorPessoa || {})[p.id] || 0);
+    const mp = metaPessoa(metas, p.id);
     const total = feitos + pendentes;
-    const pAtiv = total ? (feitos / total) * 100 : 100;
-    const pNovos = metaNovos ? (novos / metaNovos) * 100 : 100;
-    const indice = Math.round(Math.min(pAtiv, pNovos));
+    const parcelas = [total ? (feitos / total) * 100 : 100];
+    if (mp.novosDia) parcelas.push((novos / mp.novosDia) * 100);
+    if (mp.toquesDia) parcelas.push((feitos / mp.toquesDia) * 100);
+    const indice = Math.round(Math.min(...parcelas));
     const sinal = indice >= 100 ? 'ok' : indice >= 70 ? 'warn' : 'crit';
 
     const alertas = [];
+    const add = (l, motivo) => alertas.push({ lead: resumo(l), motivo });
     ativos.forEach((l) => {
-      if (l.etapa === 'trial' && l.trial_inicio && diffDias(l.trial_inicio, hoje) >= 3 && pontuacao(l) < 40) {
-        alertas.push({ lead: resumo(l), motivo: 'trial abaixo de 40 pontos' });
-      }
+      if (l.etapa === 'trial' && l.trial_inicio && diffDias(l.trial_inicio, hoje) >= 3 && pontuacao(l) < 40) add(l, 'trial abaixo de 40 pontos');
     });
+    ativos.forEach((l) => { const s = situacaoPrazo(l, hoje); if (s && s.nivel === 'crit') add(l, 'fora do prazo da etapa'); });
     ativos.forEach((l) => {
-      const s = situacaoPrazo(l, hoje);
-      if (s && s.nivel === 'crit') alertas.push({ lead: resumo(l), motivo: 'fora do prazo da etapa' });
+      if (['diagnostico', 'qualificado', 'trial', 'proposta'].includes(l.etapa) && (!l.proxima_data || l.proxima_data < hoje)) add(l, 'sem próximo passo datado');
     });
-    ativos.forEach((l) => {
-      if (['diagnostico', 'qualificado', 'trial', 'proposta'].includes(l.etapa) && (!l.proxima_data || l.proxima_data < hoje)) {
-        alertas.push({ lead: resumo(l), motivo: 'sem próximo passo datado' });
-      }
+    semDesfecho.filter((r) => (r.responsavel_id || r.lead.dono_id) === p.id).forEach((r) => {
+      alertas.push({ lead: r.lead, motivo: `reunião de ${dataBr(dataDe(r.inicio))} sem desfecho registrado` });
+    });
+    propostasVencendo.filter((x) => x.lead.dono_id === p.id).forEach((x) => {
+      alertas.push({ lead: x.lead, motivo: x.vencida ? 'proposta vencida sem resposta' : 'proposta vence em até 2 dias' });
+    });
+    aguardandoPagamento.filter((x) => x.lead.dono_id === p.id && (x.dias ?? 0) > 7).forEach((x) => {
+      alertas.push({ lead: x.lead, motivo: `assinado há ${x.dias} dias e ainda sem pagamento` });
     });
 
+    const minhasAcoes = acoes.filter((a) => a.pessoa_id === p.id);
     return {
-      pessoa: p, feitos, pendentes, novos, meta_novos: metaNovos,
+      pessoa: p, feitos, conexoes, pendentes, novos,
+      meta_novos: mp.novosDia, meta_toques: mp.toquesDia,
       atualizados_hoje: meus.filter((l) => l.atualizado_dia === hoje).length,
       indice, sinal,
       rotulo: sinal === 'ok' ? 'Em dia' : sinal === 'warn' ? 'Atenção' : 'Conversar hoje',
       ativos: ativos.length,
       alertas,
+      checagens: checagensHoje.filter((c) => c.pessoa_id === p.id),
+      acoes: minhasAcoes.map((a) => ({ ...a, vencida: a.prazo < hoje })),
     };
   });
 
@@ -316,9 +461,11 @@ export function montarPainel({ leads, toquesHoje, metas, pessoas, hoje = hojeBR(
     metas,
     plano: desdobrarMeta(metas),
     numeros,
-    hoje_listas: { toques, marcos, proximos, parados },
+    hoje_listas: { toques, marcos, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
     trials,
     supervisao,
     sem_dono: leads.filter((l) => ativo(l) && !l.dono_id).length,
   };
 }
+
+function dataBr(s) { const [, m, d] = String(s).split('-'); return `${d}/${m}`; }

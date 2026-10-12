@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, ClipboardCheck, Users } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import {
   Pill, Barra, Painel, Vazio, Kpi, brl, pct, dataBr, nivelPontos, inputCls, btnPrimCls, btnCls, Campo, NomeLead,
+  Erro, dataHoraBr, horaBr,
 } from './ui.jsx';
 import { SCRIPTS, OBJECOES } from './scripts.js';
+import { ChecagemModal, UmAUmModal, DesfechoModal } from './Acoes.jsx';
 
 const nomeEtapa = (cfg, k) => cfg.etapas.find((e) => e.k === k)?.n || k;
+const btnMini = btnPrimCls + ' !px-2 !py-1 text-xs';
+const linkMini = 'text-xs font-medium text-nexus-700 hover:underline';
+
+function Lista({ itens, vazio, render }) {
+  if (!itens.length) return <Vazio>{vazio}</Vazio>;
+  return <ul className="divide-y divide-slate-100">{itens.map(render)}</ul>;
+}
 
 // ---------------------------------------------------------------------------
 // HOJE
 // ---------------------------------------------------------------------------
-export function VistaHoje({ painel, cfg, onAbrir, onToque }) {
+export function VistaHoje({ painel, cfg, onAbrir, onToque, onMarco, onMudou }) {
   const { numeros: n, metas: m, hoje_listas: h } = painel;
+  const [desfecho, setDesfecho] = useState(null);
   const dataExt = new Date(painel.hoje + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const agora = new Date();
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
@@ -21,9 +32,11 @@ export function VistaHoje({ painel, cfg, onAbrir, onToque }) {
       </p>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi rotulo="Novos na cadência hoje" valor={n.novos_hoje} meta={m.metaNovosDia} />
-        <Kpi rotulo="Toques feitos hoje" valor={n.toques_hoje} meta={m.metaToquesDia} />
+        <Kpi rotulo="Toques feitos hoje" valor={n.toques_hoje} meta={m.metaToquesDia}
+          sub={`${n.conexoes_hoje} conexão(ões) · ${n.toques_hoje ? pct((n.conexoes_hoje / n.toques_hoje) * 100) : '—'}`} />
         <Kpi rotulo="Trials ativos" valor={n.trials_ativos} sub={`${h.marcos.length} marco(s) para hoje`} />
-        <Kpi rotulo="Ganhos no mês" valor={n.ganhos_mes} meta={m.metaClientes} sub={`${brl(n.receita_nova_mes)}/mês de receita nova`} />
+        <Kpi rotulo="Clientes pagos no mês" valor={n.pagos_mes} meta={m.metaClientes}
+          sub={`${brl(n.receita_nova_mes)}/mês · ${n.aguardando_pagamento} assinado(s) aguardando pagamento`} />
       </div>
       {painel.sem_dono > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -31,85 +44,575 @@ export function VistaHoje({ painel, cfg, onAbrir, onToque }) {
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
+        <Painel titulo="Reuniões de hoje" extra={<Pill nivel="line">{h.reunioes.length}</Pill>}>
+          <Lista itens={h.reunioes} vazio="Nenhuma reunião marcada para hoje." render={(r) => (
+            <li key={r.id} className="flex items-center gap-3 py-2">
+              <span className="w-12 font-mono text-sm text-slate-700">{horaBr(r.inicio)}</span>
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={r.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
+              </div>
+              {new Date(r.inicio) < agora && <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Desfecho</button>}
+            </li>
+          )} />
+        </Painel>
+
+        <Painel titulo="Reuniões sem desfecho" extra={<Pill nivel={h.sem_desfecho.length ? 'crit' : 'ok'}>{h.sem_desfecho.length}</Pill>}>
+          <Lista itens={h.sem_desfecho} vazio="Toda reunião passada tem desfecho registrado." render={(r) => (
+            <li key={r.id} className="flex items-center gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={r.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]} · {dataHoraBr(r.inicio)}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
+              </div>
+              <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Desfecho</button>
+            </li>
+          )} />
+        </Painel>
+
         <Painel titulo="Toques de cadência" extra={<Pill nivel="line">{h.toques.length} para fazer</Pill>}>
-          {h.toques.length ? (
-            <ul className="divide-y divide-slate-100">
-              {h.toques.map((x) => (
-                <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                    <p className="text-xs text-slate-500">
-                      <b className="text-slate-700">Dia {x.d} · {x.canal}</b> — {x.acao}
-                      {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
-                      {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
-                    </p>
-                  </div>
-                  <button type="button" className={btnPrimCls + ' !px-2 !py-1 text-xs'} onClick={() => onToque(x.lead.id, 'cadencia', x.d)}>
-                    <Check size={12} /> Feito
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : <Vazio>Nenhum toque pendente. Coloque mais cartórios em cadência no Funil: a meta é {m.metaNovosDia} novos por dia útil.</Vazio>}
+          <Lista itens={h.toques} vazio={`Nenhum toque pendente. Coloque mais cartórios em cadência no Funil: a meta é ${m.metaNovosDia} novos por dia útil.`} render={(x) => (
+            <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">
+                  <b className="text-slate-700">Dia {x.d} · {x.canal}</b> — {x.acao}
+                  {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
+                  {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
+                </p>
+              </div>
+              <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'cadencia', x.d)}>
+                <Check size={12} /> Registrar
+              </button>
+            </li>
+          )} />
         </Painel>
 
         <Painel titulo="Marcos de trial" extra={<Pill nivel="line">{h.marcos.length} para fazer</Pill>}>
-          {h.marcos.length ? (
-            <ul className="divide-y divide-slate-100">
-              {h.marcos.map((x) => (
-                <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                    <p className="text-xs text-slate-500">
-                      <b className="text-slate-700">D{x.d} · {x.n}</b> — {x.acao} <Pill nivel={nivelPontos(x.pontos)}>{x.pontos} pts</Pill>
-                      {x.atrasado && <> <Pill nivel="crit">desde {dataBr(x.previsto)}</Pill></>}
-                    </p>
-                  </div>
-                  <button type="button" className={btnPrimCls + ' !px-2 !py-1 text-xs'} onClick={() => onToque(x.lead.id, 'marco', x.d)}>
-                    <Check size={12} /> Feito
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : <Vazio>Nenhum marco de trial vencendo hoje.</Vazio>}
+          <Lista itens={h.marcos} vazio="Nenhum marco de trial vencendo hoje." render={(x) => (
+            <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">
+                  <b className="text-slate-700">D{x.d} · {x.n}</b> — {x.acao} <Pill nivel={nivelPontos(x.pontos)}>{x.pontos} pts</Pill>
+                  {x.atrasado && <> <Pill nivel="crit">desde {dataBr(x.previsto)}</Pill></>}
+                </p>
+              </div>
+              <button type="button" className={btnMini} onClick={() => onMarco(x.lead.id, x.d)}><Check size={12} /> Feito</button>
+            </li>
+          )} />
         </Painel>
 
         <Painel titulo="Próximos passos de hoje" extra={<Pill nivel="line">{h.proximos.length}</Pill>}>
-          {h.proximos.length ? (
-            <ul className="divide-y divide-slate-100">
-              {h.proximos.map((x) => (
-                <li key={x.lead.id} className="flex items-start gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                    <p className="text-xs text-slate-500">{x.proximo_passo || 'Sem descrição'} · {nomeEtapa(cfg, x.lead.etapa)}</p>
-                  </div>
-                  <Pill nivel={x.vencido ? 'crit' : 'neu'}>{x.vencido ? 'venceu ' + dataBr(x.proxima_data) : 'hoje'}</Pill>
-                </li>
-              ))}
-            </ul>
-          ) : <Vazio>Nada agendado para hoje.</Vazio>}
+          <Lista itens={h.proximos} vazio="Nada agendado para hoje." render={(x) => (
+            <li key={x.lead.id} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">{x.proximo_passo || 'Sem descrição'} · {nomeEtapa(cfg, x.lead.etapa)}</p>
+              </div>
+              <Pill nivel={x.vencido ? 'crit' : 'neu'}>{x.vencido ? 'venceu ' + dataBr(x.proxima_data) : 'hoje'}</Pill>
+            </li>
+          )} />
+        </Painel>
+
+        <Painel titulo="Propostas vencendo" extra={<Pill nivel={h.propostas_vencendo.length ? 'warn' : 'ok'}>{h.propostas_vencendo.length}</Pill>}>
+          <Lista itens={h.propostas_vencendo} vazio="Nenhuma proposta vencendo nos próximos 2 dias." render={(x) => (
+            <li key={x.id} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">{x.plano} · {brl(x.valor_mensal)}/mês{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+              </div>
+              <Pill nivel={x.vencida ? 'crit' : 'warn'}>{x.vencida ? 'venceu ' : 'vence '}{dataBr(x.validade)}</Pill>
+            </li>
+          )} />
+        </Painel>
+
+        <Painel titulo="Assinados aguardando pagamento" extra={<Pill nivel={h.aguardando_pagamento.length ? 'warn' : 'ok'}>{h.aguardando_pagamento.length}</Pill>}>
+          <Lista itens={h.aguardando_pagamento} vazio="Todo cliente assinado já pagou." render={(x) => (
+            <li key={x.lead.id} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">assinado {dataBr(x.assinado_em)} · {x.valor_mensal ? brl(x.valor_mensal) + '/mês' : 'sem valor'}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+              </div>
+              <Pill nivel={(x.dias ?? 0) > 7 ? 'crit' : 'warn'}>{x.dias ?? '?'}d</Pill>
+            </li>
+          )} />
         </Painel>
 
         <Painel titulo="Parados além do prazo" extra={<Pill nivel={h.parados.length ? 'crit' : 'ok'}>{h.parados.length}</Pill>}>
-          {h.parados.length ? (
-            <ul className="divide-y divide-slate-100">
-              {h.parados.slice(0, 30).map((x) => (
-                <li key={x.lead.id} className="flex items-start gap-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                    <p className="text-xs text-slate-500">{nomeEtapa(cfg, x.lead.etapa)}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
-                  </div>
-                  <Pill nivel="crit">{x.dias}d / {x.sla}d</Pill>
-                </li>
-              ))}
-              {h.parados.length > 30 && <li className="py-2 text-xs text-slate-500">e mais {h.parados.length - 30}</li>}
-            </ul>
-          ) : <Vazio>Todos os cartórios estão dentro do prazo da etapa.</Vazio>}
+          <Lista itens={h.parados.slice(0, 30)} vazio="Todos os cartórios estão dentro do prazo da etapa." render={(x) => (
+            <li key={x.lead.id} className="flex items-start gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <NomeLead lead={x.lead} onAbrir={onAbrir} />
+                <p className="text-xs text-slate-500">{nomeEtapa(cfg, x.lead.etapa)}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+              </div>
+              <Pill nivel="crit">{x.dias}d / {x.sla}d</Pill>
+            </li>
+          )} />
+          {h.parados.length > 30 && <p className="text-xs text-slate-500">e mais {h.parados.length - 30}</p>}
         </Painel>
+      </div>
+      {desfecho && <DesfechoModal reuniao={desfecho} onFechar={() => setDesfecho(null)} onFeito={() => { setDesfecho(null); onMudou(); }} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SUPERVISÃO
+// ---------------------------------------------------------------------------
+function janelaAtual() {
+  const h = new Date().getHours() + new Date().getMinutes() / 60;
+  return h < 11 ? 'abertura' : h < 15.5 ? 'meio' : 'fechamento';
+}
+
+export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
+  const admin = !!cfg.eu?.admin;
+  const [modal, setModal] = useState(null);
+  const [erro, setErro] = useState('');
+  async function concluir(acao) {
+    setErro('');
+    try { await api.put('/comercial/acoes/' + acao.id, { status: 'feita' }); onMudou(); } catch (err) { setErro(mensagemDeErro(err)); }
+  }
+  return (
+    <div className="space-y-4">
+      <p className="max-w-3xl text-sm text-slate-500">
+        Três checagens por dia: 8h30 (abertura), 12h30 (meio do dia) e 17h (fechamento). Verde: atividade do dia em dia.
+        Amarelo: entre 70% e 99%. Vermelho: abaixo de 70% — conversa de 5 minutos para tirar o bloqueio. Cada checagem
+        fica registrada com o semáforo do momento e o que foi combinado.
+      </p>
+      <Erro>{erro}</Erro>
+      {painel.sem_dono > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {painel.sem_dono} cartório(s) ativo(s) sem responsável.
+        </div>
+      )}
+      {!painel.supervisao.length && <Vazio>Ninguém com cartórios ativos ainda. Defina responsáveis no Funil ou metas por pessoa em Metas.</Vazio>}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {painel.supervisao.map((s) => (
+          <Painel key={s.pessoa.id} titulo={s.pessoa.nome} extra={<Pill nivel={s.sinal}>{s.rotulo}</Pill>}>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <Num rotulo="Feitos" valor={s.feitos} meta={s.meta_toques || null} />
+              <Num rotulo="Conexões" valor={s.conexoes} />
+              <Num rotulo="Pendentes" valor={s.pendentes} />
+              {s.meta_novos ? <Num rotulo="Novos" valor={s.novos} meta={s.meta_novos} /> : <Num rotulo="Atualiz." valor={s.atualizados_hoje} />}
+            </div>
+            <Barra pct={Math.max(4, s.indice)} nivel={s.sinal} />
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <ClipboardCheck size={14} />
+              {Object.entries(cfg.janelas).map(([k, n]) => {
+                const c = s.checagens.find((x) => x.janela === k);
+                return (
+                  <span key={k} title={c ? `${n} · ${c.gestor_nome || ''}${c.observacao ? ' — ' + c.observacao : ''}` : `${n} · não feita`}
+                    className={`rounded px-1.5 py-0.5 ${c ? (c.sinal === 'ok' ? 'bg-emerald-100 text-emerald-800' : c.sinal === 'warn' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800') : 'bg-slate-100 text-slate-400'}`}>
+                    {n.split(' ')[0]}
+                  </span>
+                );
+              })}
+              {admin && <button type="button" className={linkMini + ' ml-auto'} onClick={() => setModal({ tipo: 'checagem', sup: s })}>registrar checagem</button>}
+            </div>
+            {s.alertas.length ? (
+              <ul className="divide-y divide-slate-100">
+                {s.alertas.slice(0, 8).map((a, i) => (
+                  <li key={a.lead.id + i} className="flex items-center gap-2 py-1.5">
+                    <div className="min-w-0 flex-1"><NomeLead lead={a.lead} onAbrir={onAbrir} /><p className="text-xs text-slate-500">{a.motivo}</p></div>
+                    <Pill nivel="crit">agir</Pill>
+                  </li>
+                ))}
+                {s.alertas.length > 8 && <li className="py-1.5 text-xs text-slate-500">e mais {s.alertas.length - 8} alerta(s)</li>}
+              </ul>
+            ) : <Vazio>Sem alertas.</Vazio>}
+            {s.acoes.length > 0 && (
+              <div className="space-y-1 border-t border-slate-100 pt-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Plano de ação</p>
+                {s.acoes.map((a) => (
+                  <div key={a.id} className="flex items-center gap-2 text-sm">
+                    <span className="min-w-0 flex-1">{a.acao}</span>
+                    <Pill nivel={a.vencida ? 'crit' : 'neu'}>{a.vencida ? 'venceu ' : 'até '}{dataBr(a.prazo)}</Pill>
+                    {(admin || a.pessoa_id === cfg.eu?.id) && <button type="button" className={linkMini} onClick={() => concluir(a)}>feita</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>{s.ativos} cartório(s) ativo(s)</span>
+              {admin && <button type="button" className={linkMini + ' inline-flex items-center gap-1'} onClick={() => setModal({ tipo: '1a1', sup: s })}><Users size={12} /> registrar 1:1</button>}
+            </div>
+          </Painel>
+        ))}
+      </div>
+      {modal?.tipo === 'checagem' && <ChecagemModal cfg={cfg} sup={modal.sup} janela={janelaAtual()} onFechar={() => setModal(null)} onFeito={() => { setModal(null); onMudou(); }} />}
+      {modal?.tipo === '1a1' && <UmAUmModal sup={modal.sup} hoje={cfg.hoje} onFechar={() => setModal(null)} onFeito={() => { setModal(null); onMudou(); }} />}
+    </div>
+  );
+}
+
+function Num({ rotulo, valor, meta }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{rotulo}</span>
+      <b className="text-xl tabular-nums text-slate-900">{valor}{meta ? <small className="text-xs font-normal text-slate-400">/{meta}</small> : null}</b>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// METAS
+// ---------------------------------------------------------------------------
+const CAMPOS_META = [
+  ['metaClientes', 'Meta de clientes pagos/mês'], ['ticket', 'Ticket médio (R$/mês)'], ['diasUteis', 'Dias úteis no mês'],
+  ['taxaContatoDiag', 'Contato → diagnóstico (%)'], ['taxaDiagTrial', 'Diagnóstico → trial (%)'], ['taxaTrialPago', 'Trial → pago (%)'],
+  ['metaNovosDia', 'Novos na cadência/dia (equipe)'], ['metaToquesDia', 'Toques/dia (equipe)'],
+];
+const CAMPOS_PESSOA = [['novosDia', 'Novos/dia'], ['toquesDia', 'Toques/dia'], ['reunioesMes', 'Reuniões/mês'], ['pagosMes', 'Pagos/mês']];
+
+export function VistaMetas({ painel, cfg, onSalvo }) {
+  const admin = !!cfg.eu?.admin;
+  const mes = painel.hoje.slice(0, 7);
+  const [form, setForm] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    const { _mes_origem, _dias_uteis_calculados, novosPorPessoa, ...v } = painel.metas; // eslint-disable-line no-unused-vars
+    const pp = { ...(v.porPessoa || {}) };
+    Object.entries(novosPorPessoa || {}).forEach(([k, n]) => { pp[k] = { novosDia: n, ...(pp[k] || {}) }; });
+    setForm({ ...v, porPessoa: pp });
+  }, [painel.metas]);
+  if (!form) return null;
+
+  const t = (form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100) * (form.taxaContatoDiag / 100);
+  const contatos = t > 0 ? form.metaClientes / t : NaN;
+  const n = painel.numeros;
+  const cmp = (tx) => (tx.real == null ? <Pill nivel="line">sem dados</Pill>
+    : <Pill nivel={tx.real >= tx.meta ? 'ok' : tx.real >= tx.meta * 0.7 ? 'warn' : 'crit'}>{pct(tx.real)}</Pill>);
+  const maxMot = Math.max(1, ...n.motivos_perda.map((x) => x.n));
+  const setPP = (pid, k, v) => setForm({ ...form, porPessoa: { ...form.porPessoa, [pid]: { ...(form.porPessoa[pid] || {}), [k]: v === '' ? 0 : Number(v) } } });
+
+  async function salvar() {
+    setSalvando(true); setMsg('');
+    try { await api.put('/comercial/metas/' + mes, form); setMsg('Metas salvas.'); onSalvo(); } catch (err) { setMsg(mensagemDeErro(err)); } finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <Painel titulo={`Metas · ${mes.split('-').reverse().join('/')}`} extra={!admin && <Pill nivel="line">só a gestão altera</Pill>}>
+        <p className="text-sm text-slate-500">A meta de clientes PAGOS vira contatos por dia, de trás para frente. Comece com as taxas do plano e troque pelas reais depois de 30 dias. Dias úteis do mês, já sem feriados: {painel.metas._dias_uteis_calculados}.</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {CAMPOS_META.map(([k, r]) => (
+            <Campo key={k} rotulo={r}>
+              <input type="number" min="0" step="any" disabled={!admin} className={inputCls} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value === '' ? '' : Number(e.target.value) })} />
+            </Campo>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <p className="mb-2 text-xs font-medium text-slate-600">Metas por pessoa (alimentam o semáforo e o placar)</p>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="py-1 pr-2">Pessoa</th>{CAMPOS_PESSOA.map(([k, r]) => <th key={k} className="py-1 pr-2">{r}</th>)}</tr></thead>
+            <tbody>
+              {cfg.pessoas.map((p) => (
+                <tr key={p.id}>
+                  <td className="py-1 pr-2">{p.nome}</td>
+                  {CAMPOS_PESSOA.map(([k]) => (
+                    <td key={k} className="py-1 pr-2"><input type="number" min="0" disabled={!admin} className={inputCls + ' !w-20'} value={form.porPessoa[p.id]?.[k] || ''} onChange={(e) => setPP(p.id, k, e.target.value)} /></td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
+          <dt className="text-slate-500">Contatos por dia útil</dt><dd className="text-right text-lg font-semibold">{isFinite(contatos) ? Math.ceil(contatos / (form.diasUteis || 21)) : '—'}</dd>
+          <dt className="text-slate-500">Contatos no mês</dt><dd className="text-right font-semibold">{isFinite(contatos) ? Math.ceil(contatos) : '—'}</dd>
+          <dt className="text-slate-500">Diagnósticos no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago && form.taxaDiagTrial ? Math.ceil(form.metaClientes / ((form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100))) : '—'}</dd>
+          <dt className="text-slate-500">Trials no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago ? Math.ceil(form.metaClientes / (form.taxaTrialPago / 100)) : '—'}</dd>
+          <dt className="text-slate-500">Receita recorrente nova esperada</dt><dd className="text-right font-semibold">{brl(form.metaClientes * (form.ticket || 0))}/mês</dd>
+        </dl>
+        {admin && (
+          <div className="flex items-center gap-3">
+            <button type="button" className={btnPrimCls} onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar metas do mês'}</button>
+            {msg && <span className="text-sm text-slate-600">{msg}</span>}
+          </div>
+        )}
+        {painel.metas._mes_origem && painel.metas._mes_origem !== mes && (
+          <p className="text-xs text-amber-700">Este mês ainda usa as metas de {painel.metas._mes_origem}. Salve para fixar as deste mês.</p>
+        )}
+      </Painel>
+
+      <Painel titulo="Taxas reais do funil" extra={<span className="text-xs text-slate-400">desde o início do registro</span>}>
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr><th className="py-1">Passagem</th><th className="py-1 text-right">Volume</th><th className="py-1 text-right">Real</th><th className="py-1 text-right">Meta</th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {[['Contato → diagnóstico', n.taxas.contato_diag], ['Diagnóstico → trial', n.taxas.diag_trial], ['Trial → assinado', n.taxas.trial_pago], ['Assinado → pago', n.taxas.assinado_pago]].map(([r, tx]) => (
+              <tr key={r}><td className="py-1.5">{r}</td><td className="py-1.5 text-right font-mono">{tx.para}/{tx.de}</td><td className="py-1.5 text-right">{cmp(tx)}</td><td className="py-1.5 text-right font-mono">{tx.meta}%</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
+          <dt className="text-slate-500">Clientes pagos no mês</dt><dd className="text-right font-semibold">{n.pagos_mes} / {painel.metas.metaClientes}</dd>
+          <dt className="text-slate-500">Assinados no mês</dt><dd className="text-right font-semibold">{n.assinados_mes}</dd>
+          <dt className="text-slate-500">Receita recorrente nova (paga)</dt><dd className="text-right font-semibold">{brl(n.receita_nova_mes)}</dd>
+          <dt className="text-slate-500">Propostas abertas</dt><dd className="text-right font-semibold">{n.propostas}</dd>
+        </dl>
+        <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+          <h3 className="text-sm font-semibold text-slate-900">Motivos de perda</h3>
+          <span className="text-xs text-slate-400">{n.perdidos} perdido(s)</span>
+        </div>
+        {n.motivos_perda.length ? (
+          <div className="space-y-2">
+            {n.motivos_perda.map((x) => (
+              <div key={x.motivo} className="grid grid-cols-[140px_1fr_32px] items-center gap-2 text-sm">
+                <span className="truncate">{x.motivo}</span><Barra pct={(x.n / maxMot) * 100} nivel="crit" /><span className="text-right font-mono">{x.n}</span>
+              </div>
+            ))}
+          </div>
+        ) : <Vazio>Nenhuma perda registrada ainda.</Vazio>}
+      </Painel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PLACAR (atividade × resultado por pessoa)
+// ---------------------------------------------------------------------------
+function periodo(tipo, hoje) {
+  const d = new Date(hoje + 'T12:00:00'); const iso = (x) => x.toISOString().slice(0, 10);
+  if (tipo === 'semana') { const a = new Date(d); a.setDate(a.getDate() - 6); return [iso(a), hoje]; }
+  if (tipo === 'mes_anterior') { const a = new Date(d.getFullYear(), d.getMonth() - 1, 1, 12); const b = new Date(d.getFullYear(), d.getMonth(), 0, 12); return [iso(a), iso(b)]; }
+  return [hoje.slice(0, 8) + '01', hoje];
+}
+
+export function VistaPlacar({ cfg, painel, versao }) {
+  const [tipo, setTipo] = useState('mes');
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    const [de, ate] = periodo(tipo, cfg.hoje);
+    api.get('/comercial/placar', { params: { de, ate } }).then((r) => setDados(r.data)).catch((err) => setErro(mensagemDeErro(err)));
+  }, [tipo, cfg.hoje, versao]);
+  const metas = painel?.metas?.porPessoa || {};
+  const col = [
+    ['toques', 'Toques'], ['conexoes', 'Conexões'], ['taxa_conexao', '% conexão'], ['reunioes_agendadas', 'Reuniões agend.'],
+    ['reunioes_realizadas', 'Realizadas'], ['reunioes_faltou', 'Faltou'], ['taxa_comparecimento', '% compar.'], ['trials', 'Trials'],
+    ['propostas', 'Propostas'], ['assinados', 'Assinados'], ['pagos', 'Pagos'], ['receita', 'Receita'], ['perdidos', 'Perdidos'],
+    ['estornos', 'Estornos'], ['checagens', 'Checagens'], ['acoes_vencidas', 'Ações venc.'],
+  ];
+  const fmt = (k, v) => (k.startsWith('taxa') ? pct(v) : k === 'receita' ? brl(v) : v);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <select className={inputCls + ' !w-auto'} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+          <option value="mes">Este mês</option><option value="semana">Últimos 7 dias</option><option value="mes_anterior">Mês anterior</option>
+        </select>
+        {dados && <span className="text-sm text-slate-500">{dataBr(dados.de)} a {dataBr(dados.ate)}</span>}
+      </div>
+      <Erro>{erro}</Erro>
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table className="w-full whitespace-nowrap text-sm">
+          <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <tr><th className="sticky left-0 bg-slate-50 px-3 py-2">Pessoa</th>{col.map(([k, r]) => <th key={k} className="px-2 py-2 text-right">{r}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(dados?.linhas || []).map((l) => {
+              const mp = metas[l.id] || {};
+              return (
+                <tr key={l.id}>
+                  <td className="sticky left-0 bg-white px-3 py-2 font-medium">{l.nome}</td>
+                  {col.map(([k]) => {
+                    const meta = k === 'pagos' && tipo === 'mes' ? mp.pagosMes : k === 'reunioes_realizadas' && tipo === 'mes' ? mp.reunioesMes : null;
+                    const ruim = (k === 'estornos' && l[k] > 2) || (k === 'acoes_vencidas' && l[k] > 0) || (meta && l[k] < meta);
+                    return (
+                      <td key={k} className={`px-2 py-2 text-right tabular-nums ${ruim ? 'font-semibold text-red-700' : ''}`}>
+                        {fmt(k, l[k])}{meta ? <span className="text-xs font-normal text-slate-400">/{meta}</span> : null}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {dados && !dados.linhas.length && <tr><td colSpan={col.length + 1} className="px-3 py-4 text-sm text-slate-500">Sem atividade no período.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-400">Conexão = falou com alguém (atendeu, agendou, pediu retorno, recusou, respondeu). Comparecimento = realizadas ÷ (realizadas + faltou). Pagos e receita só contam com o 1º pagamento confirmado.</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CONTROLES (não contatar, rotina da gestão, feriados)
+// ---------------------------------------------------------------------------
+export function VistaControles({ cfg, onMudou }) {
+  const admin = !!cfg.eu?.admin;
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <NaoContatar cfg={cfg} admin={admin} onMudou={onMudou} />
+      <div className="space-y-4">
+        <Rotina cfg={cfg} />
+        <Feriados cfg={cfg} admin={admin} />
       </div>
     </div>
   );
 }
+
+function NaoContatar({ cfg, admin, onMudou }) {
+  const [lista, setLista] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [f, setF] = useState({ tipo: 'email', valor: '', motivo: 'descadastro', observacao: '' });
+  const [lote, setLote] = useState('');
+  const [msg, setMsg] = useState('');
+  const carregar = () => api.get('/comercial/nao-contatar', { params: busca ? { busca } : {} }).then((r) => setLista(r.data)).catch(() => {});
+  useEffect(() => { const t = setTimeout(carregar, 300); return () => clearTimeout(t); }, [busca]); // eslint-disable-line
+
+  async function incluir(corpo) {
+    setMsg('');
+    try { const r = await api.post('/comercial/nao-contatar', corpo); setMsg(`${r.data.incluidos} incluído(s)${r.data.ja_existiam ? `, ${r.data.ja_existiam} já existiam` : ''}.`); setF({ ...f, valor: '', observacao: '' }); setLote(''); carregar(); onMudou(); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  function incluirLote() {
+    const itens = lote.split(/[\n;,]+/).map((x) => x.trim()).filter(Boolean).map((v) => ({
+      tipo: v.includes('@') ? 'email' : v.replace(/\D/g, '').length === 14 ? 'cnpj' : v.replace(/\D/g, '').length <= 7 ? 'cns' : 'telefone',
+      valor: v, motivo: f.motivo,
+    }));
+    if (itens.length) incluir({ itens });
+  }
+  async function remover(id) {
+    try { await api.delete('/comercial/nao-contatar/' + id); carregar(); onMudou(); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  return (
+    <Painel titulo="Lista de não contatar (LGPD / descadastro)" extra={<Pill nivel="line">{lista.length}</Pill>}>
+      <p className="text-sm text-slate-500">Quem está aqui não pode ser cadastrado, importado nem contatado. Qualquer pessoa da equipe inclui; só a gestão remove (fica registrado).</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[110px_1fr_200px]">
+        <select className={inputCls} value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>
+          {['email', 'dominio', 'telefone', 'cns', 'cnpj'].map((t) => <option key={t} value={t}>{t === 'dominio' ? 'domínio' : t.toUpperCase() === 'CNS' || t === 'cnpj' ? t.toUpperCase() : t}</option>)}
+        </select>
+        <input className={inputCls} placeholder="valor" value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} />
+        <select className={inputCls} value={f.motivo} onChange={(e) => setF({ ...f, motivo: e.target.value })}>
+          {Object.entries(cfg.motivos_nao_contatar).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" className={btnPrimCls} onClick={() => f.valor && incluir({ ...f, observacao: f.observacao || null })}>Incluir</button>
+      </div>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-nexus-700">Incluir em lote (descadastros do Instantly, por exemplo)</summary>
+        <textarea className={inputCls + ' mt-2 min-h-[80px] font-mono text-xs'} placeholder="um por linha: e-mail, telefone, CNS ou CNPJ" value={lote} onChange={(e) => setLote(e.target.value)} />
+        <button type="button" className={btnCls + ' mt-2'} onClick={incluirLote}>Incluir lote com o motivo escolhido acima</button>
+      </details>
+      {msg && <p className="text-sm text-slate-600">{msg}</p>}
+      <input className={inputCls} placeholder="Buscar" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+        {lista.map((x) => (
+          <li key={x.id} className="flex items-start gap-2 py-1.5 text-sm">
+            <span className="w-16 shrink-0 pt-0.5 text-[10px] uppercase text-slate-400">{x.tipo}</span>
+            <div className="min-w-0 flex-1">
+              <p className="break-all font-mono text-xs text-slate-800">{x.valor}</p>
+              <p className="text-xs text-slate-500">{cfg.motivos_nao_contatar[x.motivo]} · {x.criado_por_nome} · {new Date(x.criado_em).toLocaleDateString('pt-BR')}</p>
+            </div>
+            {admin && <button type="button" className="text-xs text-red-700 hover:underline" onClick={() => remover(x.id)}>remover</button>}
+          </li>
+        ))}
+      </ul>
+    </Painel>
+  );
+}
+
+function Rotina({ cfg }) {
+  const [dados, setDados] = useState(null);
+  const [umas, setUmas] = useState([]);
+  useEffect(() => {
+    api.get('/comercial/checagens').then((r) => setDados(r.data)).catch(() => {});
+    api.get('/comercial/1a1').then((r) => setUmas(r.data)).catch(() => {});
+  }, []);
+  if (!dados) return null;
+  const feriados = new Set((cfg.feriados || []).map((x) => x.data));
+  // Últimos 10 dias úteis + qualquer dia (fim de semana, feriado) que teve checagem
+  const comChecagem = new Set(dados.checagens.map((c) => c.data));
+  const dias = [];
+  for (let d = new Date(dados.ate + 'T12:00:00'); dias.length < 10; d.setDate(d.getDate() - 1)) {
+    const iso = d.toISOString().slice(0, 10); const w = d.getDay();
+    if ((w !== 0 && w !== 6 && !feriados.has(iso)) || comChecagem.has(iso)) dias.push(iso);
+    if (iso < dados.de) break;
+  }
+  const pessoas = [...new Map(dados.checagens.map((c) => [c.pessoa_id, c.pessoa_nome])).entries()];
+  const cor = { ok: 'bg-emerald-400', warn: 'bg-amber-400', crit: 'bg-red-500' };
+  return (
+    <Painel titulo="Cumprimento da rotina da gestão" extra={<span className="text-xs text-slate-400">últimos dias úteis · 3 checagens/dia</span>}>
+      {!pessoas.length ? <Vazio>Nenhuma checagem registrada ainda. Registre pela aba Supervisão.</Vazio> : (
+        <div className="overflow-x-auto">
+          <table className="text-xs">
+            <thead><tr><th className="pr-3 text-left font-medium text-slate-500">Pessoa</th>{dias.slice().reverse().map((d) => <th key={d} className="px-1 font-normal text-slate-400">{dataBr(d)}</th>)}</tr></thead>
+            <tbody>
+              {pessoas.map(([pid, nome]) => (
+                <tr key={pid}>
+                  <td className="pr-3 py-1">{nome}</td>
+                  {dias.slice().reverse().map((d) => (
+                    <td key={d} className="px-1 py-1">
+                      <div className="flex gap-0.5">
+                        {Object.keys(cfg.janelas).map((j) => {
+                          const c = dados.checagens.find((x) => x.pessoa_id === pid && x.data === d && x.janela === j);
+                          return <span key={j} title={c ? `${cfg.janelas[j]} · ${c.gestor_nome}${c.observacao ? ' — ' + c.observacao : ''}` : `${cfg.janelas[j]} · não feita`} className={`h-3 w-2 rounded-sm ${c ? cor[c.sinal] : 'bg-slate-200'}`} />;
+                        })}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="border-t border-slate-100 pt-2">
+        <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">Últimos 1:1</p>
+        {!umas.length ? <Vazio>Nenhum 1:1 registrado.</Vazio> : (
+          <ul className="space-y-2 text-sm">
+            {umas.slice(0, 8).map((u) => (
+              <li key={u.id}>
+                <b>{u.pessoa_nome}</b> · {dataBr(u.data)} · {u.gestor_nome}
+                <p className="text-xs text-slate-600">{u.combinados}</p>
+                {u.acoes.length > 0 && <p className="text-xs text-slate-500">{u.acoes.map((a) => `${a.acao} (${dataBr(a.prazo)}, ${a.status})`).join(' · ')}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Painel>
+  );
+}
+
+function Feriados({ cfg, admin }) {
+  const [lista, setLista] = useState(cfg.feriados || []);
+  const [f, setF] = useState({ data: '', nome: '', abrangencia: 'municipal' });
+  const [msg, setMsg] = useState('');
+  async function incluir() {
+    setMsg('');
+    try { await api.post('/comercial/feriados', f); setLista([...lista.filter((x) => x.data !== f.data), { ...f }].sort((a, b) => (a.data < b.data ? -1 : 1))); setF({ data: '', nome: '', abrangencia: 'municipal' }); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  async function remover(d) {
+    try { await api.delete('/comercial/feriados/' + d); setLista(lista.filter((x) => x.data !== d)); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  return (
+    <Painel titulo="Feriados" extra={<span className="text-xs text-slate-400">contam fora dos dias úteis da cadência e das metas</span>}>
+      {admin && (
+        <div className="grid grid-cols-[130px_1fr_auto] gap-2">
+          <input type="date" className={inputCls} value={f.data} onChange={(e) => setF({ ...f, data: e.target.value })} />
+          <input className={inputCls} placeholder="nome (ex.: Círio — ponto facultativo)" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} />
+          <button type="button" className={btnCls} onClick={incluir} disabled={!f.data || !f.nome}>Incluir</button>
+        </div>
+      )}
+      {msg && <p className="text-sm text-red-700">{msg}</p>}
+      <ul className="max-h-60 divide-y divide-slate-100 overflow-y-auto text-sm">
+        {lista.map((x) => (
+          <li key={x.data} className="flex items-center gap-2 py-1">
+            <span className="w-20 font-mono text-xs">{dataBr(x.data)}/{x.data.slice(2, 4)}</span>
+            <span className="flex-1">{x.nome}</span>
+            <span className="text-xs text-slate-400">{x.abrangencia}</span>
+            {admin && <button type="button" className="text-xs text-red-700 hover:underline" onClick={() => remover(x.data)}>remover</button>}
+          </li>
+        ))}
+      </ul>
+    </Painel>
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // TRIALS
@@ -154,172 +657,6 @@ export function VistaTrials({ painel, cfg, onAbrir }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// SUPERVISÃO
-// ---------------------------------------------------------------------------
-export function VistaSupervisao({ painel, onAbrir }) {
-  return (
-    <div className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-500">
-        Três checagens por dia: 8h30 (abertura), 12h30 (meio do dia) e 17h (fechamento). Verde: atividade do dia em dia.
-        Amarelo: entre 70% e 99%. Vermelho: abaixo de 70% — conversa de 5 minutos hoje para tirar o bloqueio.
-      </p>
-      {painel.sem_dono > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {painel.sem_dono} cartório(s) ativo(s) sem responsável.
-        </div>
-      )}
-      {!painel.supervisao.length && <Vazio>Ninguém com cartórios ativos ainda. Defina responsáveis no Funil ou metas de novos por pessoa em Metas.</Vazio>}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {painel.supervisao.map((s) => (
-          <Painel key={s.pessoa.id} titulo={s.pessoa.nome} extra={<Pill nivel={s.sinal}>{s.rotulo}</Pill>}>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <Num rotulo="Feitos hoje" valor={s.feitos} />
-              <Num rotulo="Pendentes hoje" valor={s.pendentes} />
-              {s.meta_novos
-                ? <Num rotulo="Novos na cadência" valor={s.novos} meta={s.meta_novos} />
-                : <Num rotulo="Atualizados hoje" valor={s.atualizados_hoje} />}
-            </div>
-            <Barra pct={Math.max(4, s.indice)} nivel={s.sinal} />
-            {s.alertas.length ? (
-              <ul className="divide-y divide-slate-100">
-                {s.alertas.slice(0, 6).map((a, i) => (
-                  <li key={a.lead.id + i} className="flex items-center gap-2 py-1.5">
-                    <div className="min-w-0 flex-1"><NomeLead lead={a.lead} onAbrir={onAbrir} /><p className="text-xs text-slate-500">{a.motivo}</p></div>
-                    <Pill nivel="crit">agir</Pill>
-                  </li>
-                ))}
-                {s.alertas.length > 6 && <li className="py-1.5 text-xs text-slate-500">e mais {s.alertas.length - 6} alerta(s)</li>}
-              </ul>
-            ) : <Vazio>Sem alertas.</Vazio>}
-            <p className="text-xs text-slate-400">{s.ativos} cartório(s) ativo(s) sob responsabilidade</p>
-          </Painel>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Num({ rotulo, valor, meta }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{rotulo}</span>
-      <b className="text-xl tabular-nums text-slate-900">{valor}{meta ? <small className="text-xs font-normal text-slate-400">/{meta}</small> : null}</b>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// METAS
-// ---------------------------------------------------------------------------
-const CAMPOS_META = [
-  ['metaClientes', 'Meta de clientes/mês'], ['ticket', 'Ticket médio (R$/mês)'], ['diasUteis', 'Dias úteis no mês'],
-  ['taxaContatoDiag', 'Contato → diagnóstico (%)'], ['taxaDiagTrial', 'Diagnóstico → trial (%)'], ['taxaTrialPago', 'Trial → pago (%)'],
-  ['metaNovosDia', 'Novos na cadência/dia'], ['metaToquesDia', 'Toques/dia'],
-];
-
-export function VistaMetas({ painel, cfg, onSalvo }) {
-  const mes = painel.hoje.slice(0, 7);
-  const [form, setForm] = useState(null);
-  const [salvando, setSalvando] = useState(false);
-  const [msg, setMsg] = useState('');
-  useEffect(() => {
-    const { _mes_origem, ...v } = painel.metas; // eslint-disable-line no-unused-vars
-    setForm({ ...v, novosPorPessoa: { ...(v.novosPorPessoa || {}) } });
-  }, [painel.metas]);
-  if (!form) return null;
-
-  const t = (form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100) * (form.taxaContatoDiag / 100);
-  const contatos = t > 0 ? form.metaClientes / t : NaN;
-  const n = painel.numeros;
-  const cmp = (tx) => (tx.real == null ? <Pill nivel="line">sem dados</Pill>
-    : <Pill nivel={tx.real >= tx.meta ? 'ok' : tx.real >= tx.meta * 0.7 ? 'warn' : 'crit'}>{pct(tx.real)}</Pill>);
-  const maxMot = Math.max(1, ...n.motivos_perda.map((x) => x.n));
-
-  async function salvar() {
-    setSalvando(true); setMsg('');
-    try {
-      await api.put('/comercial/metas/' + mes, form);
-      setMsg('Metas salvas.');
-      onSalvo();
-    } catch (err) { setMsg(mensagemDeErro(err)); } finally { setSalvando(false); }
-  }
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Painel titulo={`Desdobramento da meta · ${mes.split('-').reverse().join('/')}`}>
-        <p className="text-sm text-slate-500">A meta de clientes vira contatos por dia, de trás para frente. Comece com as taxas do plano e troque pelas reais depois de 30 dias.</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {CAMPOS_META.map(([k, r]) => (
-            <Campo key={k} rotulo={r}>
-              <input type="number" min="0" step="any" className={inputCls} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value === '' ? '' : Number(e.target.value) })} />
-            </Campo>
-          ))}
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-medium text-slate-600">Novos na cadência por dia, por pessoa (alimenta o semáforo da Supervisão)</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {cfg.pessoas.map((p) => (
-              <Campo key={p.id} rotulo={p.nome}>
-                <input type="number" min="0" className={inputCls} value={form.novosPorPessoa[p.id] ?? ''}
-                  onChange={(e) => {
-                    const v = { ...form.novosPorPessoa };
-                    if (e.target.value === '' || Number(e.target.value) === 0) delete v[p.id]; else v[p.id] = Number(e.target.value);
-                    setForm({ ...form, novosPorPessoa: v });
-                  }} />
-              </Campo>
-            ))}
-          </div>
-        </div>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
-          <dt className="text-slate-500">Contatos por dia útil</dt><dd className="text-right text-lg font-semibold">{isFinite(contatos) ? Math.ceil(contatos / (form.diasUteis || 21)) : '—'}</dd>
-          <dt className="text-slate-500">Contatos no mês</dt><dd className="text-right font-semibold">{isFinite(contatos) ? Math.ceil(contatos) : '—'}</dd>
-          <dt className="text-slate-500">Diagnósticos no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago && form.taxaDiagTrial ? Math.ceil(form.metaClientes / ((form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100))) : '—'}</dd>
-          <dt className="text-slate-500">Trials no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago ? Math.ceil(form.metaClientes / (form.taxaTrialPago / 100)) : '—'}</dd>
-          <dt className="text-slate-500">Receita recorrente nova esperada</dt><dd className="text-right font-semibold">{brl(form.metaClientes * (form.ticket || 0))}/mês</dd>
-        </dl>
-        <div className="flex items-center gap-3">
-          <button type="button" className={btnPrimCls} onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar metas do mês'}</button>
-          {msg && <span className="text-sm text-slate-600">{msg}</span>}
-        </div>
-        {painel.metas._mes_origem && painel.metas._mes_origem !== mes && (
-          <p className="text-xs text-amber-700">Este mês ainda usa as metas de {painel.metas._mes_origem}. Salve para fixar as deste mês.</p>
-        )}
-      </Painel>
-
-      <Painel titulo="Taxas reais do funil" extra={<span className="text-xs text-slate-400">desde o início do registro</span>}>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
-            <tr><th className="py-1">Passagem</th><th className="py-1 text-right">Volume</th><th className="py-1 text-right">Real</th><th className="py-1 text-right">Meta</th></tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {[['Contato → diagnóstico', n.taxas.contato_diag], ['Diagnóstico → trial', n.taxas.diag_trial], ['Trial → pago', n.taxas.trial_pago]].map(([r, tx]) => (
-              <tr key={r}><td className="py-1.5">{r}</td><td className="py-1.5 text-right font-mono">{tx.para}/{tx.de}</td><td className="py-1.5 text-right">{cmp(tx)}</td><td className="py-1.5 text-right font-mono">{tx.meta}%</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
-          <dt className="text-slate-500">Clientes ganhos no mês</dt><dd className="text-right font-semibold">{n.ganhos_mes} / {painel.metas.metaClientes}</dd>
-          <dt className="text-slate-500">Receita recorrente nova no mês</dt><dd className="text-right font-semibold">{brl(n.receita_nova_mes)}</dd>
-          <dt className="text-slate-500">Propostas abertas</dt><dd className="text-right font-semibold">{n.propostas}</dd>
-        </dl>
-        <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-          <h3 className="text-sm font-semibold text-slate-900">Motivos de perda</h3>
-          <span className="text-xs text-slate-400">{n.perdidos} perdido(s)</span>
-        </div>
-        {n.motivos_perda.length ? (
-          <div className="space-y-2">
-            {n.motivos_perda.map((x) => (
-              <div key={x.motivo} className="grid grid-cols-[140px_1fr_32px] items-center gap-2 text-sm">
-                <span className="truncate">{x.motivo}</span><Barra pct={(x.n / maxMot) * 100} nivel="crit" /><span className="text-right font-mono">{x.n}</span>
-              </div>
-            ))}
-          </div>
-        ) : <Vazio>Nenhuma perda registrada ainda. Todo cartório perdido precisa de motivo: é o que mostra o que mudar no discurso.</Vazio>}
-      </Painel>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // SCRIPTS

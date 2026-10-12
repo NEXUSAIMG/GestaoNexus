@@ -98,3 +98,39 @@ export function NomeLead({ lead, onAbrir }) {
     </button>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Modal genérico + campos de data/hora
+// ---------------------------------------------------------------------------
+export function Modal({ titulo, onFechar, children, rodape, largura = 'max-w-lg' }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-16">
+      <div className={`w-full ${largura} rounded-lg bg-white shadow-xl`} role="dialog" aria-modal="true" aria-label={titulo}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>
+          <button type="button" onClick={onFechar} className="rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Fechar">✕</button>
+        </div>
+        <div className="space-y-3 px-5 py-4">{children}</div>
+        {rodape && <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">{rodape}</div>}
+      </div>
+    </div>
+  );
+}
+
+export function Erro({ children }) {
+  if (!children) return null;
+  return <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{children}</div>;
+}
+
+/** 'YYYY-MM-DDTHH:mm' local → ISO com fuso */
+export function localParaIso(v) { return v ? new Date(v).toISOString() : null; }
+export function isoParaLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+export function dataHoraBr(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+export const horaBr = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

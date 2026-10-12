@@ -85,6 +85,8 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
                       {l.pontos != null && ['trial', 'proposta'].includes(l.etapa) && <Pill nivel={nivelPontos(l.pontos)}>{l.pontos} pts</Pill>}
                       {l.etapa === 'perdido' && l.motivo_perda && <Pill nivel="line">{l.motivo_perda}</Pill>}
                       {l.etapa === 'ganho' && (l.valor_mensal ? <Pill nivel="ok">{brl(l.valor_mensal)}/mês</Pill> : <Pill nivel="warn">sem valor</Pill>)}
+                      {l.etapa === 'ganho' && (l.pago_em ? <Pill nivel="ok">pago</Pill> : <Pill nivel="warn">aguardando pagamento</Pill>)}
+                      {l.bloqueado_nc && <Pill nivel="crit">não contatar</Pill>}
                     </span>
                   </button>
                 ))}
