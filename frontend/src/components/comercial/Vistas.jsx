@@ -7,6 +7,7 @@ import {
 } from './ui.jsx';
 import { SCRIPTS, OBJECOES } from './scripts.js';
 import { ChecagemModal, UmAUmModal, DesfechoModal } from './Acoes.jsx';
+import { Dica } from './Ajuda.jsx';
 
 const nomeEtapa = (cfg, k) => cfg.etapas.find((e) => e.k === k)?.n || k;
 const btnMini = btnPrimCls + ' !px-2 !py-1 text-xs';
@@ -20,137 +21,197 @@ function Lista({ itens, vazio, render }) {
 // ---------------------------------------------------------------------------
 // HOJE
 // ---------------------------------------------------------------------------
-export function VistaHoje({ painel, cfg, onAbrir, onToque, onMarco, onMudou }) {
+export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMudou }) {
   const { numeros: n, metas: m, hoje_listas: h } = painel;
   const [desfecho, setDesfecho] = useState(null);
   const dataExt = new Date(painel.hoje + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const agora = new Date();
+  const minha = painel.supervisao.find((s) => s.pessoa.id === cfg.eu?.id);
+  const pessoal = escopo === 'meus' && minha;
+
+  // Roteiro do dia, na ordem em que deve ser feito. Cada bloco diz por que
+  // está nessa posição — é o que a pessoa precisa para decidir sozinha.
+  const blocos = [
+    {
+      k: 'reunioes', titulo: 'Reuniões de hoje', itens: h.reunioes, nivel: 'line',
+      porque: 'Compromisso com hora marcada vem primeiro. Prepare-se com o roteiro de Diagnóstico.',
+      render: (r) => (
+        <li key={r.id} className="flex items-center gap-3 py-2">
+          <span className="w-12 font-mono text-sm text-slate-700">{horaBr(r.inicio)}</span>
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={r.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
+          </div>
+          {new Date(r.inicio) < agora
+            ? <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Como foi?</button>
+            : <span className="text-xs text-slate-400">depois da reunião, registre como foi</span>}
+        </li>
+      ),
+    },
+    {
+      k: 'sem_desfecho', titulo: 'Reuniões sem desfecho', itens: h.sem_desfecho, nivel: 'crit',
+      porque: 'Reunião que já passou precisa dizer se aconteceu. Sem isso, o funil e o placar mentem.',
+      render: (r) => (
+        <li key={r.id} className="flex items-center gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={r.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]} · {dataHoraBr(r.inicio)}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Como foi?</button>
+        </li>
+      ),
+    },
+    {
+      k: 'marcos', titulo: 'Marcos de trial', itens: h.marcos, nivel: 'line', dica: 'pontos',
+      porque: 'Trial é onde o cliente decide. Marco atrasado é cliente esfriando.',
+      render: (x) => (
+        <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">
+              <b className="text-slate-700">D{x.d} · {x.n}</b> — {x.acao} <Pill nivel={nivelPontos(x.pontos)}>{x.pontos} pts</Pill>
+              {x.atrasado && <> <Pill nivel="crit">desde {dataBr(x.previsto)}</Pill></>}
+            </p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => onMarco(x.lead.id, x.d)}><Check size={12} /> Feito</button>
+        </li>
+      ),
+    },
+    {
+      k: 'toques', titulo: 'Toques de cadência', itens: h.toques, nivel: 'line', dica: 'cadencia',
+      porque: 'O toque do dia de cada cartório em cadência. Registre sempre o resultado — mesmo "não atendeu".',
+      render: (x) => (
+        <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">
+              <b className="text-slate-700">Dia {x.d} · {x.canal}</b> — {x.acao}
+              {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
+              {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
+            </p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'cadencia', x.d)}>Registrar</button>
+        </li>
+      ),
+    },
+    {
+      k: 'proximos', titulo: 'Próximos passos de hoje', itens: h.proximos, nivel: 'line', dica: 'proximo_passo',
+      porque: 'O que você mesma combinou para hoje. Abra o cartório, faça e registre o novo próximo passo.',
+      render: (x) => (
+        <li key={x.lead.id} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{x.proximo_passo || 'Sem descrição'} · {nomeEtapa(cfg, x.lead.etapa)}</p>
+          </div>
+          <Pill nivel={x.vencido ? 'crit' : 'neu'}>{x.vencido ? 'venceu ' + dataBr(x.proxima_data) : 'hoje'}</Pill>
+          <button type="button" className={linkMini} onClick={() => onAbrir(x.lead.id)}>abrir</button>
+        </li>
+      ),
+    },
+    {
+      k: 'propostas', titulo: 'Propostas vencendo', itens: h.propostas_vencendo, nivel: 'warn',
+      porque: 'Proposta perto da validade: ligue para fechar ou entender o que falta.',
+      render: (x) => (
+        <li key={x.id} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{x.plano} · {brl(x.valor_mensal)}/mês{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+          </div>
+          <Pill nivel={x.vencida ? 'crit' : 'warn'}>{x.vencida ? 'venceu ' : 'vence '}{dataBr(x.validade)}</Pill>
+        </li>
+      ),
+    },
+    {
+      k: 'pagamento', titulo: 'Assinados aguardando pagamento', itens: h.aguardando_pagamento, nivel: 'warn', dica: 'assinado_pago',
+      porque: 'Assinatura só vira cliente com o 1º pagamento. Confira o CNPJ e o boleto/PIX.',
+      render: (x) => (
+        <li key={x.lead.id} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">assinado {dataBr(x.assinado_em)} · {x.valor_mensal ? brl(x.valor_mensal) + '/mês' : 'sem valor'}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+          </div>
+          <Pill nivel={(x.dias ?? 0) > 7 ? 'crit' : 'warn'}>{x.dias ?? '?'}d</Pill>
+        </li>
+      ),
+    },
+    {
+      k: 'parados', titulo: 'Parados além do prazo', itens: h.parados, nivel: 'crit', dica: 'sla',
+      porque: 'Cartórios presos na mesma etapa. Abra cada um: a ficha diz o que fazer para destravar.',
+      render: (x) => (
+        <li key={x.lead.id} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{nomeEtapa(cfg, x.lead.etapa)}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+          </div>
+          <Pill nivel="crit">{x.dias}d / {x.sla}d</Pill>
+        </li>
+      ),
+    },
+  ];
+  const comItens = blocos.filter((b) => b.itens.length);
+  const emDia = blocos.filter((b) => !b.itens.length);
+  const total = comItens.reduce((s, b) => s + b.itens.length, 0);
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
-        {dataExt.charAt(0).toUpperCase() + dataExt.slice(1)}. A gestão cobra a atividade; as taxas a gente ajusta no processo.
+        {dataExt.charAt(0).toUpperCase() + dataExt.slice(1)}.{' '}
+        {total ? <>Você tem <b className="text-slate-800">{total} tarefa(s)</b>{escopo === 'meus' ? '' : ' na equipe'}. Trabalhe de cima para baixo.</> : 'Nenhuma tarefa pendente.'}
       </p>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi rotulo="Novos na cadência hoje" valor={n.novos_hoje} meta={m.metaNovosDia} />
-        <Kpi rotulo="Toques feitos hoje" valor={n.toques_hoje} meta={m.metaToquesDia}
-          sub={`${n.conexoes_hoje} conexão(ões) · ${n.toques_hoje ? pct((n.conexoes_hoje / n.toques_hoje) * 100) : '—'}`} />
-        <Kpi rotulo="Trials ativos" valor={n.trials_ativos} sub={`${h.marcos.length} marco(s) para hoje`} />
-        <Kpi rotulo="Clientes pagos no mês" valor={n.pagos_mes} meta={m.metaClientes}
-          sub={`${brl(n.receita_nova_mes)}/mês · ${n.aguardando_pagamento} assinado(s) aguardando pagamento`} />
+        {pessoal ? (
+          <>
+            <Kpi rotulo="Meus toques hoje" valor={minha.feitos} meta={minha.meta_toques || null} sub={`${minha.conexoes} conexão(ões)`} />
+            <Kpi rotulo="Meus novos na cadência" valor={minha.novos} meta={minha.meta_novos || null} />
+            <div className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white p-4">
+              <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">Meu semáforo <Dica termo="semaforo" /></span>
+              <span><Pill nivel={minha.sinal}>{minha.rotulo}</Pill></span>
+              <Barra pct={Math.max(4, minha.indice)} nivel={minha.sinal} />
+              <span className="text-xs text-slate-500">{minha.pendentes} pendente(s) agora</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <Kpi rotulo="Novos na cadência hoje" valor={n.novos_hoje} meta={m.metaNovosDia} />
+            <Kpi rotulo="Toques feitos hoje" valor={n.toques_hoje} meta={m.metaToquesDia}
+              sub={`${n.conexoes_hoje} conexão(ões) · ${n.toques_hoje ? pct((n.conexoes_hoje / n.toques_hoje) * 100) : '—'}`} />
+            <Kpi rotulo="Trials ativos" valor={n.trials_ativos} sub={`${h.marcos.length} marco(s) para hoje`} />
+          </>
+        )}
+        <Kpi rotulo="Clientes pagos no mês (equipe)" valor={n.pagos_mes} meta={m.metaClientes}
+          sub={`${brl(n.receita_nova_mes)}/mês · ${n.aguardando_pagamento} aguardando pagamento`} />
       </div>
-      {painel.sem_dono > 0 && (
+      {painel.sem_dono > 0 && escopo !== 'meus' && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {painel.sem_dono} cartório(s) ativo(s) sem responsável. Defina o responsável no Funil para entrarem na supervisão.
+          {painel.sem_dono} cartório(s) ativo(s) sem responsável. Abra no Funil (filtro "Sem responsável") e escolha quem cuida.
         </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Painel titulo="Reuniões de hoje" extra={<Pill nivel="line">{h.reunioes.length}</Pill>}>
-          <Lista itens={h.reunioes} vazio="Nenhuma reunião marcada para hoje." render={(r) => (
-            <li key={r.id} className="flex items-center gap-3 py-2">
-              <span className="w-12 font-mono text-sm text-slate-700">{horaBr(r.inicio)}</span>
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={r.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
-              </div>
-              {new Date(r.inicio) < agora && <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Desfecho</button>}
-            </li>
-          )} />
-        </Painel>
 
-        <Painel titulo="Reuniões sem desfecho" extra={<Pill nivel={h.sem_desfecho.length ? 'crit' : 'ok'}>{h.sem_desfecho.length}</Pill>}>
-          <Lista itens={h.sem_desfecho} vazio="Toda reunião passada tem desfecho registrado." render={(r) => (
-            <li key={r.id} className="flex items-center gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={r.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]} · {dataHoraBr(r.inicio)}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
-              </div>
-              <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Desfecho</button>
-            </li>
-          )} />
-        </Painel>
+      {!total && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+          <p className="text-base font-semibold">Tudo em dia.</p>
+          <p className="mt-1">Sem tarefas pendentes{escopo === 'meus' ? ' para você' : ''}. Bom momento para colocar mais cartórios em cadência:
+            abra o Funil, escolha cartórios em Prospect e clique em “Começar cadência hoje”. A meta da equipe é {m.metaNovosDia} novos por dia útil.</p>
+        </div>
+      )}
 
-        <Painel titulo="Toques de cadência" extra={<Pill nivel="line">{h.toques.length} para fazer</Pill>}>
-          <Lista itens={h.toques} vazio={`Nenhum toque pendente. Coloque mais cartórios em cadência no Funil: a meta é ${m.metaNovosDia} novos por dia útil.`} render={(x) => (
-            <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">
-                  <b className="text-slate-700">Dia {x.d} · {x.canal}</b> — {x.acao}
-                  {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
-                  {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
-                </p>
-              </div>
-              <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'cadencia', x.d)}>
-                <Check size={12} /> Registrar
-              </button>
-            </li>
-          )} />
-        </Painel>
-
-        <Painel titulo="Marcos de trial" extra={<Pill nivel="line">{h.marcos.length} para fazer</Pill>}>
-          <Lista itens={h.marcos} vazio="Nenhum marco de trial vencendo hoje." render={(x) => (
-            <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">
-                  <b className="text-slate-700">D{x.d} · {x.n}</b> — {x.acao} <Pill nivel={nivelPontos(x.pontos)}>{x.pontos} pts</Pill>
-                  {x.atrasado && <> <Pill nivel="crit">desde {dataBr(x.previsto)}</Pill></>}
-                </p>
-              </div>
-              <button type="button" className={btnMini} onClick={() => onMarco(x.lead.id, x.d)}><Check size={12} /> Feito</button>
-            </li>
-          )} />
-        </Painel>
-
-        <Painel titulo="Próximos passos de hoje" extra={<Pill nivel="line">{h.proximos.length}</Pill>}>
-          <Lista itens={h.proximos} vazio="Nada agendado para hoje." render={(x) => (
-            <li key={x.lead.id} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">{x.proximo_passo || 'Sem descrição'} · {nomeEtapa(cfg, x.lead.etapa)}</p>
-              </div>
-              <Pill nivel={x.vencido ? 'crit' : 'neu'}>{x.vencido ? 'venceu ' + dataBr(x.proxima_data) : 'hoje'}</Pill>
-            </li>
-          )} />
-        </Painel>
-
-        <Painel titulo="Propostas vencendo" extra={<Pill nivel={h.propostas_vencendo.length ? 'warn' : 'ok'}>{h.propostas_vencendo.length}</Pill>}>
-          <Lista itens={h.propostas_vencendo} vazio="Nenhuma proposta vencendo nos próximos 2 dias." render={(x) => (
-            <li key={x.id} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">{x.plano} · {brl(x.valor_mensal)}/mês{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
-              </div>
-              <Pill nivel={x.vencida ? 'crit' : 'warn'}>{x.vencida ? 'venceu ' : 'vence '}{dataBr(x.validade)}</Pill>
-            </li>
-          )} />
-        </Painel>
-
-        <Painel titulo="Assinados aguardando pagamento" extra={<Pill nivel={h.aguardando_pagamento.length ? 'warn' : 'ok'}>{h.aguardando_pagamento.length}</Pill>}>
-          <Lista itens={h.aguardando_pagamento} vazio="Todo cliente assinado já pagou." render={(x) => (
-            <li key={x.lead.id} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">assinado {dataBr(x.assinado_em)} · {x.valor_mensal ? brl(x.valor_mensal) + '/mês' : 'sem valor'}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
-              </div>
-              <Pill nivel={(x.dias ?? 0) > 7 ? 'crit' : 'warn'}>{x.dias ?? '?'}d</Pill>
-            </li>
-          )} />
-        </Painel>
-
-        <Painel titulo="Parados além do prazo" extra={<Pill nivel={h.parados.length ? 'crit' : 'ok'}>{h.parados.length}</Pill>}>
-          <Lista itens={h.parados.slice(0, 30)} vazio="Todos os cartórios estão dentro do prazo da etapa." render={(x) => (
-            <li key={x.lead.id} className="flex items-start gap-3 py-2">
-              <div className="min-w-0 flex-1">
-                <NomeLead lead={x.lead} onAbrir={onAbrir} />
-                <p className="text-xs text-slate-500">{nomeEtapa(cfg, x.lead.etapa)}{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
-              </div>
-              <Pill nivel="crit">{x.dias}d / {x.sla}d</Pill>
-            </li>
-          )} />
-          {h.parados.length > 30 && <p className="text-xs text-slate-500">e mais {h.parados.length - 30}</p>}
-        </Painel>
+      <div className="space-y-4">
+        {comItens.map((b, i) => (
+          <Painel key={b.k}
+            titulo={<span className="flex items-center gap-2"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-nexus-700 text-[11px] font-semibold text-white">{i + 1}</span>{b.titulo}{b.dica && <Dica termo={b.dica} />}</span>}
+            extra={<Pill nivel={b.nivel}>{b.itens.length}</Pill>}>
+            <p className="-mt-1 text-xs text-slate-500">{b.porque}</p>
+            <ul className="divide-y divide-slate-100">{b.itens.slice(0, 40).map(b.render)}</ul>
+            {b.itens.length > 40 && <p className="text-xs text-slate-500">e mais {b.itens.length - 40}</p>}
+          </Painel>
+        ))}
       </div>
+
+      {total > 0 && emDia.length > 0 && (
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+          <Check size={14} className="text-emerald-600" /> Em dia: {emDia.map((b) => b.titulo.toLowerCase()).join(' · ')}.
+        </p>
+      )}
       {desfecho && <DesfechoModal reuniao={desfecho} onFechar={() => setDesfecho(null)} onFeito={() => { setDesfecho(null); onMudou(); }} />}
     </div>
   );
@@ -188,16 +249,16 @@ export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
       {!painel.supervisao.length && <Vazio>Ninguém com cartórios ativos ainda. Defina responsáveis no Funil ou metas por pessoa em Metas.</Vazio>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {painel.supervisao.map((s) => (
-          <Painel key={s.pessoa.id} titulo={s.pessoa.nome} extra={<Pill nivel={s.sinal}>{s.rotulo}</Pill>}>
+          <Painel key={s.pessoa.id} titulo={s.pessoa.nome} extra={<span className="flex items-center gap-1"><Pill nivel={s.sinal}>{s.rotulo}</Pill><Dica termo="semaforo" /></span>}>
             <div className="grid grid-cols-4 gap-2 text-center">
               <Num rotulo="Feitos" valor={s.feitos} meta={s.meta_toques || null} />
-              <Num rotulo="Conexões" valor={s.conexoes} />
+              <Num rotulo={<>Conexões <Dica termo="conexao" /></>} valor={s.conexoes} />
               <Num rotulo="Pendentes" valor={s.pendentes} />
               {s.meta_novos ? <Num rotulo="Novos" valor={s.novos} meta={s.meta_novos} /> : <Num rotulo="Atualiz." valor={s.atualizados_hoje} />}
             </div>
             <Barra pct={Math.max(4, s.indice)} nivel={s.sinal} />
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ClipboardCheck size={14} />
+              <ClipboardCheck size={14} /><Dica termo="checagem" />
               {Object.entries(cfg.janelas).map(([k, n]) => {
                 const c = s.checagens.find((x) => x.janela === k);
                 return (
@@ -336,7 +397,7 @@ export function VistaMetas({ painel, cfg, onSalvo }) {
         )}
       </Painel>
 
-      <Painel titulo="Taxas reais do funil" extra={<span className="text-xs text-slate-400">desde o início do registro</span>}>
+      <Painel titulo={<span className="flex items-center gap-1">Taxas reais do funil <Dica texto="De cada 100 cartórios que chegam a uma etapa, quantos passam para a seguinte. Verde: igual ou acima da meta; amarelo: até 30% abaixo; vermelho: mais que isso." /></span>} extra={<span className="text-xs text-slate-400">desde o início do registro</span>}>
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
             <tr><th className="py-1">Passagem</th><th className="py-1 text-right">Volume</th><th className="py-1 text-right">Real</th><th className="py-1 text-right">Meta</th></tr>
@@ -381,6 +442,17 @@ function periodo(tipo, hoje) {
   return [hoje.slice(0, 8) + '01', hoje];
 }
 
+const DICAS_PLACAR = {
+  conexoes: 'Toques em que a pessoa falou com alguém (atendeu, agendou, pediu retorno, recusou, respondeu).',
+  taxa_conexao: 'Conexões ÷ toques. Baixa = problema de horário, lista ou telefone errado.',
+  taxa_comparecimento: 'Reuniões realizadas ÷ (realizadas + faltou). Baixa = confirmar a reunião na véspera.',
+  assinados: 'Clientes que aceitaram (etapa Ganho) no período.',
+  pagos: 'Clientes com o 1º pagamento confirmado no período. É o que conta na meta.',
+  estornos: 'Registros corrigidos. Muitos estornos = registro feito com pressa.',
+  checagens: 'Quantas checagens diárias a gestão registrou para a pessoa.',
+  acoes_vencidas: 'Ações do plano (1:1) com prazo vencido e não feitas.',
+};
+
 export function VistaPlacar({ cfg, painel, versao }) {
   const [tipo, setTipo] = useState('mes');
   const [dados, setDados] = useState(null);
@@ -409,7 +481,9 @@ export function VistaPlacar({ cfg, painel, versao }) {
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full whitespace-nowrap text-sm">
           <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-            <tr><th className="sticky left-0 bg-slate-50 px-3 py-2">Pessoa</th>{col.map(([k, r]) => <th key={k} className="px-2 py-2 text-right">{r}</th>)}</tr>
+            <tr><th className="sticky left-0 bg-slate-50 px-3 py-2">Pessoa</th>{col.map(([k, r]) => (
+              <th key={k} className="px-2 py-2 text-right">{r}{DICAS_PLACAR[k] && <Dica className="ml-0.5" texto={DICAS_PLACAR[k]} />}</th>
+            ))}</tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {(dados?.linhas || []).map((l) => {

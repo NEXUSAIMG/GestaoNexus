@@ -85,7 +85,7 @@ export const btnPrimCls = 'inline-flex items-center justify-center gap-1.5 round
 export function Campo({ rotulo, children, className = '' }) {
   return (
     <label className={`flex flex-col gap-1 text-xs font-medium text-slate-600 ${className}`}>
-      {rotulo}
+      <span className="inline-flex items-center gap-1">{rotulo}</span>
       {children}
     </label>
   );

@@ -5,6 +5,8 @@ import { Pill, Campo, Erro, inputCls, btnCls, btnPrimCls, dataBr, dataHoraBr, ni
 import {
   ToqueModal, EstornoModal, TextoModal, ReuniaoModal, DesfechoModal, PropostaModal, PagamentoModal,
 } from './Acoes.jsx';
+import { Dica } from './Ajuda.jsx';
+import { proximaAcao, criteriosPara, CaixaProximaAcao, ListaCriterios, GuiaDaEtapa, OQueFalar } from './Orientacao.jsx';
 
 /**
  * Gaveta de um lead (Sprint 42/42B).
@@ -40,6 +42,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const [erroCodigo, setErroCodigo] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [modal, setModal] = useState(null);
+  const [aviso, setAviso] = useState('');
   const [ganhos, setGanhos] = useState([]);
   const feriados = new Set((cfg.feriados || []).map((x) => x.data));
   const admin = !!cfg.eu?.admin;
@@ -97,7 +100,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const idx = (k) => cfg.etapas.findIndex((e) => e.k === k);
   const pend = lead && f.etapa !== lead.etapa && f.etapa !== 'perdido' ? (lead.portoes?.[f.etapa] || []) : [];
 
-  async function salvar(extra = {}) {
+  async function salvar(extra = {}, manterAberto = false) {
     setErro(''); setErroCodigo('');
     if (!f.nome.trim()) { setErro('Informe o nome do cartório.'); return; }
     if (!f.origem) { setErro('Escolha a origem do lead.'); return; }
@@ -115,7 +118,12 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
     try {
       if (id) await api.put('/comercial/leads/' + id, corpo);
       else await api.post('/comercial/leads', corpo);
-      onMudou(); onFechar();
+      onMudou();
+      if (manterAberto && id) {
+        const r = await api.get('/comercial/leads/' + id);
+        setLead(r.data); setF(paraRascunho(r.data));
+        setAviso('Salvo. Etapa atual: ' + (cfg.etapas.find((e) => e.k === r.data.etapa)?.n || r.data.etapa) + '.');
+      } else onFechar();
     } catch (err) {
       const cod = err?.response?.data?.codigo;
       if (cod === 'justificativa_obrigatoria') { setModal({ tipo: 'justificativa' }); return; }
@@ -127,7 +135,30 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
     try { await api.post(`/comercial/leads/${id}/toques`, { tipo: 'marco', dia }); await recarregar(); onMudou(); } catch (err) { setErro(mensagemDeErro(err)); }
   }
 
-  async function aposModal() { setModal(null); await recarregar(); onMudou(); }
+  // Executa a ação sugerida pela orientação ("O que fazer agora" / checklist)
+  function focar(idCampo) {
+    setTimeout(() => {
+      const el = document.getElementById(idCampo);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+    }, 50);
+  }
+  function executar(acao) {
+    const [tipo, a, b] = acao.split(':');
+    if (tipo === 'toque') setModal(a === 'cadencia' ? { tipo: 'toque', toqueTipo: 'cadencia', dia: Number(b) } : { tipo: 'toque' });
+    else if (tipo === 'marco') marcoDireto(Number(a));
+    else if (tipo === 'reuniao') setModal({ tipo: 'reuniao', tipoReuniao: a });
+    else if (tipo === 'desfecho') setModal({ tipo: 'desfecho', reuniao: lead.reunioes.find((r) => r.id === a) });
+    else if (tipo === 'proposta') setModal({ tipo: 'proposta' });
+    else if (tipo === 'pagamento') setModal({ tipo: 'pagamento' });
+    else if (tipo === 'foco') focar(a);
+    else if (tipo === 'etapa') {
+      setF({ ...f, etapa: a });
+      if (a === 'perdido') focar('campo-motivo');
+      else salvar({ etapa: a }, true);
+    }
+  }
+
+  async function aposModal() { setModal(null); setAviso('Registrado.'); await recarregar(); onMudou(); }
 
   async function statusProposta(pid, status) {
     try { await api.post(`/comercial/propostas/${pid}/status`, { status }); await aposModal(); } catch (err) { setErro(mensagemDeErro(err)); }
@@ -189,6 +220,17 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
         </div>
       )}
 
+      {aviso && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</div>}
+      {lead && <CaixaProximaAcao acao={proximaAcao(lead, cfg, admin)} onExecutar={executar} />}
+      {lead && <ListaCriterios criterios={criteriosPara(lead, f, cfg)} onExecutar={executar} />}
+      {lead && <OQueFalar lead={lead} />}
+      {!id && (
+        <div className="rounded-md bg-nexus-50 p-3 text-sm text-slate-700">
+          Preencha o nome e a origem (de onde ele veio). Com CNS ou CNPJ o sistema evita cadastro repetido.
+          O cartório entra como <b>Prospect</b>; ao salvar, a ficha mostra o próximo passo.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Nome do cartório *" className="col-span-2"><input className={inputCls} value={f.nome} onChange={set('nome')} /></Campo>
         <Campo rotulo="Segmento">
@@ -196,7 +238,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             <option value="">—</option>{cfg.segmentos.map((s) => <option key={s}>{s}</option>)}
           </select>
         </Campo>
-        <Campo rotulo="Origem *">
+        <Campo rotulo={<>Origem * <Dica termo="origem" /></>}>
           <select className={inputCls} value={f.origem} onChange={set('origem')}>
             <option value="">Escolha…</option>{Object.entries(cfg.origens).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
           </select>
@@ -206,7 +248,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             <option value="">Sem responsável</option>{cfg.pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Campo>
-        <Campo rotulo="Campanha / onda"><input className={inputCls} value={f.campanha || ''} onChange={set('campanha')} placeholder="ex.: E-mail onda 1" /></Campo>
+        <Campo rotulo={<>Campanha / onda <Dica termo="campanha" /></>}><input className={inputCls} value={f.campanha || ''} onChange={set('campanha')} placeholder="ex.: E-mail onda 1" /></Campo>
         {f.origem === 'indicacao' && (
           <Campo rotulo="Indicado por (cliente)" className="col-span-2">
             <select className={inputCls} value={f.indicado_por_id || ''} onChange={set('indicado_por_id')}>
@@ -216,8 +258,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
         )}
         <Campo rotulo="Cidade"><input className={inputCls} value={f.cidade || ''} onChange={set('cidade')} /></Campo>
         <Campo rotulo="UF"><input className={inputCls} maxLength={2} value={f.uf || ''} onChange={(e) => setF({ ...f, uf: e.target.value.toUpperCase() })} /></Campo>
-        <Campo rotulo="CNS (código da serventia)"><input className={inputCls} inputMode="numeric" value={f.cns || ''} onChange={set('cns')} placeholder="6 dígitos" /></Campo>
-        <Campo rotulo="CNPJ"><input className={inputCls} inputMode="numeric" value={f.cnpj || ''} onChange={set('cnpj')} /></Campo>
+        <Campo rotulo={<>CNS (código da serventia) <Dica termo="cns" /></>}><input className={inputCls} inputMode="numeric" value={f.cns || ''} onChange={set('cns')} placeholder="6 dígitos" /></Campo>
+        <Campo rotulo="CNPJ"><input id="campo-cnpj" className={inputCls} inputMode="numeric" value={f.cnpj || ''} onChange={set('cnpj')} placeholder="14 dígitos — confere o pagamento no ASAAS" /></Campo>
         <Campo rotulo="Titular / responsável"><input className={inputCls} value={f.contato || ''} onChange={set('contato')} /></Campo>
         <Campo rotulo="Telefone / WhatsApp"><input className={inputCls} value={f.telefone || ''} onChange={set('telefone')} /></Campo>
         <Campo rotulo="E-mail" className="col-span-2"><input type="email" className={inputCls} value={f.email || ''} onChange={set('email')} /></Campo>
@@ -225,24 +267,24 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
 
       <Bloco titulo="Etapa">
         <div className="grid grid-cols-2 gap-3">
-          <Campo rotulo="Etapa">
+          <Campo rotulo={<>Etapa <Dica termo="portao" /></>}>
             <select className={inputCls} value={f.etapa} onChange={set('etapa')}>
               {cfg.etapas.map((e) => <option key={e.k} value={e.k}>{e.n}</option>)}
             </select>
           </Campo>
           {f.etapa === 'perdido' ? (
             <Campo rotulo="Motivo da perda *">
-              <select className={inputCls} value={f.motivo_perda || ''} onChange={set('motivo_perda')}>
+              <select id="campo-motivo" className={inputCls} value={f.motivo_perda || ''} onChange={set('motivo_perda')}>
                 <option value="">Escolha…</option>{cfg.motivos_perda.map((m) => <option key={m}>{m}</option>)}
               </select>
             </Campo>
           ) : (
             <Campo rotulo={`Valor mensal (R$)${f.etapa === 'ganho' ? ' *' : ''}`}>
-              <input type="number" min="0" className={inputCls} value={f.valor_mensal ?? ''} onChange={set('valor_mensal')} />
+              <input id="campo-valor" type="number" min="0" className={inputCls} value={f.valor_mensal ?? ''} onChange={set('valor_mensal')} />
             </Campo>
           )}
           {f.etapa === 'perdido' && <Campo rotulo="Detalhe da perda" className="col-span-2"><input className={inputCls} value={f.motivo_perda_obs || ''} onChange={set('motivo_perda_obs')} /></Campo>}
-          <Campo rotulo="Próximo passo"><input className={inputCls} value={f.proximo_passo || ''} onChange={set('proximo_passo')} /></Campo>
+          <Campo rotulo={<>Próximo passo <Dica termo="proximo_passo" /></>}><input id="campo-proximo" className={inputCls} value={f.proximo_passo || ''} onChange={set('proximo_passo')} placeholder="ex.: ligar para a titular" /></Campo>
           <Campo rotulo="Data do próximo passo"><input type="date" className={inputCls} value={f.proxima_data || ''} onChange={set('proxima_data')} /></Campo>
         </div>
         {pend.length > 0 && (
@@ -251,6 +293,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
             <ul className="ml-4 list-disc">{pend.map((p) => <li key={p}>{p}</li>)}</ul>
           </div>
         )}
+        <GuiaDaEtapa etapa={f.etapa} />
         {lead?.prazo && <p className="text-xs text-slate-500">Na etapa há {lead.prazo.dias} dia(s) · prazo {lead.prazo.sla} dias <Pill nivel={lead.prazo.nivel}>{lead.prazo.nivel === 'crit' ? 'fora do prazo' : lead.prazo.nivel === 'warn' ? 'vencendo' : 'no prazo'}</Pill></p>}
       </Bloco>
 
@@ -259,11 +302,11 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
           <div className="grid grid-cols-2 gap-3">
             {cfg.diagnostico_campos.map((c) => (
               <Campo key={c.k} rotulo={c.n + (c.obrigatorio ? ' *' : '')} className={['dor', 'sistema_atual'].includes(c.k) ? 'col-span-2' : ''}>
-                <input className={inputCls} value={f.diagnostico[c.k] ?? ''} onChange={setDiag(c.k)} />
+                <input id={'campo-diag-' + c.k} className={inputCls} value={f.diagnostico[c.k] ?? ''} onChange={setDiag(c.k)} />
               </Campo>
             ))}
             {idx(f.etapa) >= idx('qualificado') && f.etapa !== 'perdido' && (
-              <Campo rotulo="Meta de sucesso do trial *" className="col-span-2"><input className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos" /></Campo>
+              <Campo rotulo="Meta de sucesso do trial *" className="col-span-2"><input id="campo-meta" className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos" /></Campo>
             )}
           </div>
         </Bloco>
@@ -379,7 +422,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
 
       {modal?.tipo === 'toque' && <ToqueModal cfg={cfg} lead={leadMin} tipo={modal.toqueTipo || 'avulso'} dia={modal.dia} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'estornar' && <EstornoModal url={modal.url} corpoExtra={modal.corpo} onFechar={() => setModal(null)} onFeito={aposModal} />}
-      {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={etapaReal === 'qualificado' ? 'ativacao' : etapaReal === 'trial' ? 'resultado' : 'diagnostico'} onFechar={() => setModal(null)} onFeito={aposModal} />}
+      {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={modal.tipoReuniao || (etapaReal === 'qualificado' ? 'ativacao' : etapaReal === 'trial' ? 'resultado' : 'diagnostico')} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'desfecho' && <DesfechoModal reuniao={modal.reuniao} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'proposta' && <PropostaModal lead={leadMin} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'pagamento' && <PagamentoModal lead={leadMin} hoje={hoje} onFechar={() => setModal(null)} onFeito={aposModal} />}

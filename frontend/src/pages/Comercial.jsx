@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, HelpCircle } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Funil from '../components/comercial/Funil.jsx';
@@ -9,6 +9,7 @@ import {
   VistaHoje, VistaTrials, VistaSupervisao, VistaMetas, VistaScripts, VistaPlacar, VistaControles,
 } from '../components/comercial/Vistas.jsx';
 import { ToqueModal } from '../components/comercial/Acoes.jsx';
+import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.jsx';
 
 /**
  * Comercial — Sprint 42.
@@ -22,8 +23,19 @@ import { ToqueModal } from '../components/comercial/Acoes.jsx';
 const ABAS = [
   ['hoje', 'Hoje'], ['funil', 'Funil'], ['trials', 'Trials'],
   ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
-  ['controles', 'Controles'], ['scripts', 'Scripts'],
+  ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
 ];
+
+/** Filtra as listas do painel para "só os meus" (responsável = eu). */
+function soMeus(painel, eu) {
+  const meu = (x) => (x.lead?.dono_id ?? x.dono_id) === eu || x.responsavel_id === eu;
+  const h = painel.hoje_listas;
+  return {
+    ...painel,
+    hoje_listas: Object.fromEntries(Object.entries(h).map(([k, v]) => [k, v.filter(meu)])),
+    trials: painel.trials.filter(meu),
+  };
+}
 
 export default function Comercial() {
   const { pessoa } = useAuth();
@@ -37,6 +49,9 @@ export default function Comercial() {
   const [modal, setModal] = useState(null);   // 'lista' | 'quadro'
   const [aviso, setAviso] = useState('');
   const [toque, setToque] = useState(null); // {lead, tipo, dia}
+  const [escopo, setEscopo] = useState(() => { try { return localStorage.getItem('comercial-escopo') || (admin ? 'equipe' : 'meus'); } catch { return admin ? 'equipe' : 'meus'; } });
+  const [tour, setTour] = useState(false);
+  useEffect(() => { try { localStorage.setItem('comercial-escopo', escopo); } catch { /* ok */ } }, [escopo]);
 
   useEffect(() => { try { localStorage.setItem('comercial-aba', aba); } catch { /* ok */ } }, [aba]);
 
@@ -47,7 +62,7 @@ export default function Comercial() {
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
-    if (['funil', 'scripts', 'controles'].includes(aba)) return;
+    if (['funil', 'scripts', 'controles', 'ajuda'].includes(aba)) return;
     api.get('/comercial/painel').then((r) => setPainel(r.data)).catch((err) => setErro(mensagemDeErro(err)));
   }, [aba, versao]);
 
@@ -67,7 +82,12 @@ export default function Comercial() {
           <h1 className="text-xl font-semibold text-slate-900">Comercial</h1>
           <span className="text-sm text-slate-500">Seu Cartório</span>
         </div>
-        {aviso && <span className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">{aviso}</span>}
+        <div className="flex items-center gap-2">
+          {aviso && <span className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white" role="status">{aviso}</span>}
+          <button type="button" onClick={() => setAba('ajuda')} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
+            <HelpCircle size={16} /> Dúvidas?
+          </button>
+        </div>
       </div>
 
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-slate-200">
@@ -88,11 +108,22 @@ export default function Comercial() {
               onImportarLista={() => setModal('lista')}
               onImportarQuadro={() => setModal('quadro')} />
           )}
+          {aba !== 'ajuda' && <ComoFunciona aba={aba} />}
+          {aba === 'hoje' && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-500">Mostrar:</span>
+              {[['meus', 'Só os meus cartórios'], ['equipe', 'Toda a equipe']].map(([k, n]) => (
+                <button key={k} type="button" onClick={() => setEscopo(k)}
+                  className={`rounded-full px-3 py-1 ${escopo === k ? 'bg-nexus-700 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50'}`}>{n}</button>
+              ))}
+            </div>
+          )}
+          {aba === 'ajuda' && <VistaAjuda cfg={cfg} onTour={() => setTour(true)} />}
           {aba === 'scripts' && <VistaScripts cfg={cfg} />}
           {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
           {!['funil', 'scripts', 'controles'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
           {painel && aba === 'hoje' && (
-            <VistaHoje painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar}
+            <VistaHoje painel={escopo === 'meus' ? soMeus(painel, cfg.eu.id) : painel} escopo={escopo} cfg={cfg} onAbrir={abrir} onMudou={recarregar}
               onToque={(lead, tipo, dia) => setToque({ lead, tipo, dia })} onMarco={marcarMarco} />
           )}
           {painel && aba === 'trials' && <VistaTrials painel={painel} cfg={cfg} onAbrir={abrir} />}
@@ -102,6 +133,7 @@ export default function Comercial() {
         </>
       )}
 
+      {cfg && <Tour forcar={tour} onFechar={() => setTour(false)} />}
       {cfg && aberto && (
         <LeadDrawer id={aberto.id} cfg={cfg} padrao={{ origem: '', dono_id: pessoa?.id || '' }}
           onFechar={() => setAberto(null)} onMudou={recarregar} />

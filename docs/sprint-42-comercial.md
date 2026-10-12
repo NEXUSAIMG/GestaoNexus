@@ -166,3 +166,36 @@ Migration `035_comercial_controle.sql` (aditiva). Abas novas: **Placar** e
 restrito criada no teste para conferir as permissões. Bateria `npm run api`:
 156 verificações passando. Conferência do ASAAS testada com cobrança
 simulada no banco.
+
+---
+
+# Sprint 42C — Autoexplicativo
+
+Objetivo: a equipe se resolver sozinha, sem manual e sem perguntar à gestão.
+
+- **Ficha do cartório diz o próximo passo:** caixa "O que fazer agora" com
+  uma ação e o botão que a executa (registrar toque do dia, registrar
+  desfecho, agendar ativação, preencher diagnóstico, iniciar trial, mudar
+  para Proposta, preencher CNPJ…). Logo abaixo, **"Para avançar para…"**: a
+  lista dos critérios da próxima etapa com ✓/○ e um botão em cada item que
+  falta. E **"O que falar agora"**: o roteiro do passo atual, com botão Copiar.
+  Ações que mudam a etapa mantêm a ficha aberta e mostram a nova orientação.
+- **Hoje virou roteiro do dia:** blocos numerados na ordem certa (reuniões,
+  desfechos, marcos, toques, próximos passos, propostas, pagamento,
+  parados), cada um dizendo por que está ali; blocos vazios viram uma linha
+  "Em dia". Filtro **Só os meus / Toda a equipe** (vendedora abre nos seus;
+  gestão na equipe), com KPIs pessoais e o próprio semáforo. Tela vazia diz o
+  que fazer em seguida.
+- **Ajuda em todo lugar:** faixa "como funciona" recolhível no topo de cada
+  aba; ícones (?) nos termos (conexão, portão, semáforo, cadência, CNS,
+  origem, prazo da etapa, colunas do placar, colunas do funil); aba **Ajuda**
+  com o caminho do cartório (8 etapas: objetivo, o que fazer, quando avança,
+  prazo), perguntas frequentes com busca e glossário; botão "Dúvidas?" no
+  topo.
+- **Tour de 1 minuto** na primeira visita de cada pessoa (5 telas), que pode
+  ser revisto na aba Ajuda.
+- **Funil:** vendedora abre filtrada na própria carteira; colunas vazias
+  explicam o que entra nelas.
+
+Todo o texto fica em `frontend/src/components/comercial/guia.js` — para
+ajustar uma explicação, edite só esse arquivo.

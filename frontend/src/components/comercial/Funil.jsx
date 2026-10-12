@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Upload, Search, KanbanSquare } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { Pill, brl, nivelPontos, linhaLocal, inputCls, btnCls, btnPrimCls } from './ui.jsx';
+import { Dica } from './Ajuda.jsx';
+import { GUIA_ETAPAS } from './guia.js';
 
 const POR_COLUNA = 60;
 
@@ -13,7 +15,11 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
   const [busca, setBusca] = useState('');
   const [buscaD, setBuscaD] = useState('');
   const [origem, setOrigem] = useState('');
-  const [dono, setDono] = useState(() => { try { return localStorage.getItem('comercial-dono') || ''; } catch { return ''; } });
+  // Quem não é gestão abre o funil já filtrado na própria carteira.
+  const [dono, setDono] = useState(() => {
+    try { const v = localStorage.getItem('comercial-dono'); if (v != null) return v; } catch { /* ok */ }
+    return admin ? '' : (cfg.eu?.id || '');
+  });
   const [mais, setMais] = useState({});
   const reqId = useRef(0);
 
@@ -69,7 +75,7 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
             return (
               <section key={e.k} aria-label={e.n} className="flex w-64 shrink-0 flex-col gap-2 rounded-lg bg-slate-100 p-2">
                 <div className="flex items-center justify-between px-1">
-                  <b className="text-xs font-semibold text-slate-700">{e.n}</b>
+                  <b className="flex items-center gap-1 text-xs font-semibold text-slate-700">{e.n}<Dica texto={`${GUIA_ETAPAS[e.k].objetivo} ${GUIA_ETAPAS[e.k].avancar}${e.sla ? ` Prazo: ${e.sla} dias.` : ''}`} /></b>
                   <Pill nivel="line">{cs.length}{e.sla ? ` · ${e.sla}d` : ''}</Pill>
                 </div>
                 {cs.slice(0, lim).map((l) => (
@@ -90,6 +96,7 @@ export default function Funil({ cfg, admin, versao, onAbrir, onNovo, onImportarL
                     </span>
                   </button>
                 ))}
+                {!cs.length && <p className="px-1 py-2 text-[11px] leading-snug text-slate-400">{GUIA_ETAPAS[e.k].objetivo}</p>}
                 {cs.length > lim && (
                   <button type="button" className="rounded-md py-1 text-xs font-medium text-nexus-700 hover:bg-white"
                     onClick={() => setMais({ ...mais, [e.k]: lim + POR_COLUNA })}>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { Modal, Erro, Campo, inputCls, btnCls, btnPrimCls, localParaIso } from './ui.jsx';
+import { Dica } from './Ajuda.jsx';
 
 /**
  * Modais de registro do módulo Comercial (Sprint 42B).
@@ -69,7 +70,8 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
         )}
       </div>
       <fieldset>
-        <legend className="mb-1 text-xs font-medium text-slate-600">Resultado *</legend>
+        <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-600">Resultado * <Dica termo="conexao" /></legend>
+        <p className="mb-2 text-xs text-slate-500">Escolha o que aconteceu, mesmo que não tenha atendido. “Agendou reunião” já pede data e hora e move o cartório para Diagnóstico.</p>
         <div className="grid grid-cols-2 gap-1.5">
           {cfg.resultados.map((r) => (
             <label key={r.k} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm ${resultado === r.k ? 'border-nexus-500 bg-nexus-50' : 'border-slate-200'}`}>
