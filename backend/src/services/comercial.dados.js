@@ -26,6 +26,29 @@ export function normTelefone(v) {
 }
 
 // ---------------------------------------------------------------------------
+// Gestão comercial: admin OU líder de uma equipe "Comercial"
+// ---------------------------------------------------------------------------
+/**
+ * Quem faz a gestão do dia (checagens, 1:1, metas) nem sempre é admin do
+ * Nexus — e admin enxerga o financeiro inteiro. Por isso a gestão comercial
+ * também vale para quem é LÍDER de uma equipe cujo nome contém "Comercial"
+ * (Equipes → membro → papel Líder). Pagamento manual continua só admin.
+ */
+export async function marcarGestorComercial(req, _res, next) {
+  try {
+    if (req.pessoa?.administrador) { req.gestorComercial = true; return next(); }
+    const { rows } = await query(
+      `SELECT 1 FROM equipes_membros em JOIN equipes e ON e.id = em.equipe_id
+        WHERE em.pessoa_id = $1 AND em.papel = 'lider' AND e.nome ILIKE '%comercial%'
+          AND e.arquivada_em IS NULL LIMIT 1`,
+      [req.pessoa.id],
+    );
+    req.gestorComercial = rows.length > 0;
+    next();
+  } catch (err) { next(err); }
+}
+
+// ---------------------------------------------------------------------------
 // Feriados (cache de 10 min)
 // ---------------------------------------------------------------------------
 let feriadosEm = 0;

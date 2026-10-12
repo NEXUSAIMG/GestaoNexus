@@ -224,3 +224,18 @@ const fer = await A('POST', '/comercial/feriados', { data: '2026-12-08', nome: '
 ok(fer.status === 201, 'gestão inclui feriado');
 ok((await V('POST', '/comercial/feriados', { data: '2026-12-09', nome: 'x' })).status === 403, 'vendedora não inclui feriado');
 await A('DELETE', '/comercial/feriados/2026-12-08');
+
+titulo('Gestão comercial sem ser admin (líder da equipe Comercial)');
+const emailL = `lider.${sufixo}@local.test`;
+const lid = (await post('/pessoas', { nome: 'Líder ' + sufixo, email: emailL, senha: 'SenhaLocal123!', acesso_restrito: true })).dados;
+await post(`/equipes/${equipeId}/membros`, { pessoa_id: lid.id, papel: 'lider' });
+const ll = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: emailL, senha: 'SenhaLocal123!' }) }).then((r) => r.json());
+const L = (m, c, b) => como(ll.token, m, c, b);
+const cfgL = (await L('GET', '/comercial/config')).dados;
+ok(cfgL.eu.gestor === true && cfgL.eu.admin === false, 'líder da equipe Comercial é gestão comercial, sem ser admin');
+const chkL = await L('POST', '/comercial/checagens', { janela: 'meio', pessoa_id: vend.id, observacao: 'checagem feita pela líder' });
+ok(chkL.status === 201, 'líder registra checagem');
+const pagL = await L('POST', `/comercial/leads/${id}/pagamento`, { pago_em: hoje, valor: 1, referencia: 'teste' });
+ok(pagL.status === 403, 'pagamento manual continua só admin');
+ok((await V('POST', '/comercial/checagens', { janela: 'meio', pessoa_id: vend.id, observacao: 'x' })).status === 403, 'membro comum não registra checagem');
+

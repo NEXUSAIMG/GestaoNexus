@@ -13,6 +13,7 @@ import {
   obterPlacar, incluirFeriado, removerFeriado,
 } from '../controllers/comercial-gestao.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
+import { marcarGestorComercial } from '../services/comercial.dados.js';
 
 /**
  * Módulo Comercial — Sprint 42 / 42B.
@@ -24,6 +25,7 @@ import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
  */
 const router = Router();
 router.use(autenticar);
+router.use(marcarGestorComercial);
 
 router.get('/config', config);
 router.get('/painel', painel);

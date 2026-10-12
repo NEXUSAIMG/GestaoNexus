@@ -212,3 +212,20 @@ Objetivo: a equipe se resolver sozinha, sem manual e sem perguntar à gestão.
 
 Todo o texto fica em `frontend/src/components/comercial/guia.js` — para
 ajustar uma explicação, edite só esse arquivo.
+
+## Gestão comercial sem acesso ao financeiro
+
+A rotina diária (checagens, 1:1, metas, arquivar, forçar etapa, remover da
+lista de não contatar, feriados) vale para **admin ou líder de uma equipe cujo
+nome contém "Comercial"** (Equipes → membro → papel Líder). Assim quem faz a
+gestão do dia não precisa ser admin — admin enxerga o financeiro inteiro.
+Confirmar pagamento manual e importar o quadro continuam só admin.
+
+## Plano de execução no próprio Nexus
+
+`docs/plano-comercial-30-dias.csv` tem as 43 ações do lançamento (decisões
+pendentes, ferramenta, leads rápidos, e-mail frio, clientes, eventos, gestão)
+com responsável, prazo, prioridade e critério de pronto. Importe em Tarefas →
+novo quadro → Importar planilha: cada frente vira etiqueta e "Decisão
+pendente" vira coluna.
+

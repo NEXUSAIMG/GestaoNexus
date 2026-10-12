@@ -1,0 +1,44 @@
+﻿Título,Descrição,Responsável,Prazo,Coluna,Prioridade,Etiquetas
+Escolher os nomes dos 4 domínios do e-mail frio,Sem isso o aquecimento (2–3 semanas) não começa e o piloto de 26/10 atrasa. Pronto quando: 4 nomes aprovados e comprados.,Márcio,13/10/2026,Decisão pendente,Urgente,Decisão
+"Definir quem vai ao Congresso Anoreg (Brasília, 17–19/11)",Inscrição até 30/10 (R$ 1.295). Pronto quando: nome definido e inscrição paga.,Márcio,16/10/2026,Decisão pendente,Alta,Decisão
+"Definir quem vai ao Congresso Notarial (Recife, 3–4/12)",Confirmar valor com o CNB. Pronto quando: nome definido e valor confirmado.,Márcio,23/10/2026,Decisão pendente,Média,Decisão
+Definir quem liga para os ex-clientes e os 8 trials que não fecharam,"Oferta: 1 mês grátis só para ex-cliente, até 10/11. Pronto quando: lista dividida entre Lia e Karina no Nexus.",Márcio,13/10/2026,Decisão pendente,Urgente,Decisão
+Nomear quem faz a gestão do dia (checagens 8h30/12h30/17h),"Se ninguém for o dono da rotina, o controle não acontece. Pronto quando: pessoa nomeada e com acesso de gestão comercial no Nexus.",Márcio,13/10/2026,Decisão pendente,Urgente,Decisão
+Documentar a origem da base de 13.600 e-mails,Necessário para a análise de legítimo interesse (LGPD). Pronto quando: origem descrita no doc de LGPD.,Márcio,16/10/2026,Decisão pendente,Alta,Decisão
+Validar a análise de LGPD com advogado,Depois da revisão da Karina (23/10). Pronto quando: parecer ok antes do 1º envio.,Márcio,24/10/2026,Decisão pendente,Alta,Decisão
+Confirmar se a AYIO paga a assinatura (conta interna?),Muda o número real de clientes pagantes. Pronto quando: confirmado.,Márcio,16/10/2026,Decisão pendente,Baixa,Decisão
+Definir oferta de upgrade e convidado do webinar,Itens do plano de marketing. Pronto quando: definidos.,Márcio,30/10/2026,Decisão pendente,Baixa,Decisão
+Enviar ao GitHub e abrir o PR do módulo Comercial,"Baixar o pacote, avisar o Claude, clicar em Create pull request. Pronto quando: PR aberto.",Márcio,13/10/2026,A fazer,Urgente,Ferramenta
+Revisar e fazer o merge do PR (deploy automático),Migrations 034 e 035 rodam sozinhas. Pronto quando: /api/saude mostra versão 1.9 e o menu Comercial aparece.,Márcio,14/10/2026,A fazer,Urgente,Ferramenta
+Merge do PR fix/83 (erro ao anexar arquivo),"Depois do deploy, anexar uma imagem pequena e uma grande para descobrir a causa. Pronto quando: card #83 fechado.",Márcio,16/10/2026,A fazer,Média,Ferramenta
+Criar/conferir o acesso da equipe no Nexus,"Alexia, Rodrigo, Lia e Karina: acesso restrito + membros da equipe Comercial (sem isso não conseguem logar). Pronto quando: os 4 entram e veem o menu Comercial.",Márcio,14/10/2026,A fazer,Urgente,Ferramenta
+Importar o quadro Atividade Comercial para o funil,Comercial → Funil → Importar do quadro; conferir o mapa coluna→etapa; só etiqueta Cliente. Pronto quando: cartórios no funil com responsável.,Márcio,14/10/2026,A fazer,Alta,Ferramenta
+Preencher metas do mês e metas por pessoa,"Alexia 15 novos/dia, Rodrigo 10; toques, reuniões e pagos de cada um. Pronto quando: aba Metas salva para 10/2026.",Márcio,14/10/2026,A fazer,Alta,Ferramenta
+Completar CNPJ e valor dos clientes ganhos,Com CNPJ o ASAAS confirma o pagamento sozinho. Pronto quando: nenhum ganho 'sem valor'.,Lia,16/10/2026,A fazer,Média,Ferramenta
+Treinamento de 1 hora no módulo Comercial,"Tour, aba Processo, registrar toque com resultado, ficha 'O que fazer agora', estorno. Pronto quando: cada pessoa registrou 1 toque e 1 reunião de teste.",Márcio,15/10/2026,A fazer,Urgente,Ferramenta
+Aposentar a Mesa Comercial,Avisar a equipe que o registro é só no Nexus. Pronto quando: aviso enviado.,Márcio,15/10/2026,A fazer,Média,Ferramenta
+Ligar para os 87 cadastros abandonados no site,"O formulário perde ~70%. Importar a lista (origem Site/blog, campanha 'Cadastro abandonado') e ligar em 48h. Pronto quando: todos com toque registrado.",Rodrigo,16/10/2026,A fazer,Urgente,Leads rápidos
+Retomar o 1º Tabelionato de Notas de Santa Maria/RS,Lead quente parado desde 08/10. Pronto quando: reunião agendada ou motivo registrado.,Lia,13/10/2026,A fazer,Urgente,Leads rápidos
+Decidir o trial de Assis/SP (aberto desde 10/08),"Reunião de resultado e proposta, ou encerrar. Pronto quando: ganho ou perdido com motivo.",Lia,15/10/2026,A fazer,Urgente,Leads rápidos
+Ligar para os 8 trials que não fecharam,"Juruti, Xingu, Oliveira, 1º Ofício de Ananindeua, Lago do Junco, Joésia Saibrosa e outros. Pronto quando: todos com resultado registrado.",Karina,20/10/2026,A fazer,Alta,Leads rápidos
+Ligar para os 2 ex-clientes (oferta de 1 mês grátis),Luís Correia e Aristoteles Abreu de Castro Neto. Pronto quando: resultado registrado.,Karina,16/10/2026,A fazer,Alta,Leads rápidos
+Montar a lista semanal de prospecção por telefone,"125 cartórios/semana (Alexia 75, Rodrigo 50), do ICP, importados com campanha da semana. Pronto quando: lista da semana importada toda segunda.",Alexia,13/10/2026,A fazer,Alta,Leads rápidos
+Comprar os 4 domínios e criar as 12 caixas,Google Workspace + SPF/DKIM/DMARC. Pronto quando: caixas criadas e autenticadas.,Rodrigo,14/10/2026,A fazer,Urgente,E-mail frio
+Contratar o Instantly e iniciar o aquecimento,Aquecimento mínimo de 2 semanas antes do piloto. Pronto quando: as 12 caixas aquecendo.,Rodrigo,15/10/2026,A fazer,Urgente,E-mail frio
+Revisar a análise de legítimo interesse (LGPD),Checklist no Playbook. Pronto quando: revisão entregue.,Karina,23/10/2026,A fazer,Alta,E-mail frio
+Limpar e segmentar a base de 13.600 e-mails,"Validar e-mails, separar por especialidade/UF, tirar clientes e quem pediu para sair. Pronto quando: onda 1 com ~1.900 cartórios pronta.",Alexia,23/10/2026,A fazer,Alta,E-mail frio
+Carregar descadastros na lista de não contatar,Comercial → Controles → incluir em lote. Pronto quando: lista atualizada antes do 1º envio.,Rodrigo,24/10/2026,A fazer,Alta,E-mail frio
+Piloto do e-mail frio (onda 1),"Só respostas com interesse entram no Nexus (origem E-mail frio, campanha Onda 1) — não importar os 1.900. Pronto quando: piloto rodando.",Rodrigo,26/10/2026,A fazer,Alta,E-mail frio
+Plano de uso para o 2º RI de Recife (uso baixo),"46 atendimentos em 30 dias. Ligar, entender, reativar. Pronto quando: plano registrado.",Karina,16/10/2026,A fazer,Alta,Clientes
+Formosa/GO: ativar uso e confirmar pagamento,"Zero uso e aguardando pagamento. Pronto quando: pago e usando, ou encerrado.",Lia,16/10/2026,A fazer,Alta,Clientes
+Pedir autorização dos clientes de referência,"Socorro, Marabá, Givaldo, Jaraguá, 5º Notas Belém, Bandeirantes, Alison Rodrigo. Pronto quando: 3 autorizações para usar nome e números.",Karina,23/10/2026,A fazer,Média,Clientes
+Pedir indicação a todo cliente pago,Script 'Pedido de indicação'. Pronto quando: os 10 clientes contatados.,Lia,30/10/2026,A fazer,Média,Clientes
+Inscrição e passagens do Congresso Anoreg,"Comprar cedo. Pronto quando: inscrição, passagem e hotel pagos.",Márcio,30/10/2026,A fazer,Alta,Eventos
+Material e demo para o Congresso Anoreg,"Folder/QR para cadastro, demo no celular, casos de referência. Pronto quando: material pronto.",Alexia,10/11/2026,A fazer,Média,Eventos
+Follow-up dos contatos do congresso em 48h,Cadastrar no Nexus com origem Congresso/evento e campanha 'Anoreg 2026'. Pronto quando: todos com 1º toque em 48h.,Alexia,21/11/2026,A fazer,Média,Eventos
+Rotina diária: 3 checagens no Nexus,"8h30, 12h30, 17h na aba Supervisão. Pronto quando: aba Controles mostra 3 checagens por dia útil.",Márcio,16/10/2026,A fazer,Urgente,Gestão
+1:1 de sexta com cada pessoa,Registrar na Supervisão com plano de ação. Pronto quando: 4 registros toda sexta.,Márcio,16/10/2026,A fazer,Alta,Gestão
+Revisão mensal: taxas reais x metas,Ajustar as taxas da aba Metas com os números reais. Pronto quando: metas de novembro salvas.,Márcio,30/10/2026,A fazer,Média,Gestão
+Garantir o caixa de outubro (~R$ 3.400 além dos R$ 1.000),Ordem de pagamento da aba Orçamento. Pronto quando: valores cobertos.,Márcio,20/10/2026,A fazer,Alta,Gestão
+Construir as entregas 2 e 3 do Nexus (apuração e saúde da base),"Custo por cliente por canal, orçamento previsto x realizado, risco de cancelamento pelo uso, relatório automático de segunda. Pronto quando: em produção.",Márcio,06/11/2026,A fazer,Média,Ferramenta
+Investigar a perda de 70% no formulário de cadastro do Seu Cartório,"No código do Seu Cartório, com o ritual (investigar → plano → OK → deploy). Pronto quando: correção publicada.",Márcio,30/10/2026,A fazer,Alta,Ferramenta

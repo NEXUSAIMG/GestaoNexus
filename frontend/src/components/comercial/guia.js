@@ -199,6 +199,7 @@ export const FAQ = [
   { p: 'Por que o meu semáforo está vermelho?', r: 'Você fez menos de 70% do que estava previsto para hoje (toques e marcos pendentes) ou está abaixo da sua meta de novos ou de toques. Veja os alertas no seu cartão da Supervisão e os itens em Hoje.' },
   { p: 'Não sei o que falar na ligação.', r: 'Abra a aba Scripts. Dentro da ficha do cartório também aparece o roteiro do passo atual, com botão para copiar.' },
   { p: 'Quem pode arquivar um cartório?', r: 'Só a gestão, com motivo — arquivar tira o cartório das contas. Para encerrar uma negociação, use Perdido.' },
+  { p: 'Quem é a "gestão" no sistema?', r: 'Quem é administrador do Nexus ou líder da equipe Comercial (Equipes → membro → papel Líder). A gestão registra checagens e 1:1, define metas, arquiva e força etapa com justificativa. Confirmar pagamento manual é só do administrador.' },
 ];
 
 // ---------------------------------------------------------------------------

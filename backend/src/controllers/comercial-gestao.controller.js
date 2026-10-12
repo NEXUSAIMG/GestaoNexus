@@ -20,7 +20,7 @@ import {
 
 const ehAdmin = (req) => !!req.pessoa?.administrador;
 function exigirGestao(req) {
-  if (!ehAdmin(req)) throw new AppError('Só a gestão (admin) pode fazer isso.', 403, 'so_admin');
+  if (!req.gestorComercial && !ehAdmin(req)) throw new AppError('Só a gestão (admin) pode fazer isso.', 403, 'so_admin');
 }
 const dataISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const txt = (max) => z.string().max(max).nullable().optional()
@@ -221,7 +221,7 @@ export async function atualizarAcao(req, res, next) {
     if (!rows.length) throw new NaoEncontradoError('Ação não encontrada');
     if (rows[0].status !== 'aberta') throw new AppError('Ação já encerrada.');
     if (b.status === 'cancelada') exigirGestao(req);
-    else if (rows[0].pessoa_id !== req.pessoa.id && !ehAdmin(req)) throw new AppError('Só a própria pessoa ou a gestão conclui a ação.', 403);
+    else if (rows[0].pessoa_id !== req.pessoa.id && !req.gestorComercial && !ehAdmin(req)) throw new AppError('Só a própria pessoa ou a gestão conclui a ação.', 403);
     await query(`UPDATE comercial_acoes SET status = $2, concluida_em = now() WHERE id = $1`, [req.params.id, b.status]);
     res.json({ ok: true });
   } catch (err) { next(err); }

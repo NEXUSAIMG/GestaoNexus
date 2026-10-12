@@ -226,7 +226,7 @@ function janelaAtual() {
 }
 
 export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
-  const admin = !!cfg.eu?.admin;
+  const admin = !!(cfg.eu?.gestor ?? cfg.eu?.admin);
   const [modal, setModal] = useState(null);
   const [erro, setErro] = useState('');
   async function concluir(acao) {
@@ -326,7 +326,7 @@ const CAMPOS_META = [
 const CAMPOS_PESSOA = [['novosDia', 'Novos/dia'], ['toquesDia', 'Toques/dia'], ['reunioesMes', 'Reuniões/mês'], ['pagosMes', 'Pagos/mês']];
 
 export function VistaMetas({ painel, cfg, onSalvo }) {
-  const admin = !!cfg.eu?.admin;
+  const admin = !!(cfg.eu?.gestor ?? cfg.eu?.admin);
   const mes = painel.hoje.slice(0, 7);
   const [form, setForm] = useState(null);
   const [salvando, setSalvando] = useState(false);
@@ -516,7 +516,7 @@ export function VistaPlacar({ cfg, painel, versao }) {
 // CONTROLES (não contatar, rotina da gestão, feriados)
 // ---------------------------------------------------------------------------
 export function VistaControles({ cfg, onMudou }) {
-  const admin = !!cfg.eu?.admin;
+  const admin = !!(cfg.eu?.gestor ?? cfg.eu?.admin);
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <NaoContatar cfg={cfg} admin={admin} onMudou={onMudou} />

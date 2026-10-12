@@ -165,6 +165,10 @@ const ehAdmin = (req) => !!req.pessoa?.administrador;
 function exigirAdminLocal(req, msg) {
   if (!ehAdmin(req)) throw new AppError(msg || 'Só a gestão (admin) pode fazer isso.', 403, 'so_admin');
 }
+const ehGestor = (req) => !!req.gestorComercial || ehAdmin(req);
+function exigirGestor(req, msg) {
+  if (!ehGestor(req)) throw new AppError(msg || 'Só a gestão comercial pode fazer isso.', 403, 'so_gestao');
+}
 
 function novoProtocolo(hoje = hojeBR()) {
   return 'SC-' + hoje.replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
@@ -240,7 +244,7 @@ export async function config(req, res, next) {
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
       feriados,
-      eu: { id: req.pessoa.id, admin: ehAdmin(req) },
+      eu: { id: req.pessoa.id, admin: ehAdmin(req), gestor: ehGestor(req) },
       hoje: hojeBR(),
     });
   } catch (err) { next(err); }
@@ -400,7 +404,7 @@ export async function atualizar(req, res, next) {
         const [reunioes, propostas] = await Promise.all([reunioesDoLead(atual.id, client), propostasDoLead(atual.id, client)]);
         const pend = pendenciasPortao(efetivo, novaEtapa, { reunioes, propostas, valor_mensal: efetivo.valor_mensal });
         if (pend.length) {
-          if (dados.forcar_portao && ehAdmin(req) && dados.justificativa) {
+          if (dados.forcar_portao && ehGestor(req) && dados.justificativa) {
             justif = `[portão forçado pela gestão] ${dados.justificativa} — pendências: ${pend.join('; ')}`;
           } else {
             const e = new AppError(`Para ir a "${ETAPA[novaEtapa].n}" falta: ${pend.join('; ')}.`, 400, 'portao');
@@ -468,7 +472,7 @@ export async function atualizar(req, res, next) {
 /** POST /comercial/leads/:id/arquivar {motivo} — só admin */
 export async function arquivar(req, res, next) {
   try {
-    exigirAdminLocal(req, 'Só a gestão arquiva lead. Para encerrar uma negociação, marque como Perdido com o motivo.');
+    exigirGestor(req, 'Só a gestão arquiva lead. Para encerrar uma negociação, marque como Perdido com o motivo.');
     const { motivo } = estornoSchema.parse(req.body || {});
     const { rowCount } = await query(
       `UPDATE comercial_leads SET arquivado_em = now(), arquivado_motivo = $2, arquivado_por_id = $3
@@ -572,7 +576,7 @@ export async function registrarToque(req, res, next) {
 async function estornarToqueRow(req, toque, motivo) {
   const hoje = hojeBR();
   const meu = toque.pessoa_id === req.pessoa.id && toque.data === hoje;
-  if (!meu && !ehAdmin(req)) {
+  if (!meu && !ehGestor(req)) {
     throw new AppError('Só quem registrou pode estornar, e só no mesmo dia. Depois disso, peça à gestão.', 403, 'estorno_negado');
   }
   if (toque.estornado_em) throw new AppError('Este toque já foi estornado.');
@@ -797,7 +801,7 @@ export async function obterMetas(req, res, next) {
 /** PUT /comercial/metas/:mes — só admin */
 export async function salvarMetas(req, res, next) {
   try {
-    exigirAdminLocal(req, 'Só a gestão define metas.');
+    exigirGestor(req, 'Só a gestão define metas.');
     const mes = req.params.mes;
     if (!/^\d{4}-\d{2}$/.test(mes)) throw new AppError('Mês no formato AAAA-MM');
     const valores = metasSchema.parse(req.body);

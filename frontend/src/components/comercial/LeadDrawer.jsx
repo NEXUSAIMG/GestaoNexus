@@ -46,7 +46,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
   const [aviso, setAviso] = useState('');
   const [ganhos, setGanhos] = useState([]);
   const feriados = new Set((cfg.feriados || []).map((x) => x.data));
-  const admin = !!cfg.eu?.admin;
+  const admin = !!cfg.eu?.admin;          // pagamento manual
+  const gestor = !!(cfg.eu?.gestor ?? cfg.eu?.admin); // arquivar, forçar portão
 
   function paraRascunho(l) {
     const r = { ...VAZIO };
@@ -188,7 +189,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
       )}
       rodape={(
         <>
-          {id && admin ? (
+          {id && gestor ? (
             <button type="button" onClick={() => setModal({ tipo: 'arquivar' })} className="inline-flex items-center gap-1 text-sm font-medium text-red-700 hover:underline">
               <Archive size={14} /> Arquivar
             </button>
@@ -200,7 +201,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou }) {
         </>
       )}>
       <Erro>{erro}</Erro>
-      {erroCodigo === 'portao' && admin && (
+      {erroCodigo === 'portao' && gestor && (
         <button type="button" className="text-sm font-medium text-amber-800 underline" onClick={() => setModal({ tipo: 'forcar' })}>
           Forçar a mudança de etapa (gestão) com justificativa
         </button>
