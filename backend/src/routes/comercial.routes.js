@@ -13,6 +13,9 @@ import {
   obterPlacar, incluirFeriado, removerFeriado, listarGestores, salvarGestores,
 } from '../controllers/comercial-gestao.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
+import {
+  painelMarketing, criarAcaoMkt, atualizarAcaoMkt, arquivarAcaoMkt, loteMarketing, criarDataMkt, removerDataMkt,
+} from '../controllers/comercial.marketing.controller.js';
 import { marcarGestorComercial } from '../services/comercial.dados.js';
 import { espelharDepois } from '../services/comercial.espelho.js';
 
@@ -90,6 +93,15 @@ router.get('/importar-quadro/previa', exigirAdmin, previaImportarQuadro);
 router.post('/importar-quadro', exigirAdmin, importarQuadro);
 
 // Espelho quadro ↔ Comercial
+// Sprint 42I — Marketing (calendário das ações + resultado no funil)
+router.get('/marketing', painelMarketing);
+router.post('/marketing/acoes', criarAcaoMkt);
+router.put('/marketing/acoes/:id', atualizarAcaoMkt);
+router.post('/marketing/acoes/:id/arquivar', arquivarAcaoMkt);
+router.post('/marketing/lote', loteMarketing);
+router.post('/marketing/datas', criarDataMkt);
+router.delete('/marketing/datas/:id', removerDataMkt);
+
 router.get('/espelho', listarEspelhos);
 router.put('/espelho/:quadroId', exigirAdmin, atualizarEspelho);
 

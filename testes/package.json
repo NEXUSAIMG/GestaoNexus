@@ -8,7 +8,7 @@
     "db:subir": "node pg-start.mjs",
     "db:parar": "node pg-start.mjs stop",
     "semear": "node semear.mjs",
-    "api": "node t-importar.mjs && node t-importar-real.mjs && node t-erros.mjs && node t-historico.mjs && node t-arquivados.mjs && node t-csv.mjs && node t-comercial.mjs && node t-comercial-regras.mjs && node t-comercial-espelho.mjs && node t-comercial-insistencia.mjs",
+    "api": "node t-importar.mjs && node t-importar-real.mjs && node t-erros.mjs && node t-historico.mjs && node t-arquivados.mjs && node t-csv.mjs && node t-comercial.mjs && node t-comercial-regras.mjs && node t-comercial-espelho.mjs && node t-comercial-insistencia.mjs && node t-comercial-marketing.mjs",
     "layout": "node t-layout.mjs",
     "ui": "node t-quadro.mjs && node t-import-ui.mjs"
   },

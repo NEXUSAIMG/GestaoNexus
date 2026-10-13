@@ -17,6 +17,7 @@ import {
 import {
   normalizar, palpiteEtapa, palpiteMotivo, palpiteMarco, salvarEspelho,
 } from '../services/comercial.espelho.js';
+import { campanhasAtivas } from './comercial.marketing.controller.js';
 
 /**
  * Módulo Comercial — Sprint 42 (funil) + 42B (controle minucioso).
@@ -232,6 +233,7 @@ export async function config(req, res, next) {
       tipos_reuniao: TIPOS_REUNIAO, motivos_nao_contatar: MOTIVOS_NAO_CONTATAR, janelas: JANELAS,
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
+      campanhas: await campanhasAtivas(), // Sprint 42I — lista do campo Campanha
       feriados,
       eu: { id: req.pessoa.id, admin: ehAdmin(req), gestor: ehGestor(req) },
       hoje: hojeBR(),

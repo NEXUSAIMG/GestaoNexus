@@ -50,6 +50,29 @@ export const ORIGENS = {
 };
 export const ORIGENS_CHAVES = Object.keys(ORIGENS);
 
+// Sprint 42I — canais das ações de marketing. `origem` é a origem que o
+// cartório que chega por essa ação recebe no funil (sugestão no cadastro).
+export const CANAIS_MKT = {
+  linkedin:   { nome: 'LinkedIn',                 origem: 'linkedin' },
+  instagram:  { nome: 'Instagram',                origem: 'instagram' },
+  facebook:   { nome: 'Facebook',                 origem: 'outro' },
+  site:       { nome: 'Site / blog',              origem: 'site' },
+  email:      { nome: 'E-mail',                   origem: 'email_frio' },
+  whatsapp:   { nome: 'Lista de WhatsApp',        origem: 'inbound' },
+  evento:     { nome: 'Congresso / evento',       origem: 'evento' },
+  webinar:    { nome: 'Webinar',                  origem: 'webinar' },
+  indicacao:  { nome: 'Indicação',                origem: 'indicacao' },
+  casos:      { nome: 'Casos de clientes',        origem: 'indicacao' },
+  parcerias:  { nome: 'Associações e parcerias',  origem: 'evento' },
+  anuncios:   { nome: 'Anúncios pagos',           origem: 'site' },
+  interno:    { nome: 'Interno / preparação',     origem: null },
+  outro:      { nome: 'Outro',                    origem: 'outro' },
+};
+export const CANAIS_MKT_CHAVES = Object.keys(CANAIS_MKT);
+export const STATUS_MKT = {
+  planejada: 'Planejada', em_andamento: 'Em andamento', feita: 'Feita', adiada: 'Adiada', cancelada: 'Cancelada',
+};
+
 export const MOTIVOS_PERDA = [
   'Preço', 'Sem dor', 'Sem decisor', 'Escolheu concorrente',
   'Sem tempo para implantar', 'Problema técnico', 'Sumiu',

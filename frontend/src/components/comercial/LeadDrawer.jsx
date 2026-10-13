@@ -303,7 +303,18 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
             <option value="">Sem responsável</option>{opcoesDono.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </Campo>
-        <Campo rotulo="Campanha / onda" dica={<Dica termo="campanha" />}><input className={inputCls} value={f.campanha || ''} onChange={set('campanha')} placeholder="ex.: E-mail onda 1" /></Campo>
+        <Campo rotulo="Campanha (ação de marketing)" dica={<Dica termo="campanha" />}>
+          <input className={inputCls} value={f.campanha || ''} list="campanhas-mkt" placeholder="escolha a ação que trouxe o cartório"
+            onChange={(e) => {
+              // Sprint 42I — escolheu a campanha de uma ação: sugere a origem do canal dela
+              const v = e.target.value;
+              const c = (cfg.campanhas || []).find((x) => x.campanha === v);
+              setF({ ...f, campanha: v, ...(c?.origem && !f.origem && podeOrigem ? { origem: c.origem } : {}) });
+            }} />
+          <datalist id="campanhas-mkt">
+            {(cfg.campanhas || []).map((c) => <option key={c.campanha} value={c.campanha}>{c.titulo}</option>)}
+          </datalist>
+        </Campo>
         {f.origem === 'indicacao' && (
           <Campo rotulo="Indicado por (cliente)" className="col-span-2">
             <select className={inputCls} value={f.indicado_por_id || ''} onChange={set('indicado_por_id')}>

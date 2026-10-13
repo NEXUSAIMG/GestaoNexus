@@ -12,6 +12,7 @@ import {
 import { ToqueModal } from '../components/comercial/Acoes.jsx';
 import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.jsx';
 import { VistaProcesso } from '../components/comercial/Processo.jsx';
+import { VistaMarketing } from '../components/comercial/Marketing.jsx';
 
 /**
  * Comercial — Sprint 42.
@@ -25,7 +26,7 @@ import { VistaProcesso } from '../components/comercial/Processo.jsx';
 const ABAS = [
   ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['implantacao', 'Implantação'],
   ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
-  ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
+  ['marketing', 'Marketing'], ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
 ];
 
 /** Filtra as listas do painel para "só os meus" (responsável = eu). */
@@ -64,7 +65,7 @@ export default function Comercial() {
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
-    if (['funil', 'scripts', 'controles', 'ajuda'].includes(aba)) return;
+    if (['funil', 'scripts', 'controles', 'ajuda', 'marketing'].includes(aba)) return;
     api.get('/comercial/painel').then((r) => { setPainel(r.data); setErro(''); }).catch((err) => setErro(mensagemDeErro(err)));
   }, [aba, versao]);
 
@@ -134,7 +135,8 @@ export default function Comercial() {
           {aba === 'processo' && <VistaProcesso cfg={cfg} painel={painel} />}
           {aba === 'scripts' && <VistaScripts cfg={cfg} />}
           {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
-          {!['funil', 'scripts', 'controles', 'ajuda'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
+          {aba === 'marketing' && <VistaMarketing cfg={cfg} onAviso={setAviso} />}
+          {!['funil', 'scripts', 'controles', 'ajuda', 'marketing'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
           {painel && aba === 'hoje' && (
             <VistaHoje painel={escopo === 'meus' ? soMeus(painel, cfg.eu.id) : painel} escopo={escopo} cfg={cfg} onAbrir={abrir} onMudou={recarregar}
               onAviso={setAviso}

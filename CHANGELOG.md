@@ -11,6 +11,48 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42I — Marketing no Comercial (versão 1.16)
+
+Aba **Marketing** no Comercial: o calendário das ações de marketing e o
+resultado de cada uma no funil.
+
+- **Ações** (`comercial_mkt_acoes`). Cada ação tem título, canal (LinkedIn,
+  Instagram, congresso, webinar...), data, status, responsável (pessoa do
+  Nexus ou texto, como "Sócio"), custo, horas, notas e o que aconteceu.
+  - Quem é do Comercial cria e atualiza as ações.
+  - Remover a ação: a gestão ou quem a criou.
+- **Ligação com o funil pela campanha**:
+  - toda ação tem uma campanha única, que é gerada do título se ficar em
+    branco;
+  - o cartório cadastrado com aquela campanha conta para a ação:
+    cartórios, reuniões, propostas, clientes pagos, receita, custo por
+    cartório;
+  - no cadastro do cartório, o campo Campanha lista as ações e sugere a
+    origem pelo canal;
+  - campanhas digitadas que não batem com nenhuma ação aparecem num aviso.
+- **Tela**:
+  - calendário do mês, com as ações coloridas por status e as atrasadas em
+    vermelho;
+  - lista "Para fazer" com as atrasadas e os próximos 7 dias, e os botões
+    Feita e Adiar;
+  - KPIs do mês;
+  - resultado por ação;
+  - de onde vêm os cartórios (origem, últimos 90 dias);
+  - datas importantes (`comercial_mkt_datas`), em amarelo no calendário.
+- **Plano out–dez** (47 ações e 4 datas da Agenda de Marketing): a gestão
+  lança com um botão (`POST /comercial/marketing/lote`). Rodar de novo não
+  duplica.
+- **Ajuda**: "como funciona" da aba, glossário da campanha e 2 perguntas no
+  FAQ.
+
+Arquivos: migration `039_comercial_marketing.sql`,
+`controllers/comercial.marketing.controller.js`, `CANAIS_MKT` em
+`comercial.regras.js`, `components/comercial/Marketing.jsx` e
+`planoMarketing.js`, `LeadDrawer.jsx` (campanha), `pages/Comercial.jsx`.
+Testes: `t-comercial-marketing.mjs` (14 checagens).
+
+---
+
 ## Sprint 42H — Tudo explicado na tela (versão 1.15)
 
 A equipe precisa entender cada tela sem treinamento. O foco é o quadro

@@ -105,7 +105,7 @@ export const GLOSSARIO = {
   um_a_um: 'Conversa semanal (sexta) entre a gestão e cada pessoa: números da semana, bloqueios e plano de ação com prazo.',
   proximo_passo: 'O que vai acontecer a seguir com o cartório e quando. Cartório em negociação nunca fica sem próximo passo com data.',
   origem: 'De onde o cartório veio (ligação, e-mail frio, indicação, evento…). Serve para saber qual canal dá resultado e quanto custa cada cliente.',
-  campanha: 'Nome da ação específica (ex.: "E-mail onda 1", "Congresso Recife"). Opcional, mas ajuda a comparar ações do mesmo canal.',
+  campanha: 'A ação de marketing que trouxe o cartório (post, congresso, webinar, e-mail...). Escolha da lista: as ações da aba Marketing aparecem aqui. É assim que a aba Marketing mostra quais ações dão resultado.',
 };
 
 // ---------------------------------------------------------------------------
@@ -175,6 +175,15 @@ export const COMO_FUNCIONA = {
       'Feriados: não contam como dia útil na cadência nem nas metas.',
     ],
   },
+  marketing: {
+    titulo: 'Marketing: o calendário das ações e o que cada uma trouxe',
+    itens: [
+      'Cada post, congresso, webinar ou e-mail é uma ação com data, canal e responsável. Clique num dia do calendário para criar.',
+      'Fez? Marque como "Feita" e anote o resultado. Ação com data passada e sem marcar aparece em vermelho.',
+      'O resultado no funil vem do campo Campanha do cartório: quando um cartório chegar por uma ação, escolha a campanha dela no cadastro.',
+      'A tabela mostra, por ação, quantos cartórios chegaram, quantos foram à reunião e quantos viraram cliente — e quanto custou cada um.',
+    ],
+  },
   scripts: {
     titulo: 'Scripts: o que falar',
     itens: ['Roteiros, não falas decoradas. Troque os campos entre colchetes e mantenha a ordem.'],
@@ -190,6 +199,8 @@ export const FAQ = [
   { p: 'Posso continuar usando o quadro Atividade Comercial?', r: 'Pode. Com o espelho ligado (Controles → Quadro e Comercial em espelho), o quadro e o Comercial andam juntos: mover o card muda a etapa aqui, e mudar a etapa aqui move o card. Nome, responsável, telefone, contato, e-mail e cidade também ficam iguais nos dois. Card novo numa coluna do funil vira cartório aqui, e cartório cadastrado aqui ganha card lá. Se o Comercial não deixar o card andar (falta reunião, proposta etc.), o quadro mostra o que falta e o botão para abrir a ficha.' },
   { p: 'Como vejo só os meus cards no quadro?', r: 'No quadro, clique em "Destacar os meus" (na barra de filtros). Os seus cards ficam com contorno e os dos outros, apagados — nada some, você continua vendo o quadro inteiro. Cada coluna mostra quantos são seus. O Nexus lembra a sua escolha; clique de novo para voltar ao normal. Para esconder os outros de vez, use o filtro de responsável.' },
   { p: 'O que é a linha com a seta embaixo do card?', r: 'É o próximo passo do cartório, com a data, igual ao do Comercial. Vermelho: atrasado. Laranja: é hoje. Ao registrar o contato no Comercial, o próximo passo muda sozinho e o card mostra o novo.' },
+  { p: 'Um cartório chegou por um post / congresso. O que eu faço?', r: 'No cadastro do cartório, no campo Campanha, escolha a ação da lista (são as ações da aba Marketing). A origem é sugerida sozinha. Assim a ação passa a contar esse cartório e a gestão vê o que dá resultado. Não achou a ação na lista? Peça para incluir na aba Marketing.' },
+  { p: 'Como registro uma ação de marketing?', r: 'Aba Marketing → Nova ação (ou clique num dia do calendário). Informe o que vai ser feito, o canal, a data e o responsável. Depois de fazer, marque como Feita e anote o resultado (alcance, inscritos, conversas).' },
   { p: 'Registrei um toque errado. Como corrijo?', r: 'Abra o cartório, desmarque o toque na cadência (contato avulso: abra o Histórico completo e clique em "estornar") e escreva o motivo. Isso é um estorno: o registro fica riscado, não some. No mesmo dia, você mesma estorna; depois disso, peça à gestão.' },
   { p: 'O sistema não me deixa mudar a etapa. Por quê?', r: 'Cada etapa tem um critério (portão). A ficha do cartório mostra a lista do que falta, com o botão para resolver cada item — por exemplo, "Agendar reunião" ou "Preencher diagnóstico". Resolva os itens e tente de novo.' },
   { p: 'Quero voltar um cartório para uma etapa anterior.', r: 'Pode. Mude a etapa e escreva a justificativa quando o sistema pedir. Ela fica no histórico. Ao reabrir um Perdido, os critérios valem de novo: só a etapa que ele já tinha alcançado antes fica dispensada.' },
