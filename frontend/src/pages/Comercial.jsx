@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TrendingUp, HelpCircle } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -74,6 +75,16 @@ export default function Comercial() {
   }
 
   const abrir = (id) => setAberto({ id });
+
+  // Sprint 42F — /comercial?lead=<id> abre a ficha (link "Abrir no Comercial" do card)
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = params.get('lead');
+    if (!id) return;
+    setAberto({ id });
+    params.delete('lead');
+    setParams(params, { replace: true });
+  }, [params, setParams]);
 
   return (
     <div className="space-y-4">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X, Archive, CalendarPlus, FileSignature, Phone, BadgeCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { X, Archive, CalendarPlus, FileSignature, Phone, BadgeCheck, KanbanSquare } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { Pill, Campo, Erro, Modal, inputCls, btnCls, btnPrimCls, dataBr, dataHoraBr, nivelPontos, brl } from './ui.jsx';
 import {
@@ -262,6 +263,16 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
       )}
 
       {lead && <OndeEsta cfg={cfg} etapa={lead.etapa} />}
+      {lead?.quadro && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <span className="inline-flex items-center gap-1.5">
+            <KanbanSquare size={14} className="shrink-0 text-slate-500" />
+            No quadro {lead.quadro.quadro}: <b>{lead.quadro.coluna}</b>
+            {lead.quadro.espelho && <span className="text-xs text-slate-500">· andam juntos</span>}
+          </span>
+          <Link to={`/tarefas/${lead.quadro.quadro_id}?card=${lead.quadro.card_id}`} className="text-sm font-medium text-nexus-700 hover:underline">Ver o card</Link>
+        </div>
+      )}
       {aviso && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</div>}
       {lead && <CaixaProximaAcao acao={proximaAcao(lead, cfg, admin)} onExecutar={executar} />}
       {lead && <ListaCriterios criterios={criteriosPara(lead, f, cfg)} onExecutar={executar} />}

@@ -44,7 +44,7 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.11', // bump a cada deploy novo (1.11 = Sprint 42E Comercial sem trial)
+    versao: '1.12', // bump a cada deploy novo (1.12 = Sprint 42F quadro e Comercial em espelho)
     sprints_ativas: 'até 34 (Projetos: subtarefas, dependências, campos personalizados, '
       + 'WIP, tipo de coluna, vínculos de negócio, apontamento de horas)',
   });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Archive, Palette, ListChecks, Paperclip, MessageSquare,
   ListTree, Ban, Link2, Clock, SlidersHorizontal, Flag, History, FolderInput,
@@ -16,6 +17,11 @@ import CardVinculos from './CardVinculos.jsx';
 import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
 import { ehCardCliente } from './FichaCliente.jsx';
+
+const ETAPA_COMERCIAL = {
+  prospect: 'Em prospecção', cadencia: 'Em contatos', diagnostico: 'Reunião de apresentação',
+  proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
+};
 import {
   COR_CHIP, CORES, corForte, inputCls, PRIORIDADES, semAcento,
 } from './ui.js';
@@ -85,6 +91,7 @@ export default function ModalCard({
   const [colunasDestino, setColunasDestino] = useState([]);
   const [colunaDestinoId, setColunaDestinoId] = useState('');
   const [movendoSalvando, setMovendoSalvando] = useState(false);
+  const [comercial, setComercial] = useState(null); // Sprint 42F — lead ligado
 
   useEffect(() => {
     api.get('/pessoas')
@@ -98,6 +105,7 @@ export default function ModalCard({
     api.get('/cards/' + cardId)
       .then((r) => {
         const c = r.data;
+        setComercial(c.comercial || null);
         setTitulo(c.titulo);
         setDescricao(c.descricao || '');
         setResponsavelIds((c.responsaveis || []).map((p) => p.id));
@@ -310,6 +318,19 @@ export default function ModalCard({
               Fechar
             </button>
           </div>
+        </div>
+      )}
+
+      {editando && comercial && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+          <span>
+            Ligado ao Comercial: <strong>{ETAPA_COMERCIAL[comercial.etapa] || comercial.etapa}</strong>
+            {comercial.dono_nome ? ' · ' + comercial.dono_nome : ' · na fila'}.
+            {' '}Mover o card muda a etapa lá; título, responsável e contatos andam juntos.
+          </span>
+          <Link to={'/comercial?lead=' + comercial.lead_id} className="shrink-0 rounded border border-indigo-300 bg-white px-2 py-1 font-medium text-indigo-800 hover:bg-indigo-100">
+            Abrir no Comercial
+          </Link>
         </div>
       )}
 

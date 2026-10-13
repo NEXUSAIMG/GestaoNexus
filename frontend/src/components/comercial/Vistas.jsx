@@ -565,6 +565,7 @@ export function VistaControles({ cfg, onMudou }) {
     <div className="grid gap-4 xl:grid-cols-2">
       <NaoContatar cfg={cfg} admin={admin} onMudou={onMudou} />
       <div className="space-y-4">
+        <Espelho cfg={cfg} />
         {cfg.eu?.admin && <Gestores cfg={cfg} />}
         <Rotina cfg={cfg} />
         <Feriados cfg={cfg} admin={admin} />
@@ -643,6 +644,62 @@ function NaoContatar({ cfg, admin, onMudou }) {
 }
 
 /** Quem faz a gestão comercial (checagens, 1:1, metas, arquivar). Só o admin define. */
+/** Sprint 42F — quadro ↔ Comercial em espelho: estado, mapa e liga/desliga (admin). */
+function Espelho({ cfg }) {
+  const [lista, setLista] = useState(null);
+  const [msg, setMsg] = useState('');
+  const admin = !!cfg.eu?.admin;
+  const carregar = () => api.get('/comercial/espelho').then((r) => setLista(r.data)).catch((err) => setMsg(mensagemDeErro(err)));
+  useEffect(() => { carregar(); }, []);
+  async function mudar(q, corpo) {
+    setMsg('');
+    try { await api.put('/comercial/espelho/' + q, corpo); carregar(); } catch (err) { setMsg(mensagemDeErro(err)); }
+  }
+  if (!lista) return null;
+  const nomeEtapa = Object.fromEntries(cfg.etapas.map((e) => [e.k, e.n]));
+  return (
+    <Painel titulo="Quadro e Comercial em espelho" extra={<Pill nivel={lista.some((e) => e.ativo) ? 'ok' : 'line'}>{lista.some((e) => e.ativo) ? 'ligado' : 'desligado'}</Pill>}>
+      {!lista.length && (
+        <p className="text-sm text-slate-500">
+          Nenhum quadro ligado. Para ligar, use <b>Importar → Quadro Kanban</b> e deixe marcado “Manter o quadro e o Comercial em espelho”.
+        </p>
+      )}
+      {lista.map((e) => (
+        <div key={e.quadro_id} className="space-y-2">
+          <p className="text-sm text-slate-700">
+            <b>{e.quadro_nome}</b> · {e.leads_vinculados} lead(s) ligados{e.somente_etiqueta ? ` · só cards com a etiqueta “${e.somente_etiqueta}”` : ''}.
+            {' '}Mover o card muda a etapa aqui; mudar a etapa aqui move o card. Nome, responsável e contatos andam juntos.
+          </p>
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-1.5">Coluna do quadro</th><th className="px-3 py-1.5">Etapa no Comercial</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {e.colunas.map((c) => (
+                  <tr key={c.id}>
+                    <td className="px-3 py-1">{c.nome}</td>
+                    <td className="px-3 py-1 text-slate-600">
+                      {c.etapa === 'ignorar' ? <span className="text-slate-400">fica só no quadro</span> : nomeEtapa[c.etapa] || c.etapa}
+                      {c.etapa === 'ganho' && c.marco != null && <span className="text-xs text-slate-400"> · marco D{c.marco}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {admin && (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={e.ativo} onChange={(x) => mudar(e.quadro_id, { ativo: x.target.checked })} /> Espelho ligado</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={e.criar_cards} disabled={!e.ativo} onChange={(x) => mudar(e.quadro_id, { criar_cards: x.target.checked })} /> Lead novo ganha card</label>
+              <span className="text-xs text-slate-500">Para mudar o mapa, rode a importação do quadro de novo.</span>
+            </div>
+          )}
+        </div>
+      ))}
+      {msg && <p className="text-sm text-red-700">{msg}</p>}
+    </Painel>
+  );
+}
+
 function Gestores({ cfg }) {
   const [sel, setSel] = useState(null);
   const [msg, setMsg] = useState('');

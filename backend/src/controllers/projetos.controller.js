@@ -3,6 +3,7 @@ import { query, pool } from '../config/database.js';
 import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import { podeVerQuadro } from './quadros.controller.js';
+import { espelharCardNoLead } from '../services/comercial.espelho.js';
 
 /**
  * Sprint 34 — Projetos: fundacao.
@@ -317,6 +318,10 @@ export async function definirValorCampo(req, res, next) {
        DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = NOW()`,
       [req.params.id, req.params.campoId, JSON.stringify(valor)],
     );
+
+    // Sprint 42F — telefone, contato, e-mail e cidade do card de um lead
+    // vão para o Comercial (quadro em espelho).
+    await espelharCardNoLead(req.params.id, req.pessoa.id);
 
     res.json({ ok: true, valor });
   } catch (err) { next(err); }

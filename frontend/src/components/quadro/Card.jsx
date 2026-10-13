@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   Calendar, CheckCircle2, MessageSquare, Paperclip, CheckSquare, AlignLeft,
-  Ban, GitBranch, Link2, Clock, ListTree, Check,
+  Ban, GitBranch, Link2, Clock, ListTree, Check, Handshake,
 } from 'lucide-react';
 import {
   COR_CHIP, corForte, formatarPrazo, iniciais, prioridadeDe, formatarMinutos,
@@ -10,6 +10,12 @@ import {
 } from './ui.js';
 import { estiloCapaCard } from '../../constants/kanbanVisual.js';
 import FichaCliente, { ehCardCliente } from './FichaCliente.jsx';
+
+// Sprint 42F — nomes das etapas do Comercial (iguais às colunas da equipe)
+const ETAPA_COMERCIAL = {
+  prospect: 'Em prospecção', cadencia: 'Em contatos', diagnostico: 'Reunião de apresentação',
+  proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
+};
 
 /**
  * Card do board.
@@ -185,6 +191,19 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
       )}
 
       <div className="text-sm font-medium text-slate-900 leading-snug">{card.titulo}</div>
+
+      {card.comercial && (
+        <div
+          className={'mt-1 inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium '
+            + (card.comercial.etapa === 'ganho' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : card.comercial.etapa === 'perdido' ? 'border-slate-200 bg-slate-50 text-slate-500'
+                : 'border-indigo-200 bg-indigo-50 text-indigo-800')}
+          title="Este card está ligado a um lead do Comercial: mover aqui muda a etapa lá, e vice-versa"
+        >
+          <Handshake size={10} className="shrink-0" />
+          <span className="truncate">Comercial · {ETAPA_COMERCIAL[card.comercial.etapa] || card.comercial.etapa}{card.comercial.etapa === 'ganho' && card.comercial.pago ? ' · pago' : ''}</span>
+        </div>
+      )}
 
       {cliente && (
         <FichaCliente

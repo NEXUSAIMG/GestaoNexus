@@ -5,7 +5,7 @@ import {
   agendarReuniao, desfechoReuniao, remarcarReuniao,
   registrarProposta, statusProposta, confirmarPagamento, recompensaIndicacao,
   painel, obterMetas, salvarMetas,
-  importarLista, previaImportarQuadro, importarQuadro, pegarDaFila,
+  importarLista, previaImportarQuadro, importarQuadro, pegarDaFila, listarEspelhos, atualizarEspelho,
 } from '../controllers/comercial.controller.js';
 import {
   listarNaoContatar, incluirNaoContatar, removerNaoContatar,
@@ -14,6 +14,7 @@ import {
 } from '../controllers/comercial-gestao.controller.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
 import { marcarGestorComercial } from '../services/comercial.dados.js';
+import { espelharDepois } from '../services/comercial.espelho.js';
 
 /**
  * Módulo Comercial — Sprint 42 / 42B.
@@ -27,6 +28,8 @@ import { marcarGestorComercial } from '../services/comercial.dados.js';
 const router = Router();
 router.use(autenticar);
 router.use(marcarGestorComercial);
+// Sprint 42F — toda escrita no Comercial é espelhada no quadro (se houver)
+router.use(espelharDepois);
 
 router.get('/config', config);
 router.get('/painel', painel);
@@ -85,5 +88,9 @@ router.delete('/feriados/:data', removerFeriado);
 // Importar quadro Kanban
 router.get('/importar-quadro/previa', exigirAdmin, previaImportarQuadro);
 router.post('/importar-quadro', exigirAdmin, importarQuadro);
+
+// Espelho quadro ↔ Comercial
+router.get('/espelho', listarEspelhos);
+router.put('/espelho/:quadroId', exigirAdmin, atualizarEspelho);
 
 export default router;

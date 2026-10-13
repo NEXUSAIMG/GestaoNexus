@@ -7,7 +7,7 @@ import { query } from '../config/database.js';
 import { AppError, ConflitoError, NaoEncontradoError } from '../utils/errors.js';
 import {
   ETAPAS_ATIVAS, METAS_PADRAO, RESULTADOS_CONECTAM,
-  hojeBR, mesDe, definirFeriados, diasUteisDoMes, montarPainel, situacaoPrazo, pontuacao,
+  hojeBR, mesDe, definirFeriados, diasUteisDoMes, montarPainel, situacaoPrazo, pontuacao, aplicarEtapa,
 } from './comercial.regras.js';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +74,10 @@ export const SELECT_LEAD = `
          l.indicado_por_id, li.nome AS indicado_por_nome, l.recompensa_indicacao_em::text AS recompensa_indicacao_em,
          l.pago_em::text AS pago_em, l.pago_valor::float AS pago_valor, l.pago_fonte, l.pago_referencia,
          l.origem_card_id, l.criado_por_id, l.criado_em, l.atualizado_em,
+         (SELECT json_build_object('card_id', cq.id, 'quadro_id', cq.quadro_id, 'quadro', qq.nome, 'coluna', cc.nome,
+                                   'espelho', EXISTS (SELECT 1 FROM comercial_espelhos e WHERE e.quadro_id = cq.quadro_id AND e.ativo))
+            FROM cards cq JOIN quadros qq ON qq.id = cq.quadro_id JOIN colunas cc ON cc.id = cq.coluna_id
+           WHERE cq.id = l.origem_card_id AND cq.arquivado_em IS NULL) AS quadro,
          to_char(l.atualizado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS atualizado_dia,
          COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text)
                      FROM comercial_toques t
@@ -485,3 +489,53 @@ export async function placar(de, ate) {
         ? Math.round((r.reunioes_realizadas / (r.reunioes_realizadas + r.reunioes_faltou)) * 1000) / 10 : null,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Criação de lead (cadastro, importações e espelho do quadro)
+// ---------------------------------------------------------------------------
+export function novoProtocolo(hoje = hojeBR()) {
+  return 'SC-' + hoje.replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
+}
+
+
+export async function inserirLead(client, dados, pessoaId, extras = {}) {
+  const hoje = hojeBR();
+  const etapa = dados.etapa || 'prospect';
+  const base = { etapa: null, marcos: {}, cadencia_inicio: null, implantacao_inicio: null };
+  // Importação: etapas anteriores datadas na criação do card e a etapa atual
+  // na entrada da coluna — senão um "Concluído" antigo contaria como ganho do mês.
+  const mud = aplicarEtapa(base, etapa, extras.data_marcos || hoje);
+  if (extras.etapa_desde) {
+    if (mud.marcos[etapa]) mud.marcos[etapa] = extras.etapa_desde;
+    if (etapa === 'cadencia') mud.cadencia_inicio = extras.etapa_desde;
+    if (etapa === 'ganho') mud.implantacao_inicio = extras.etapa_desde;
+  }
+  const { rows } = await client.query(
+    `INSERT INTO comercial_leads
+       (protocolo, nome, segmento, cidade, uf, contato, telefone, email, cns, cnpj, dono_id,
+        cartorio_id, etapa, etapa_desde, marcos, origem, campanha, cadencia_inicio,
+        implantacao_inicio, sinais, diagnostico, meta_sucesso, valor_mensal, motivo_perda, motivo_perda_obs,
+        proximo_passo, proxima_data, notas, indicado_por_id, origem_card_id, criado_por_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20::jsonb,$21::jsonb,
+             $22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+     RETURNING id`,
+    [
+      novoProtocolo(hoje), dados.nome, dados.segmento ?? null, dados.cidade ?? null,
+      dados.uf ?? null, dados.contato ?? null, dados.telefone ?? null, dados.email ?? null,
+      soDigitos(dados.cns), soDigitos(dados.cnpj),
+      dados.dono_id ?? null, dados.cartorio_id ?? null, etapa, extras.etapa_desde || hoje,
+      JSON.stringify(mud.marcos), dados.origem, dados.campanha ?? null,
+      mud.cadencia_inicio ?? null, mud.implantacao_inicio ?? null, JSON.stringify(dados.sinais || {}),
+      JSON.stringify(dados.diagnostico || {}), dados.meta_sucesso ?? null,
+      dados.valor_mensal ?? null, etapa === 'perdido' ? dados.motivo_perda : null,
+      dados.motivo_perda_obs ?? null, dados.proximo_passo ?? null, dados.proxima_data ?? null,
+      dados.notas ?? null, dados.indicado_por_id ?? null, extras.origem_card_id ?? null, pessoaId,
+    ],
+  );
+  await client.query(
+    `INSERT INTO comercial_movimentos (lead_id, de_etapa, para_etapa, pessoa_id, justificativa) VALUES ($1, NULL, $2, $3, $4)`,
+    [rows[0].id, etapa, pessoaId, extras.justificativa ?? null],
+  );
+  return rows[0].id;
+}
+

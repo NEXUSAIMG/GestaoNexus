@@ -11,6 +11,49 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42F — Quadro e Comercial em espelho (versão 1.12)
+
+O quadro "Atividade Comercial" e o módulo Comercial passam a andar juntos,
+nos dois sentidos. A equipe pode continuar no quadro que conhece; a gestão
+continua com os controles do Comercial.
+
+**Quadro → Comercial**
+- Mover o card muda a etapa do lead, na mesma transação. Se o Comercial não
+  deixa (portão pendente, voltar etapa, desfazer venda), o movimento é
+  recusado com 409 e o quadro mostra o que falta + "Abrir no Comercial".
+- Colunas da implantação viram marcos: entrar em "Em Desenvolvimento" marca
+  onboarding e treinamento como feitos; "Pós venda" marca até a checagem D15.
+- Perdido pela coluna recebe o motivo pelo nome (Fora do funil, Desistência).
+- Card novo numa coluna do funil vira lead (respeitando a etiqueta de venda,
+  em quadro misto). Card criado em Ganho/Perdido não vira lead (comentário no
+  card explica). Card criado além de "Reunião de apresentação" entra nela.
+- Título, responsável e campos Telefone/WhatsApp, Representante/Oficial,
+  E-mail e Cidade/UF vão para o lead (com histórico "pelo quadro").
+
+**Comercial → quadro**
+- Toda escrita no Comercial é espelhada antes da resposta: etapa mudou → o
+  card vai para a coluna da etapa; marco feito → o card anda na implantação
+  (só para a frente); perdido → coluna do motivo.
+- Lead cadastrado no Comercial ganha card (opção "Lead novo ganha card").
+- Nome, responsável e contatos do lead vão para o card.
+
+**Telas**
+- Selo "Comercial · etapa" no card; faixa "Ligado ao Comercial" no card aberto.
+- Ficha do lead mostra a coluna atual no quadro e "Ver o card".
+- Importar quadro: "Manter o quadro e o Comercial em espelho" (liga e grava o
+  mapa coluna → etapa; rodar de novo ajusta o mapa).
+- Controles: painel "Quadro e Comercial em espelho" (mapa, liga/desliga).
+
+**Arquivos:** `038_comercial_espelho_quadro.sql`, `services/comercial.espelho.js`
+(novo), `cards.controller.js`, `projetos.controller.js`, `quadros.controller.js`,
+`comercial.controller.js`, `comercial.dados.js` (inserirLead foi para cá),
+`Quadro.jsx`, `ModalComercial.jsx` (novo), `Card.jsx`, `ModalCard.jsx`,
+`LeadDrawer.jsx`, `Importar.jsx`, `Vistas.jsx`, `Comercial.jsx`, `guia.js`.
+
+**Testar:** `node testes/t-comercial-espelho.mjs` (26 verificações).
+
+---
+
 ## Sprint 42E — Comercial sem trial, com os nomes do quadro da equipe
 
 Decisão da empresa: não há trial. A prova é a reunião de apresentação (com

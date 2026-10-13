@@ -11,8 +11,11 @@ import {
 import {
   SELECT_LEAD, enriquecer, carregarLead, reunioesDoLead, propostasDoLead,
   metasDoMes, pessoasAtivas, carregarFeriados, verificarBloqueios, exigirContatoLiberado,
-  calcularPainel, soDigitos, prepararBloqueiosLote,
+  calcularPainel, soDigitos, prepararBloqueiosLote, inserirLead,
 } from '../services/comercial.dados.js';
+import {
+  normalizar, palpiteEtapa, palpiteMotivo, palpiteMarco, salvarEspelho,
+} from '../services/comercial.espelho.js';
 
 /**
  * Módulo Comercial — Sprint 42 (funil) + 42B (controle minucioso).
@@ -162,6 +165,13 @@ const importarQuadroSchema = z.object({
   origem_padrao: z.enum(ORIGENS_CHAVES),
   campanha: txt(120),
   motivo_perda_padrao: z.enum(MOTIVOS_PERDA).optional().default('Outro'),
+  // Sprint 42F — manter quadro e Comercial em espelho depois de importar
+  espelhar: z.boolean().optional().default(true),
+  criar_cards: z.boolean().optional().default(true),
+});
+const espelhoSchema = z.object({
+  ativo: z.boolean().optional(),
+  criar_cards: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -193,10 +203,6 @@ function checarDono(req, atual, novo) {
   throw new AppError('Este lead é de outra pessoa. Para trocar o responsável, fale com a gestão comercial.', 403, 'dono_negado');
 }
 
-function novoProtocolo(hoje = hojeBR()) {
-  return 'SC-' + hoje.replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase();
-}
-
 function validarFechamento(etapa, dados) {
   if (etapa === 'perdido' && !dados.motivo_perda) {
     throw new AppError('Escolha o motivo da perda: é o que mostra o que mudar no discurso.', 400, 'motivo_obrigatorio');
@@ -207,47 +213,6 @@ function validarFechamento(etapa, dados) {
 }
 
 const paraTexto = (v) => (v == null ? null : typeof v === 'object' ? JSON.stringify(v) : String(v));
-
-async function inserirLead(client, dados, pessoaId, extras = {}) {
-  const hoje = hojeBR();
-  const etapa = dados.etapa || 'prospect';
-  const base = { etapa: null, marcos: {}, cadencia_inicio: null, implantacao_inicio: null };
-  // Importação: etapas anteriores datadas na criação do card e a etapa atual
-  // na entrada da coluna — senão um "Concluído" antigo contaria como ganho do mês.
-  const mud = aplicarEtapa(base, etapa, extras.data_marcos || hoje);
-  if (extras.etapa_desde) {
-    if (mud.marcos[etapa]) mud.marcos[etapa] = extras.etapa_desde;
-    if (etapa === 'cadencia') mud.cadencia_inicio = extras.etapa_desde;
-    if (etapa === 'ganho') mud.implantacao_inicio = extras.etapa_desde;
-  }
-  const { rows } = await client.query(
-    `INSERT INTO comercial_leads
-       (protocolo, nome, segmento, cidade, uf, contato, telefone, email, cns, cnpj, dono_id,
-        cartorio_id, etapa, etapa_desde, marcos, origem, campanha, cadencia_inicio,
-        implantacao_inicio, sinais, diagnostico, meta_sucesso, valor_mensal, motivo_perda, motivo_perda_obs,
-        proximo_passo, proxima_data, notas, indicado_por_id, origem_card_id, criado_por_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20::jsonb,$21::jsonb,
-             $22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
-     RETURNING id`,
-    [
-      novoProtocolo(hoje), dados.nome, dados.segmento ?? null, dados.cidade ?? null,
-      dados.uf ?? null, dados.contato ?? null, dados.telefone ?? null, dados.email ?? null,
-      soDigitos(dados.cns), soDigitos(dados.cnpj),
-      dados.dono_id ?? null, dados.cartorio_id ?? null, etapa, extras.etapa_desde || hoje,
-      JSON.stringify(mud.marcos), dados.origem, dados.campanha ?? null,
-      mud.cadencia_inicio ?? null, mud.implantacao_inicio ?? null, JSON.stringify(dados.sinais || {}),
-      JSON.stringify(dados.diagnostico || {}), dados.meta_sucesso ?? null,
-      dados.valor_mensal ?? null, etapa === 'perdido' ? dados.motivo_perda : null,
-      dados.motivo_perda_obs ?? null, dados.proximo_passo ?? null, dados.proxima_data ?? null,
-      dados.notas ?? null, dados.indicado_por_id ?? null, extras.origem_card_id ?? null, pessoaId,
-    ],
-  );
-  await client.query(
-    `INSERT INTO comercial_movimentos (lead_id, de_etapa, para_etapa, pessoa_id, justificativa) VALUES ($1, NULL, $2, $3, $4)`,
-    [rows[0].id, etapa, pessoaId, extras.justificativa ?? null],
-  );
-  return rows[0].id;
-}
 
 // ---------------------------------------------------------------------------
 // Config, leitura
@@ -1002,31 +967,6 @@ export async function pegarDaFila(req, res, next) {
 // ---------------------------------------------------------------------------
 // Importador do quadro Kanban ("Atividade Comercial") — só admin
 // ---------------------------------------------------------------------------
-const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-
-/** Palpite de etapa pelo nome da coluna (o admin confirma na tela). */
-function palpiteEtapa(nomeColuna, tipoColuna) {
-  const n = normalizar(nomeColuna);
-  if (/fora do funil|descart|sem interesse|negativ|perd|desist|cancel|nao fech|recus/.test(n)) return 'perdido';
-  // Interino que depende da corregedoria para contratar: decisão pendente
-  if (/corregedor/.test(n)) return 'corregedoria';
-  // Depois da assinatura: onboarding, treinamento, desenvolvimento, ativação, corregedoria, pós-venda
-  if (/ganh|fechad|assin|onboard|treinament|desenvolv|ativa|implant|pos.?venda/.test(n)) return 'ganho';
-  if (/aguardando retorno|retorno|propost|negocia/.test(n)) return 'proposta';
-  if (/diagn|reuni|apresent|demo/.test(n)) return 'diagnostico';
-  if (/cadenc|contat|follow|andamento/.test(n)) return 'cadencia';
-  if (tipoColuna === 'concluida') return 'ganho';
-  return 'prospect';
-}
-
-/** Motivo de perda pelo nome da coluna; senão, o padrão escolhido na tela. */
-function palpiteMotivo(nomeColuna, padrao) {
-  const n = normalizar(nomeColuna);
-  if (/desist/.test(n)) return 'Desistência (usou e desistiu)';
-  if (/fora do funil|sem interesse|negativ|recus/.test(n)) return 'Fora do funil (sem interesse)';
-  return padrao;
-}
-
 function palpiteOrigem(texto, padrao) {
   const n = normalizar(texto);
   if (!n) return padrao;
@@ -1075,8 +1015,14 @@ export async function previaImportarQuadro(req, res, next) {
         GROUP BY qe.nome ORDER BY cards DESC`,
       [quadroId],
     );
+    const { rows: esp } = await query(`SELECT ativo, mapa, criar_cards, somente_etiqueta FROM comercial_espelhos WHERE quadro_id = $1`, [quadroId]);
     res.json({
-      colunas: colunas.map((c) => ({ ...c, etapa_sugerida: palpiteEtapa(c.nome, c.tipo) })),
+      espelho: esp[0] || null,
+      colunas: colunas.map((c) => ({
+        ...c,
+        etapa_sugerida: esp[0]?.mapa?.[c.id] || palpiteEtapa(c.nome, c.tipo),
+        marco: palpiteMarco(c.nome),
+      })),
       ja_importados: ja[0].n,
       campos: campos.map((c) => c.nome),
       etiquetas,
@@ -1168,20 +1114,75 @@ export async function importarQuadro(req, res, next) {
       const bloq = await verificarBloqueios(dados, { soVerificar: true, client });
       if (bloq && bloq.codigo !== 'duplicado') { bloqueados++; continue; }
       if (bloq && bloq.codigo === 'duplicado') { pulados++; continue; }
-      await inserirLead(client, dados, req.pessoa.id, {
+      const leadId = await inserirLead(client, dados, req.pessoa.id, {
         origem_card_id: c.id, etapa_desde: c.coluna_dia || hoje, data_marcos: c.criado_dia || hoje,
         justificativa: 'importado do quadro Kanban',
       });
+      // Implantação: card em "Em desenvolvimento" já fez onboarding e treinamento
+      const marco = etapa === 'ganho' ? palpiteMarco(nomeColuna.get(c.coluna_id)) : null;
+      for (const m of MARCOS_IMPLANTACAO.filter((x) => marco != null && x.d < marco)) {
+        await client.query(
+          `INSERT INTO comercial_toques (lead_id, tipo, dia, nota, data, pessoa_id) VALUES ($1,'marco',$2,$3,$4,$5)`,
+          [leadId, m.d, 'importado do quadro (coluna "' + nomeColuna.get(c.coluna_id) + '")', hoje, req.pessoa.id],
+        );
+      }
       criados++;
+    }
+    if (d.espelhar) {
+      await salvarEspelho(client, d.quadro_id, {
+        mapa: d.mapa, ativo: true, criar_cards: d.criar_cards, origem_padrao: d.origem_padrao,
+        somente_etiqueta: d.somente_etiqueta || null,
+      }, req.pessoa.id);
     }
     await client.query('COMMIT');
     await registrarAcao({
       pessoa_acesso_id: req.pessoa.id, acao: 'comercial.importar_quadro',
-      detalhes: { quadro_id: d.quadro_id, criados, pulados, ignorados, bloqueados }, req,
+      detalhes: { quadro_id: d.quadro_id, criados, pulados, ignorados, bloqueados, espelho: d.espelhar }, req,
     });
-    res.status(201).json({ criados, pulados, ignorados, bloqueados });
+    res.status(201).json({ criados, pulados, ignorados, bloqueados, espelho: d.espelhar });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally { client.release(); }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 42F — espelho quadro ↔ Comercial
+// ---------------------------------------------------------------------------
+
+/** GET /comercial/espelho — quadros em espelho, com o mapa legível */
+export async function listarEspelhos(req, res, next) {
+  try {
+    const { rows } = await query(
+      `SELECT e.quadro_id, q.nome AS quadro_nome, e.ativo, e.criar_cards, e.somente_etiqueta, e.mapa, e.atualizado_em,
+              (SELECT count(*)::int FROM comercial_leads l JOIN cards c ON c.id = l.origem_card_id
+                WHERE c.quadro_id = e.quadro_id AND l.arquivado_em IS NULL) AS leads_vinculados,
+              COALESCE((SELECT json_agg(json_build_object('id', col.id, 'nome', col.nome) ORDER BY col.ordem)
+                          FROM colunas col WHERE col.quadro_id = e.quadro_id AND col.arquivada_em IS NULL
+                           AND col.tipo <> 'sustentacao'), '[]'::json) AS colunas
+         FROM comercial_espelhos e JOIN quadros q ON q.id = e.quadro_id
+        ORDER BY e.atualizado_em DESC`,
+    );
+    res.json(rows.map((r) => ({
+      ...r,
+      colunas: (r.colunas || []).map((c) => ({ ...c, etapa: r.mapa?.[c.id] || 'ignorar', marco: palpiteMarco(c.nome) })),
+    })));
+  } catch (err) { next(err); }
+}
+
+/** PUT /comercial/espelho/:quadroId {ativo?, criar_cards?} — só admin */
+export async function atualizarEspelho(req, res, next) {
+  try {
+    const d = espelhoSchema.parse(req.body || {});
+    const sets = []; const vals = [req.params.quadroId];
+    if (d.ativo !== undefined) { vals.push(d.ativo); sets.push(`ativo = $${vals.length}`); }
+    if (d.criar_cards !== undefined) { vals.push(d.criar_cards); sets.push(`criar_cards = $${vals.length}`); }
+    if (!sets.length) return res.json({ ok: true });
+    const { rowCount } = await query(
+      `UPDATE comercial_espelhos SET ${sets.join(', ')}, atualizado_em = now() WHERE quadro_id = $1`, vals,
+    );
+    if (!rowCount) throw new NaoEncontradoError('Este quadro não está em espelho. Ative pela importação do quadro.');
+    await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.espelho', detalhes: { quadro_id: req.params.quadroId, ...d }, req });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 }

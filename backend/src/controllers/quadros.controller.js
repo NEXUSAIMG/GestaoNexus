@@ -144,7 +144,12 @@ const CARD_BOARD_SELECT = `
               JOIN pessoas_acesso pa ON pa.id = cr.pessoa_id
              WHERE cr.card_id = c.id),
            '[]'::json
-         ) AS responsaveis
+         ) AS responsaveis,
+         -- Sprint 42F — card de um lead do Comercial (quadro em espelho)
+         (SELECT json_build_object('lead_id', l.id, 'etapa', l.etapa, 'pago', l.pago_em IS NOT NULL)
+            FROM comercial_leads l
+           WHERE l.origem_card_id = c.id AND l.arquivado_em IS NULL
+           LIMIT 1) AS comercial
     FROM cards c
     LEFT JOIN pessoas_acesso p ON p.id = c.responsavel_id
 `;

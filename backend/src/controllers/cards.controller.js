@@ -16,6 +16,7 @@ import { bloqueadoresAbertos, criariaCicloHierarquia } from './projetos.controll
 // Sprint 36 — motor de automação
 import { dispararEmBackground } from '../services/automacoes.service.js';
 // Sprint 38.1 — tempo real
+import { planejarMovimento, aplicarMovimento, leadDoCardNovo, espelharCardNoLead } from '../services/comercial.espelho.js';
 import { publicarMudanca } from '../services/realtime.service.js';
 
 /**
@@ -345,7 +346,14 @@ export async function obter(req, res, next) {
     const { pode } = await podeVerQuadro(req.pessoa.id, isAdmin, cR.rows[0].quadro_id);
     if (!pode) throw new NaoAutorizadoError('Sem acesso.');
 
-    res.json(serializar(cR.rows[0]));
+    // Sprint 42F — lead do Comercial ligado a este card (se houver)
+    const { rows: lr } = await query(
+      `SELECT l.id AS lead_id, l.etapa, l.etapa_desde::text AS etapa_desde, pd.nome AS dono_nome
+         FROM comercial_leads l LEFT JOIN pessoas_acesso pd ON pd.id = l.dono_id
+        WHERE l.origem_card_id = $1 AND l.arquivado_em IS NULL LIMIT 1`,
+      [req.params.id],
+    );
+    res.json({ ...serializar(cR.rows[0]), comercial: lr[0] || null });
   } catch (err) { next(err); }
 }
 
@@ -483,6 +491,9 @@ export async function criar(req, res, next) {
       detalhes: { card_id: cardId, quadro_id: quadroId, titulo: d.titulo },
       req,
     });
+
+    // Sprint 42F — card novo num quadro em espelho vira lead no Comercial.
+    await leadDoCardNovo(cardId, req.pessoa.id);
 
     // Card no formato do board: serve tanto pra notificacao quanto pra
     // resposta que o front mescla localmente (sem refazer o quadro todo).
@@ -631,9 +642,21 @@ export async function atualizar(req, res, next) {
       req,
     });
 
+    // Sprint 42F — ganhou a etiqueta de venda (quadro misto) → vira lead (idempotente)
+    if (d.etiqueta_ids !== undefined) await leadDoCardNovo(req.params.id, req.pessoa.id);
+
     // Card no formato do board: serve pra notificacao e pra resposta que o
     // front mescla localmente (sem refazer o quadro todo).
     const card = await montarCardDoQuadro(req.params.id);
+
+    // Sprint 42F — título do card de um lead vai para o Comercial; o
+    // responsável só quando o PRINCIPAL foi trocado (o modal sempre reenvia
+    // a lista inteira, e um lead da fila não deve ganhar dono por isso).
+    if (d.titulo !== undefined || veio) {
+      await espelharCardNoLead(req.params.id, req.pessoa.id, {
+        responsavel: veio && (card?.responsavel_id ?? null) !== (responsavelAnterior ?? null),
+      });
+    }
 
     // Notifica se o RESPONSÁVEL PRINCIPAL mudou (e veio mudança no payload)
     if (
@@ -729,6 +752,11 @@ export async function mover(req, res, next) {
       }
     }
 
+    // Sprint 42F — card de um lead (quadro em espelho com o Comercial):
+    // o Comercial decide se a etapa pode mudar. Recusa vem como 409 com o
+    // que falta, ANTES de mexer no card.
+    const planoComercial = mudouDeColuna ? await planejarMovimento(req.params.id, coluna_id) : null;
+
     await client.query('BEGIN');
 
     const novaOrdem = await calcularOrdemCard(client, coluna_id, posicao, req.params.id);
@@ -806,6 +834,9 @@ export async function mover(req, res, next) {
       }
     }
 
+    // Sprint 42F — mesma transação: card e lead mudam juntos ou nenhum muda.
+    await aplicarMovimento(client, planoComercial, req.pessoa.id);
+
     await client.query('COMMIT');
 
     registrarAcao({
@@ -841,6 +872,9 @@ export async function mover(req, res, next) {
       // Sprint 34 — avisos (nao sao erro; a UI mostra um toast)
       wip_estourado: wipEstourado,
       concluido: concluiAgora,
+      comercial: planoComercial
+        ? { lead_id: planoComercial.leadId, etapa: planoComercial.etapa, marcos: planoComercial.marcos }
+        : null,
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

@@ -135,6 +135,9 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
   const [etiqueta, setEtiqueta] = useState('');
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Sprint 42F — quadro e Comercial em espelho depois de importar
+  const [espelhar, setEspelhar] = useState(true);
+  const [criarCards, setCriarCards] = useState(true);
 
   useEffect(() => {
     api.get('/comercial/importar-quadro/previa').then((r) => {
@@ -150,27 +153,28 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
       setPrevia(r.data);
       setMapa(Object.fromEntries(r.data.colunas.map((c) => [c.id, c.etapa_sugerida])));
       const cli = (r.data.etiquetas || []).find((e) => e.nome.trim().toLowerCase() === 'cliente');
-      setEtiqueta(cli ? cli.nome : '');
+      setEtiqueta(r.data.espelho ? (r.data.espelho.somente_etiqueta || '') : (cli ? cli.nome : ''));
+      if (r.data.espelho) { setEspelhar(!!r.data.espelho.ativo); setCriarCards(!!r.data.espelho.criar_cards); }
     }).catch((err) => setMsg(mensagemDeErro(err)));
   }, [quadroId]);
 
   async function importar() {
     setEnviando(true); setMsg('');
     try {
-      const r = await api.post('/comercial/importar-quadro', { quadro_id: quadroId, mapa, origem_padrao: origem, campanha: campanha || null, somente_etiqueta: etiqueta || null }, { timeout: 120_000 });
-      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s); ${r.data.bloqueados || 0} bloqueado(s) (não contatar ou já cliente).`);
+      const r = await api.post('/comercial/importar-quadro', { quadro_id: quadroId, mapa, origem_padrao: origem, campanha: campanha || null, somente_etiqueta: etiqueta || null, espelhar, criar_cards: criarCards }, { timeout: 120_000 });
+      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s); ${r.data.bloqueados || 0} bloqueado(s) (não contatar ou já cliente).${r.data.espelho ? ' Quadro e Comercial agora andam juntos.' : ''}`);
     } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
   }
 
   return (
-    <Modal titulo="Importar cards do quadro Kanban" onFechar={onFechar} rodape={<>
+    <Modal titulo="Importar e ligar o quadro Kanban" onFechar={onFechar} rodape={<>
       <button type="button" className={btnCls} onClick={onFechar}>Cancelar</button>
       <button type="button" className={btnPrimCls} onClick={importar} disabled={enviando || !previa}>{enviando ? 'Importando…' : 'Importar'}</button>
     </>}>
       <p className="text-sm text-slate-600">
         Cada card vira um cartório no funil. Nome = título; responsável = primeiro responsável do card; Cidade/UF, E-mail, Telefone,
         Representante e Origem vêm dos campos personalizados; Termômetro, Faturamento e descrição vão para as anotações.
-        O quadro não é alterado. Pode rodar de novo: card já importado é pulado.
+        Pode rodar de novo: card já importado é pulado (é também como se ajusta o mapa do espelho).
       </p>
       <Campo rotulo="Quadro">
         <select className={inputCls} value={quadroId} onChange={(e) => setQuadroId(e.target.value)}>
@@ -187,7 +191,7 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
               <tbody className="divide-y divide-slate-100">
                 {previa.colunas.map((c) => (
                   <tr key={c.id}>
-                    <td className="px-3 py-1.5">{c.nome}</td>
+                    <td className="px-3 py-1.5">{c.nome}{mapa[c.id] === 'ganho' && c.marco != null && <span className="block text-[11px] text-slate-500">implantação: marco D{c.marco}</span>}</td>
                     <td className="px-3 py-1.5 font-mono">{c.cards}</td>
                     <td className="px-3 py-1.5">
                       <select className={inputCls} value={mapa[c.id] || 'ignorar'} onChange={(e) => setMapa({ ...mapa, [c.id]: e.target.value })}>
@@ -213,6 +217,18 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
               </select>
             </Campo>
             <Campo rotulo="Campanha (opcional)"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} /></Campo>
+          </div>
+          <div className="space-y-2 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950">
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-0.5" checked={espelhar} onChange={(e) => setEspelhar(e.target.checked)} />
+              <span><b>Manter o quadro e o Comercial em espelho.</b> Mover o card muda a etapa no Comercial (respeitando o que cada etapa exige) e mudar a etapa no Comercial move o card. Nome, responsável e contatos ficam iguais nos dois. Card novo numa coluna mapeada vira lead{etiqueta ? ` (só com a etiqueta “${etiqueta}”)` : ''}. Nas colunas da implantação, entrar na coluna marca os marcos anteriores.</span>
+            </label>
+            {espelhar && (
+              <label className="flex items-start gap-2 pl-6">
+                <input type="checkbox" className="mt-0.5" checked={criarCards} onChange={(e) => setCriarCards(e.target.checked)} />
+                <span>Lead cadastrado no Comercial também ganha um card no quadro.</span>
+              </label>
+            )}
           </div>
           <p className="text-xs text-slate-500">"Em prospecção" entra sem responsável, na fila: a equipe pega em lotes em Hoje. Perdido recebe o motivo pelo nome da coluna (“Fora do funil” = Sem interesse; “Desistência” = Desistiu depois de usar), senão “Outro”. Ganho entra sem valor e já em implantação — completem no funil. As datas vêm do card, então ganhos antigos não contam como ganhos deste mês.</p>
         </>

@@ -19,6 +19,7 @@ import ModalSprints from '../components/quadro/ModalSprints.jsx';
 import ModalSustentacao from '../components/quadro/ModalSustentacao.jsx';
 import ModalArquivados from '../components/quadro/ModalArquivados.jsx';
 import ModalBloqueadores from '../components/quadro/ModalBloqueadores.jsx';
+import ModalComercial from '../components/quadro/ModalComercial.jsx';
 import { estiloFundoQuadro } from '../constants/kanbanVisual.js';
 import { HeaderInstancia, ModalEscolherSaida } from '../components/quadro/Instancia.jsx';
 import Metricas from '../components/quadro/Metricas.jsx';
@@ -87,6 +88,7 @@ export default function Quadro() {
   const [novoCardEm, setNovoCardEm] = useState(null);
   const [cardAberto, setCardAberto] = useState(null);
   const [bloqueio, setBloqueio] = useState(null); // { dados, tentativa, snapshot }
+  const [recusaComercial, setRecusaComercial] = useState(null); // Sprint 42F
   const [aviso, setAviso] = useState(null); // toast de WIP
 
   const [aba, setAba] = useState('kanban');
@@ -272,6 +274,12 @@ export default function Quadro() {
     } catch (err) {
       const status = err?.response?.status;
       const detalhes = err?.response?.data?.detalhes;
+      // Sprint 42F — card de lead: o Comercial recusou a mudança de etapa
+      if (status === 409 && detalhes?.comercial) {
+        setQuadro(snapshot);
+        setRecusaComercial(detalhes);
+        return;
+      }
       if (status === 409 && detalhes?.pode_forcar) {
         // Mantém o preview otimista na tela enquanto a pessoa decide.
         setBloqueio({
@@ -799,6 +807,10 @@ export default function Quadro() {
             await enviarMover(cardId, colunaId, posicao, snap, true);
           }}
         />
+      )}
+
+      {recusaComercial && (
+        <ModalComercial dados={recusaComercial} onFechar={() => setRecusaComercial(null)} />
       )}
 
       {modalDecisao && (
