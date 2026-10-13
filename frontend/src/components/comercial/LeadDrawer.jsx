@@ -184,6 +184,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
     else if (tipo === 'proposta') setModal({ tipo: 'proposta' });
     else if (tipo === 'pagamento') setModal({ tipo: 'pagamento' });
     else if (tipo === 'foco') focar(a);
+    else if (tipo === 'semresposta') salvar({ etapa: 'perdido', motivo_perda: 'Fora do funil (sem resposta)' }); // 42K
     else if (tipo === 'etapa') {
       setF({ ...f, etapa: a });
       if (a === 'perdido') focar('campo-motivo');

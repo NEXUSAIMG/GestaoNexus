@@ -76,7 +76,7 @@ export const STATUS_MKT = {
 export const MOTIVOS_PERDA = [
   'Preço', 'Sem dor', 'Sem decisor', 'Escolheu concorrente',
   'Sem tempo para implantar', 'Problema técnico', 'Sumiu',
-  'Fora do funil (sem interesse)', 'Desistência (usou e desistiu)', 'Outro',
+  'Fora do funil (sem interesse)', 'Fora do funil (sem resposta)', 'Desistência (usou e desistiu)', 'Outro',
 ];
 
 // Sprint 42J — o 1º contato é o e-mail de apresentação (Ayio, a empresa do
@@ -103,7 +103,7 @@ export const RETORNO = [
   { d: 7, canal: 'WhatsApp',           acao: 'Encerramento: "Vou entender que agora não é o momento e encerro por aqui. Se mudar, é só me chamar."' },
 ];
 // Perdido por estes motivos volta a ser contatado em 90 dias
-export const MOTIVOS_VOLTAM = ['Sumiu', 'Sem tempo para implantar'];
+export const MOTIVOS_VOLTAM = ['Sumiu', 'Sem tempo para implantar', 'Fora do funil (sem resposta)'];
 export const DIAS_PARA_VOLTAR = 90;
 // Tentativas mínimas antes de "Sumiu" em reunião / corregedoria
 export const TENTATIVAS_MINIMAS = 3;
@@ -290,9 +290,23 @@ export function situacaoPrazo(l, hoje = hojeBR()) {
   return { dias, sla: e.sla, nivel };
 }
 
+// Sprint 42K — 3 contatos da cadência sem nenhuma resposta: o cartório sai do
+// funil ("Fora do funil (sem resposta)") e volta a ser contatado em 90 dias.
+export const TENTATIVAS_SEM_RESPOSTA = 3;
+export const MOTIVO_SEM_RESPOSTA = 'Fora do funil (sem resposta)';
+
+/** Em contatos, com 3 ou mais toques da cadência e nenhuma conexão? */
+export function foraDoFunilDevido(l) {
+  if (l.etapa !== 'cadencia') return null;
+  const feitos = Object.keys(l.toques_cadencia || {}).length;
+  if (feitos < TENTATIVAS_SEM_RESPOSTA || Number(l.conexoes_na_etapa || 0) > 0) return null;
+  return { tentativas: feitos };
+}
+
 /** Próximo toque de cadência devido (ou null). l.toques_cadencia = {dia: data} */
 export function toqueDevido(l, hoje = hojeBR()) {
   if (l.etapa !== 'cadencia' || !l.cadencia_inicio) return null;
+  if (foraDoFunilDevido(l)) return null; // 42K: 3 sem resposta → sai do funil, não insiste mais
   const feitos = l.toques_cadencia || {};
   for (const c of CADENCIA) {
     if (feitos[c.d]) continue;
@@ -327,6 +341,15 @@ export function retornoDevido(l, hoje = hojeBR()) {
  * cartório: não têm portão.
  */
 export function pendenciasPerda(l, motivo) {
+  if (motivo === MOTIVO_SEM_RESPOSTA) {
+    // 42K: "Fora do funil (sem resposta)" só depois de 3 contatos sem resposta
+    const n = ['prospect', 'cadencia'].includes(l.etapa)
+      ? Object.keys(l.toques_cadencia || {}).length
+      : Number(l.toques_na_etapa || 0);
+    if (n < TENTATIVAS_SEM_RESPOSTA) return [`pelo menos ${TENTATIVAS_SEM_RESPOSTA} contatos antes de "Fora do funil (sem resposta)" (feitos ${n})`];
+    if (Number(l.conexoes_na_etapa || 0) > 0) return ['o cartório já respondeu nesta etapa: escolha o motivo que ele deu (Sem interesse, Preço, Sem tempo...) ou siga a cadência'];
+    return [];
+  }
   if (motivo !== 'Sumiu') return [];
   if (['prospect', 'cadencia'].includes(l.etapa)) {
     const feitos = CADENCIA.filter((c) => (l.toques_cadencia || {})[c.d]).length;
@@ -444,11 +467,12 @@ export function montarPainel({
 
   // --- Hoje
   const toques = []; const marcos = []; const proximos = []; const parados = [];
-  const retornos = []; const voltam = [];
+  const retornos = []; const voltam = []; const foraFunil = [];
   for (const l of leads) {
     if (l.bloqueado_nc) continue; // na lista de não contatar: some das filas
     const t = toqueDevido(l, hoje); if (t) toques.push({ lead: resumo(l), ...t });
     const r = retornoDevido(l, hoje); if (r) retornos.push({ lead: resumo(l), ...r });
+    const ff = foraDoFunilDevido(l); if (ff) foraFunil.push({ lead: resumo(l), ...ff });
     // Perdido por "Sumiu"/"Sem tempo" volta a ser contatado depois de 90 dias
     if (l.etapa === 'perdido' && MOTIVOS_VOLTAM.includes(l.motivo_perda) && l.proxima_data && l.proxima_data <= hoje) {
       voltam.push({ lead: resumo(l), motivo: l.motivo_perda, perdido_em: l.marcos?.perdido || null });
@@ -532,7 +556,8 @@ export function montarPainel({
     const conexoes = meusToques.filter((t) => RESULTADOS_CONECTAM.includes(t.resultado)).length;
     const pendentes = toques.filter((x) => x.lead.dono_id === p.id).length
       + marcos.filter((x) => x.lead.dono_id === p.id).length
-      + retornos.filter((x) => x.lead.dono_id === p.id).length;
+      + retornos.filter((x) => x.lead.dono_id === p.id).length
+      + foraFunil.filter((x) => x.lead.dono_id === p.id).length;
     const novos = meus.filter((l) => l.marcos?.cadencia === hoje).length;
     const mp = metaPessoa(metas, p.id);
     const total = feitos + pendentes;
@@ -588,7 +613,7 @@ export function montarPainel({
     metas,
     plano: desdobrarMeta(metas),
     numeros,
-    hoje_listas: { toques, marcos, retornos, voltam, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
+    hoje_listas: { toques, marcos, retornos, fora_funil: foraFunil, voltam, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
     implantacoes,
     supervisao,
     sem_dono: totais ? totais.sem_dono : leads.filter((l) => ativo(l) && !l.dono_id && !naFila(l)).length,

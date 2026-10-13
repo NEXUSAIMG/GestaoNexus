@@ -92,6 +92,10 @@ export const SELECT_LEAD = `
              AND t.data > (SELECT max(x.enviada_em) FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada')) AS toques_pos_proposta,
          (SELECT count(*)::int FROM comercial_toques t
            WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso') AND t.data >= l.etapa_desde) AS toques_na_etapa,
+         -- Sprint 42K — contatos que tiveram resposta nesta etapa (para "3 sem resposta")
+         (SELECT count(*)::int FROM comercial_toques t
+           WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso') AND t.data >= l.etapa_desde
+             AND t.resultado IN ('atendeu','agendou','pediu_retorno','recusou','respondeu')) AS conexoes_na_etapa,
          EXISTS (
            SELECT 1 FROM comercial_nao_contatar nc
             WHERE nc.removido_em IS NULL AND (

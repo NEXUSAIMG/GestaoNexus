@@ -64,6 +64,15 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
   const pessoal = escopo === 'meus' && minha;
 
   // Sprint 42G — reabre o perdido para nova conversa (retorno programado)
+  // Sprint 42K — 3 contatos sem resposta: fora do funil (volta em 90 dias)
+  async function foraDoFunil(x) {
+    try {
+      await api.put('/comercial/leads/' + x.lead.id, { etapa: 'perdido', motivo_perda: 'Fora do funil (sem resposta)' });
+      onAviso?.(`${x.lead.nome} saiu do funil (sem resposta). Volta para a lista em ${cfg.dias_para_voltar || 90} dias.`);
+      onMudou?.();
+    } catch (err) { onAviso?.(mensagemDeErro(err)); }
+  }
+
   async function voltarAContatar(x) {
     try {
       await api.put('/comercial/leads/' + x.lead.id, {
@@ -156,6 +165,19 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
             </p>
           </div>
           <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'cadencia', x.d)}>Registrar</button>
+        </li>
+      ),
+    },
+    {
+      k: 'fora_funil', titulo: '3 contatos sem resposta: tirar do funil', itens: h.fora_funil || [], nivel: 'warn', dica: 'insistencia',
+      porque: `Três contatos da cadência e ninguém respondeu. Não insista agora: coloque fora do funil — o cartório volta para a lista em ${cfg.dias_para_voltar || 90} dias.`,
+      render: (x) => (
+        <li key={x.lead.id + '-ff'} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">{x.tentativas} contatos sem resposta{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => foraDoFunil(x)}>Colocar fora do funil</button>
         </li>
       ),
     },
@@ -339,7 +361,7 @@ export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
             <Barra pct={Math.max(4, s.indice)} nivel={s.sinal} />
             {s.insistencia && (
               <p className="text-xs leading-relaxed text-slate-600">
-                Insistência no mês: {s.insistencia.perdidos} perdido(s), média de <b className={s.insistencia.media_contatos < 5 ? 'text-red-700' : 'text-slate-800'}>{String(s.insistencia.media_contatos ?? 0).replace('.', ',')} contatos</b> antes de perder{s.insistencia.sumiu ? ` · ${s.insistencia.sumiu} por "Sumiu"` : ''}
+                Insistência no mês: {s.insistencia.perdidos} perdido(s), média de <b className={s.insistencia.media_contatos < 3 ? 'text-red-700' : 'text-slate-800'}>{String(s.insistencia.media_contatos ?? 0).replace('.', ',')} contatos</b> antes de perder{s.insistencia.sumiu ? ` · ${s.insistencia.sumiu} por "Sumiu"` : ''}
                 {' '}<Dica termo="insistencia" />
               </p>
             )}

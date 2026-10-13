@@ -11,6 +11,26 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42K — 3 contatos sem resposta: fora do funil (versão 1.18)
+
+- Novo motivo de perda: **Fora do funil (sem resposta)**.
+- Em Contatos, depois de 3 toques da cadência sem nenhuma conexão:
+  - a cadência para;
+  - o cartório aparece em Hoje, no bloco "3 contatos sem resposta: tirar do
+    funil", com o botão **Colocar fora do funil**;
+  - a ficha orienta a mesma coisa.
+- O motivo só é aceito com 3 contatos registrados e nenhuma resposta. Quem
+  respondeu alguma vez segue a cadência normal.
+- Esse motivo também volta a ser contatado em 90 dias, como "Sumiu" e
+  "Sem tempo".
+- Supervisão: a média de contatos antes de perder fica vermelha abaixo de 3
+  (antes, 5), porque 3 passou a ser o mínimo.
+- Ajuda: guia da etapa Em contatos, "Como funciona" de Hoje, FAQ e
+  glossário atualizados.
+- Testes: 5 checagens novas em `t-comercial-insistencia.mjs`.
+
+---
+
 ## Sprint 42J — E-mail primeiro e Ayio nos textos (versão 1.17)
 
 - **Cadência começa pelo e-mail de apresentação** (dia 1). A ligação e o

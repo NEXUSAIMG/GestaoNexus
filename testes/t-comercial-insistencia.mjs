@@ -60,3 +60,23 @@ const eu = (await get('/pessoas')).dados.find((p) => p.email === 'admin@local.te
 painel = (await get('/comercial/painel')).dados;
 const sup = painel.supervisao.find((s) => s.pessoa.id === eu.id);
 ok(sup?.insistencia && sup.insistencia.perdidos >= 1 && typeof sup.insistencia.media_contatos === 'number', 'mostra perdidos do mês e a média de contatos antes de perder');
+
+titulo('42K — 3 contatos sem resposta: fora do funil');
+const d = await novo('Cartório Sem Resposta D', { etapa: 'cadencia' });
+const cedo = await put(`/comercial/leads/${d.id}`, { etapa: 'perdido', motivo_perda: 'Fora do funil (sem resposta)' });
+ok(cedo.status === 400 && /3 contatos/.test(JSON.stringify(cedo.dados)), 'antes de 3 contatos, "Fora do funil (sem resposta)" é recusado');
+// 3 toques sem resposta (registrados hoje como avulsos da cadência: dias 1, 2 e 4)
+for (const dia of [1, 2, 4]) await post(`/comercial/leads/${d.id}/toques`, { tipo: 'cadencia', dia, resultado: 'nao_atendeu' });
+painel = (await get('/comercial/painel')).dados;
+ok(painel.hoje_listas.fora_funil?.some((x) => x.lead.id === d.id && x.tentativas === 3), 'Hoje mostra o cartório em "3 contatos sem resposta"');
+ok(!painel.hoje_listas.toques.some((x) => x.lead.id === d.id), 'a cadência para: o próximo toque não aparece mais');
+const ff = await put(`/comercial/leads/${d.id}`, { etapa: 'perdido', motivo_perda: 'Fora do funil (sem resposta)' });
+ok(ff.status === 200 && ff.dados.proxima_data === somar(hoje, 90), 'fora do funil (sem resposta) aceito e com retomada em 90 dias');
+
+const e = await novo('Cartório Respondeu E', { etapa: 'cadencia' });
+await post(`/comercial/leads/${e.id}/toques`, { tipo: 'cadencia', dia: 1, resultado: 'nao_atendeu' });
+await post(`/comercial/leads/${e.id}/toques`, { tipo: 'cadencia', dia: 2, resultado: 'pediu_retorno' });
+await post(`/comercial/leads/${e.id}/toques`, { tipo: 'cadencia', dia: 4, resultado: 'nao_atendeu' });
+painel = (await get('/comercial/painel')).dados;
+const re2 = await put(`/comercial/leads/${e.id}`, { etapa: 'perdido', motivo_perda: 'Fora do funil (sem resposta)' });
+ok(!painel.hoje_listas.fora_funil?.some((x) => x.lead.id === e.id) && re2.status === 400, 'quem respondeu alguma vez segue a cadência (não entra em "sem resposta")');

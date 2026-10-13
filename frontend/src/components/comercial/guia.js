@@ -26,7 +26,7 @@ export const GUIA_ETAPAS = {
       'Registre cada toque com o resultado (atendeu, não atendeu, caixa postal…).',
       'Se a pessoa topar conversar, escolha "Agendou reunião" e informe data e hora: o cartório vai sozinho para Reunião de apresentação.',
     ],
-    avancar: 'Avança sozinho quando você registra "Agendou reunião". Se os 12 dias acabarem sem resposta, marque Perdido com motivo "Sumiu".',
+    avancar: 'Avança sozinho quando você registra "Agendou reunião". Três contatos sem nenhuma resposta: coloque "Fora do funil (sem resposta)" — ele volta em 90 dias.',
     prazo: '12 dias úteis (o roteiro inteiro).',
   },
   diagnostico: {
@@ -87,7 +87,7 @@ export const GUIA_ETAPAS = {
 // Glossário (usado pelos ícones "?")
 // ---------------------------------------------------------------------------
 export const GLOSSARIO = {
-  insistencia: 'Insistir com método: toda conversa termina com data, todo retorno leva algo novo (um caso, um vídeo, um número) e o último contato é o encerramento educado. "Sumiu" só depois da cadência ou do roteiro de retorno completos; quem sumiu ou estava sem tempo volta a ser contatado em 90 dias.',
+  insistencia: 'Insistir com método: toda conversa termina com data, todo retorno leva algo novo (um caso, um vídeo, um número) e o último contato é o encerramento educado. três contatos da cadência sem nenhuma resposta: "Fora do funil (sem resposta)". "Sumiu" (para quem chegou a responder) só depois da cadência ou do roteiro de retorno completos. Quem saiu sem resposta, sumiu ou estava sem tempo volta a ser contatado em 90 dias.',
   cadencia: 'Roteiro de 8 toques em 12 dias úteis (ligação, WhatsApp, e-mail) para conseguir a primeira conversa. O sistema mostra em Hoje o toque de cada dia.',
   toque: 'Qualquer contato feito com o cartório: ligação, mensagem, e-mail. Todo toque é registrado com o resultado.',
   conexao: 'Toque em que você falou com alguém: atendeu, agendou, pediu retorno, recusou ou respondeu a mensagem. Toques são esforço; conexões são o que gera reunião.',
@@ -115,7 +115,8 @@ export const COMO_FUNCIONA = {
   hoje: {
     titulo: 'Hoje é a sua lista de tarefas',
     itens: [
-      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, retornos de proposta, implantação, toques de cadência, próximos passos e quem volta a ser contatado.',
+      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, retornos de proposta, implantação, toques de cadência, quem saiu sem resposta, próximos passos e quem volta a ser contatado.',
+      'Três contatos sem nenhuma resposta: o cartório aparece em "3 contatos sem resposta" — coloque fora do funil; ele volta em 90 dias.',
       'Cada linha tem o botão que resolve. Ao registrar, a linha some e o próximo passo aparece sozinho.',
       'Comece o dia aqui e termine com a tela vazia.',
       '"Só os meus" mostra o seu trabalho; "Toda a equipe" mostra o de todos. Usa o quadro? Lá também tem o botão "Destacar os meus".',
@@ -198,7 +199,7 @@ export const COMO_FUNCIONA = {
 // Perguntas frequentes
 // ---------------------------------------------------------------------------
 export const FAQ = [
-  { p: 'Por que não consigo marcar como perdido por "Sumiu"?', r: 'Porque ainda falta insistir com método. Em Em contatos, a cadência precisa estar completa (o último toque é a mensagem de encerramento). Em Aguardando retorno, os 4 retornos da proposta. Em Reunião ou Corregedoria, pelo menos 3 tentativas. Se o cartório respondeu que não quer, o motivo é outro (Sem interesse, Preço, Concorrente...) e não tem essa trava.' },
+  { p: 'Por que não consigo marcar como perdido por "Sumiu"?', r: 'Porque ainda falta insistir com método. Em Em contatos sem nenhuma resposta, use "Fora do funil (sem resposta)" depois do 3º contato; "Sumiu" é para quem chegou a responder e a cadência precisa estar completa (o último toque é a mensagem de encerramento). Em Aguardando retorno, os 4 retornos da proposta. Em Reunião ou Corregedoria, pelo menos 3 tentativas. Se o cartório respondeu que não quer, o motivo é outro (Sem interesse, Preço, Concorrente...) e não tem essa trava.' },
   { p: 'O que fazer depois de mandar a proposta?', r: 'Siga os retornos que aparecem em Hoje: dia 2, WhatsApp com um caso parecido; dia 4, ligação para tirar dúvidas e confirmar a data; dia 6, falar com o titular; dia 7, a mensagem de encerramento. Ao registrar cada contato, o sistema já marca o próximo. Melhor ainda: na reunião, combine a data da decisão antes de mandar a proposta.' },
   { p: 'Posso continuar usando o quadro Atividade Comercial?', r: 'Pode. Com o espelho ligado (Controles → Quadro e Comercial em espelho), o quadro e o Comercial andam juntos: mover o card muda a etapa aqui, e mudar a etapa aqui move o card. Nome, responsável, telefone, contato, e-mail e cidade também ficam iguais nos dois. Card novo numa coluna do funil vira cartório aqui, e cartório cadastrado aqui ganha card lá. Se o Comercial não deixar o card andar (falta reunião, proposta etc.), o quadro mostra o que falta e o botão para abrir a ficha.' },
   { p: 'Como vejo só os meus cards no quadro?', r: 'No quadro, clique em "Destacar os meus" (na barra de filtros). Os seus cards ficam com contorno e os dos outros, apagados — nada some, você continua vendo o quadro inteiro. Cada coluna mostra quantos são seus. O Nexus lembra a sua escolha; clique de novo para voltar ao normal. Para esconder os outros de vez, use o filtro de responsável.' },
@@ -220,7 +221,7 @@ export const FAQ = [
   { p: 'Vamos oferecer um período de teste (trial)?', r: 'Não. A decisão da empresa é não trabalhar com trial. A prova é a reunião de apresentação, com a demonstração no WhatsApp do próprio cartório, e a implantação assistida em 48 horas depois da assinatura.' },
   { p: 'O cartório é interino e depende da corregedoria.', r: 'Mude para "Aguardando a Corregedoria" e registre a próxima data para cobrar o retorno. Ofereça ajuda com os documentos. Autorizou e assinou? Marque como Ganho.' },
   { p: 'Onde ficam as colunas do quadro antigo?', r: 'As etapas têm os mesmos nomes do quadro: Em prospecção, Em contatos, Reunião de apresentação, Aguardando retorno e Aguardando a Corregedoria. Enviar onboarding, Treinamento, Em desenvolvimento e Pós-venda são os marcos da implantação, na aba Implantação. Fora do funil e Desistência são motivos de Perdido.' },
-  { p: 'Terminei os 12 dias de cadência e ninguém respondeu.', r: 'Marque o cartório como Perdido com o motivo "Sumiu". Se fizer sentido, deixe um próximo passo para daqui a 90 dias antes de encerrar.' },
+  { p: 'Fiz 3 contatos e ninguém respondeu. E agora?', r: 'Coloque o cartório "Fora do funil (sem resposta)": ele aparece em Hoje, no bloco "3 contatos sem resposta", com o botão. Não insista mais agora — o sistema programa a volta em 90 dias e ele reaparece em "Voltam a ser contatados hoje". Se alguém respondeu em algum momento, siga a cadência normal.' },
   { p: 'Por que o meu semáforo está vermelho?', r: 'Você fez menos de 70% do que estava previsto para hoje (toques e marcos pendentes) ou está abaixo da sua meta de novos ou de toques. Veja os alertas no seu cartão da Supervisão e os itens em Hoje.' },
   { p: 'Não sei o que falar na ligação.', r: 'Abra a aba Scripts. Dentro da ficha do cartório também aparece o roteiro do passo atual, com botão para copiar.' },
   { p: 'Quem pode arquivar um cartório?', r: 'Só a gestão, com motivo — arquivar tira o cartório das contas. Para encerrar uma negociação, use Perdido.' },

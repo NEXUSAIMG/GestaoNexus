@@ -98,6 +98,10 @@ function proximaAcaoBase(lead, cfg, admin) {
     case 'cadencia': {
       const feitos = lead.toques_cadencia || {};
       const prox = CAD_DIAS.find((d) => !feitos[d]);
+      // Sprint 42K — 3 contatos sem nenhuma resposta: tirar do funil (volta em 90 dias)
+      if (Object.keys(feitos).length >= 3 && !Number(lead.conexoes_na_etapa || 0)) {
+        return { nivel: 'warn', titulo: '3 contatos sem resposta: coloque fora do funil', texto: `Foram ${Object.keys(feitos).length} contatos e ninguém respondeu. Não insista mais agora: marque "Fora do funil (sem resposta)". O cartório volta para a sua lista em ${cfg.dias_para_voltar || 90} dias.`, acao: 'semresposta', rotulo: 'Colocar fora do funil' };
+      }
       if (!prox) return { nivel: 'warn', titulo: 'A cadência terminou sem conversa', texto: 'Os 8 toques foram feitos. Marque como Perdido com o motivo "Sumiu" — ou, se houve resposta, registre o contato.', acao: 'etapa:perdido', rotulo: 'Marcar como perdido' };
       const previsto = addDiasUteis(lead.cadencia_inicio || hoje, prox - 1, feriados);
       const passo = cfg.cadencia.find((c) => c.d === prox);

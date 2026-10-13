@@ -229,7 +229,7 @@ export async function config(req, res, next) {
     );
     res.json({
       etapas: ETAPAS, origens: ORIGENS, motivos_perda: MOTIVOS_PERDA, segmentos: SEGMENTOS,
-      cadencia: CADENCIA, retorno: RETORNO, motivos_voltam: MOTIVOS_VOLTAM, dias_para_voltar: DIAS_PARA_VOLTAR, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
+      cadencia: CADENCIA, retorno: RETORNO, motivos_voltam: MOTIVOS_VOLTAM, tentativas_sem_resposta: 3, dias_para_voltar: DIAS_PARA_VOLTAR, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
       tipos_reuniao: TIPOS_REUNIAO, motivos_nao_contatar: MOTIVOS_NAO_CONTATAR, janelas: JANELAS,
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
