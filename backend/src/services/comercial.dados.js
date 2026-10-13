@@ -498,7 +498,33 @@ export function novoProtocolo(hoje = hojeBR()) {
 }
 
 
-export async function inserirLead(client, dados, pessoaId, extras = {}) {
+// Tamanho máximo de cada campo de texto do lead (colunas varchar do banco).
+export const LIMITES_LEAD = {
+  nome: 255, segmento: 60, cidade: 100, uf: 2, contato: 255, telefone: 60, email: 255, campanha: 120,
+};
+const ROTULO_LIMITE = { segmento: 'Segmento', cidade: 'Cidade', contato: 'Contato', telefone: 'Telefone', email: 'E-mail', campanha: 'Campanha', nome: 'Nome' };
+
+/**
+ * Corta o que não cabe nas colunas e guarda o texto inteiro nas anotações
+ * (ex.: card com três telefones e observações no campo Telefone). Assim a
+ * importação nunca quebra por um campo longo e nada se perde.
+ */
+export function ajustarTamanhos(dados) {
+  const d = { ...dados };
+  const sobras = [];
+  for (const [k, max] of Object.entries(LIMITES_LEAD)) {
+    if (d[k] == null) continue;
+    const v = String(d[k]).trim();
+    if (v.length <= max) { d[k] = v; continue; }
+    d[k] = k === 'uf' ? v.slice(0, 2).toUpperCase() : v.slice(0, max).trim();
+    if (k !== 'uf') sobras.push(`${ROTULO_LIMITE[k] || k} completo: ${v}`);
+  }
+  if (sobras.length) d.notas = [d.notas, sobras.join('\n')].filter(Boolean).join('\n\n');
+  return d;
+}
+
+export async function inserirLead(client, dadosBrutos, pessoaId, extras = {}) {
+  const dados = ajustarTamanhos(dadosBrutos);
   const hoje = hojeBR();
   const etapa = dados.etapa || 'prospect';
   const base = { etapa: null, marcos: {}, cadencia_inicio: null, implantacao_inicio: null };

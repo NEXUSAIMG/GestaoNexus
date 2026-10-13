@@ -36,7 +36,7 @@ import {
   ETAPA, MARCOS_IMPLANTACAO, hojeBR, aplicarEtapa, pendenciasPortao, ehRetrocesso,
 } from './comercial.regras.js';
 import {
-  carregarLead, reunioesDoLead, propostasDoLead, verificarBloqueios, inserirLead,
+  carregarLead, reunioesDoLead, propostasDoLead, verificarBloqueios, inserirLead, LIMITES_LEAD,
 } from './comercial.dados.js';
 
 // ---------------------------------------------------------------------------
@@ -385,6 +385,9 @@ export async function espelharCardNoLead(cardId, pessoaId, { responsavel = false
     if (!card || !(await espelhoDoQuadro(card.quadro_id))) return;
     const lead = await carregarLead(rows[0].id);
     const novo = { nome: vazio(card.titulo)?.slice(0, 255) || lead.nome, ...card.contatos };
+    for (const k of Object.keys(novo)) {
+      if (typeof novo[k] === 'string' && LIMITES_LEAD[k]) novo[k] = novo[k].slice(0, LIMITES_LEAD[k]).trim();
+    }
     // Responsável só segue o card quando ele foi trocado no card (senão um
     // lead da fila ganharia dono só porque alguém corrigiu o título)
     if (responsavel && card.responsavel_id) novo.dono_id = card.responsavel_id;
@@ -457,7 +460,11 @@ async function copiarDadosParaCard(client, lead, card, pessoaId) {
     let v;
     if (k === 'cidade_uf') v = lead.cidade ? (lead.uf ? `${lead.cidade}/${lead.uf}` : lead.cidade) : null;
     else v = lead[k] ?? null;
-    if (v == null || vazio(card.valores[c.id]) === vazio(v)) continue;
+    const atualNoCard = vazio(card.valores[c.id]);
+    if (v == null || atualNoCard === vazio(v)) continue;
+    // O card guarda o texto inteiro (ex.: vários telefones); o lead, a versão
+    // cortada. Se o card já começa com o valor do lead, não encurta o card.
+    if (atualNoCard && atualNoCard.startsWith(String(v))) continue;
     await client.query(
       `INSERT INTO cards_campos_valores (card_id, campo_id, valor, atualizado_em) VALUES ($1,$2,$3::jsonb,NOW())
        ON CONFLICT (card_id, campo_id) DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = NOW()`,

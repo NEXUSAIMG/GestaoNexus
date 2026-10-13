@@ -1064,6 +1064,7 @@ export async function importarQuadro(req, res, next) {
     const nomeColuna = new Map(cols.map((x) => [x.id, x.nome]));
     const hoje = hojeBR();
     let criados = 0; let pulados = 0; let ignorados = 0; let bloqueados = 0;
+    const recusados = [];
     await client.query('BEGIN');
     for (const c of cards) {
       if (c.ja) { pulados++; continue; }
@@ -1111,9 +1112,13 @@ export async function importarQuadro(req, res, next) {
       };
       // Importação histórica pula duplicidade com o próprio funil só via
       // origem_card_id; não-contatar e já-cliente continuam barrando.
+      // Cada card numa savepoint: um card com dado estranho é recusado sozinho
+      // (e listado), sem derrubar a importação inteira.
+      await client.query('SAVEPOINT card_importado');
+      try {
       const bloq = await verificarBloqueios(dados, { soVerificar: true, client });
-      if (bloq && bloq.codigo !== 'duplicado') { bloqueados++; continue; }
-      if (bloq && bloq.codigo === 'duplicado') { pulados++; continue; }
+      if (bloq && bloq.codigo !== 'duplicado') { bloqueados++; await client.query('RELEASE SAVEPOINT card_importado'); continue; }
+      if (bloq && bloq.codigo === 'duplicado') { pulados++; await client.query('RELEASE SAVEPOINT card_importado'); continue; }
       const leadId = await inserirLead(client, dados, req.pessoa.id, {
         origem_card_id: c.id, etapa_desde: c.coluna_dia || hoje, data_marcos: c.criado_dia || hoje,
         justificativa: 'importado do quadro Kanban',
@@ -1126,7 +1131,12 @@ export async function importarQuadro(req, res, next) {
           [leadId, m.d, 'importado do quadro (coluna "' + nomeColuna.get(c.coluna_id) + '")', hoje, req.pessoa.id],
         );
       }
+      await client.query('RELEASE SAVEPOINT card_importado');
       criados++;
+      } catch (errCard) {
+        await client.query('ROLLBACK TO SAVEPOINT card_importado');
+        recusados.push({ card: c.titulo, motivo: errCard.message });
+      }
     }
     if (d.espelhar) {
       await salvarEspelho(client, d.quadro_id, {
@@ -1137,9 +1147,9 @@ export async function importarQuadro(req, res, next) {
     await client.query('COMMIT');
     await registrarAcao({
       pessoa_acesso_id: req.pessoa.id, acao: 'comercial.importar_quadro',
-      detalhes: { quadro_id: d.quadro_id, criados, pulados, ignorados, bloqueados, espelho: d.espelhar }, req,
+      detalhes: { quadro_id: d.quadro_id, criados, pulados, ignorados, bloqueados, recusados: recusados.length, espelho: d.espelhar }, req,
     });
-    res.status(201).json({ criados, pulados, ignorados, bloqueados, espelho: d.espelhar });
+    res.status(201).json({ criados, pulados, ignorados, bloqueados, recusados, espelho: d.espelhar });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);

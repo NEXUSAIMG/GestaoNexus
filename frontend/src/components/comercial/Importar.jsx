@@ -162,7 +162,9 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
     setEnviando(true); setMsg('');
     try {
       const r = await api.post('/comercial/importar-quadro', { quadro_id: quadroId, mapa, origem_padrao: origem, campanha: campanha || null, somente_etiqueta: etiqueta || null, espelhar, criar_cards: criarCards }, { timeout: 120_000 });
-      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s); ${r.data.bloqueados || 0} bloqueado(s) (não contatar ou já cliente).${r.data.espelho ? ' Quadro e Comercial agora andam juntos.' : ''}`);
+      const rec = r.data.recusados || [];
+      const txtRec = rec.length ? ` ${rec.length} card(s) não entraram: ${rec.slice(0, 3).map((x) => `“${x.card}”`).join(', ')}${rec.length > 3 ? '…' : ''}.` : '';
+      onFeito(`${r.data.criados} cartório(s) importado(s); ${r.data.pulados} já estavam no funil; ${r.data.ignorados} ignorado(s); ${r.data.bloqueados || 0} bloqueado(s) (não contatar ou já cliente).${txtRec}${r.data.espelho ? ' Quadro e Comercial agora andam juntos.' : ''}`);
     } catch (err) { setMsg(mensagemDeErro(err)); } finally { setEnviando(false); }
   }
 

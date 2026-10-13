@@ -27,7 +27,7 @@ ok(Object.keys(col).length === NOMES.length && campoTel && campoCid, 'colunas e 
 
 // Um card antigo (já em Em Desenvolvimento) para a importação
 const antigo = await post('/cards', { coluna_id: col['Em Desenvolvimento'], titulo: 'Cartório Antigo ' + sufixo });
-await put(`/cards/${antigo.dados.id}/campos/${campoTel}`, { valor: `(91) 9${rnd(4)}-${rnd(4)}` });
+await put(`/cards/${antigo.dados.id}/campos/${campoTel}`, { valor: `(91) 9${rnd(4)}-${rnd(4)} / (91) 9${rnd(4)}-${rnd(4)} (titular) / (91) 3${rnd(3)}-${rnd(4)} (cartório, só de manhã)` });
 
 titulo('Importação liga o espelho');
 const previa = await get(`/comercial/importar-quadro/previa?quadro_id=${quadroId}`);
@@ -45,6 +45,8 @@ const fichaAntigo = leadAntigo && (await get(`/comercial/leads/${leadAntigo.id}`
 ok(fichaAntigo?.etapa === 'ganho' && fichaAntigo.toques_marco['0'] && fichaAntigo.toques_marco['2'] && !fichaAntigo.toques_marco['7'],
   'importado em Em Desenvolvimento já vem com onboarding e treinamento feitos');
 ok(fichaAntigo?.quadro?.coluna === 'Em Desenvolvimento' && fichaAntigo.quadro.espelho, 'ficha mostra onde está no quadro');
+ok(fichaAntigo?.telefone?.length <= 60 && /Telefone completo: .*só de manhã/.test(fichaAntigo.notas || ''),
+  'telefone longo no card não quebra a importação: corta e guarda o texto inteiro nas anotações');
 
 titulo('Quadro → Comercial');
 const c1 = await post('/cards', { coluna_id: col['Em prospecção'], titulo: '1º Ofício Espelho ' + sufixo });
@@ -117,6 +119,9 @@ await post(`/comercial/leads/${leadAntigo.id}/toques`, { tipo: 'marco', dia: 30 
 await esperar(800);
 card = (await get(`/cards/${antigo.dados.id}`)).dados;
 ok(card.coluna_id === col['Pós venda'], 'marco registrado no Comercial leva o card para a frente');
+
+const cardAntigo = (await get(`/quadros/${quadroId}`)).dados.cards.find((c) => c.id === antigo.dados.id);
+ok(/só de manhã/.test(cardAntigo?.campos?.[campoTel] || ''), 'o card continua com o telefone completo (o espelho não encurta)');
 
 titulo('Desligar');
 await put(`/comercial/espelho/${quadroId}`, { ativo: false });

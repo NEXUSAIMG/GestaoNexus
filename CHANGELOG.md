@@ -11,6 +11,23 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## 1.13 — Importação do quadro não quebra com campo longo
+
+Produção: importar o quadro "Atividade Comercial" dava "Erro interno do
+servidor" (log: `value too long for type character varying(60)`) — um card
+tinha no campo Telefone/WhatsApp mais de 60 caracteres (vários números e
+observações).
+
+- `ajustarTamanhos()` em `comercial.dados.js`: todo lead novo (cadastro,
+  listas, quadro, espelho) corta o que não cabe e guarda o texto inteiro nas
+  anotações ("Telefone completo: ...").
+- Importar quadro: cada card numa savepoint — card com problema é recusado
+  sozinho e listado na mensagem final, sem derrubar a importação.
+- Espelho: card → lead também corta; lead → card não encurta o campo do card.
+- Teste: `t-comercial-espelho.mjs` com telefone longo (28 verificações).
+
+---
+
 ## Sprint 42F — Quadro e Comercial em espelho (versão 1.12)
 
 O quadro "Atividade Comercial" e o módulo Comercial passam a andar juntos,
