@@ -7,7 +7,7 @@ import { query } from '../config/database.js';
 import { AppError, ConflitoError, NaoEncontradoError } from '../utils/errors.js';
 import {
   ETAPAS_ATIVAS, METAS_PADRAO, RESULTADOS_CONECTAM,
-  hojeBR, mesDe, definirFeriados, diasUteisDoMes, montarPainel, situacaoPrazo, pontuacao, aplicarEtapa,
+  hojeBR, mesDe, definirFeriados, diasUteisDoMes, montarPainel, situacaoPrazo, pontuacao, aplicarEtapa, situacaoTrial,
 } from './comercial.regras.js';
 
 // ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ export const SELECT_LEAD = `
          l.telefone, l.email, l.cns, l.cnpj, l.cartorio_id, l.produto_cliente_id, l.dono_id,
          pd.nome AS dono_nome,
          l.etapa, l.etapa_desde::text AS etapa_desde, l.marcos, l.origem, l.campanha,
-         l.cadencia_inicio::text AS cadencia_inicio, l.trial_inicio::text AS trial_inicio, l.implantacao_inicio::text AS implantacao_inicio,
+         l.cadencia_inicio::text AS cadencia_inicio, l.trial_inicio::text AS trial_inicio, l.trial_fim::text AS trial_fim, l.trial_prorrogado, l.implantacao_inicio::text AS implantacao_inicio,
          l.sinais, l.diagnostico, l.meta_sucesso,
          l.valor_mensal::float AS valor_mensal, l.motivo_perda, l.motivo_perda_obs,
          l.proximo_passo, l.proxima_data::text AS proxima_data, l.notas,
@@ -85,6 +85,10 @@ export const SELECT_LEAD = `
          COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text)
                      FROM comercial_toques t
                     WHERE t.lead_id = l.id AND t.tipo = 'marco' AND t.estornado_em IS NULL), '{}'::jsonb) AS toques_marco,
+         -- Sprint 42L — marcos do trial guiado
+         COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text)
+                     FROM comercial_toques t
+                    WHERE t.lead_id = l.id AND t.tipo = 'trial' AND t.estornado_em IS NULL), '{}'::jsonb) AS toques_trial,
          -- Sprint 42G — insistência: proposta vigente e contatos desde o envio / na etapa
          (SELECT max(x.enviada_em)::text FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada') AS proposta_enviada_em,
          (SELECT count(*)::int FROM comercial_toques t
@@ -115,7 +119,8 @@ export function enriquecer(l, hoje = hojeBR()) {
   return {
     ...l,
     prazo: situacaoPrazo(l, hoje),
-    pontos: l.etapa === 'ganho' ? pontuacao(l) : null,
+    pontos: ['ganho', 'trial'].includes(l.etapa) ? pontuacao(l) : null,
+    trial: situacaoTrial(l, hoje), // 42L
   };
 }
 
@@ -408,7 +413,7 @@ export async function calcularPainel() {
     // Fila de prospects sem dono (listas importadas) e fechamentos antigos
     // ficam fora: só contam nos agregados abaixo.
     query(SELECT_LEAD + ` WHERE l.arquivado_em IS NULL AND (
-        (l.etapa IN ('cadencia','diagnostico','proposta','corregedoria'))
+        (l.etapa IN ('cadencia','diagnostico','trial','proposta','corregedoria'))
      OR (l.etapa = 'prospect' AND l.dono_id IS NOT NULL)
      OR (l.etapa = 'ganho' AND (l.pago_em IS NULL OR l.pago_em >= $1 OR l.marcos->>'ganho' >= $2
                                OR l.implantacao_inicio >= ($1::date - 45)))
@@ -462,12 +467,13 @@ export async function totaisFunil() {
        jsonb_build_object(
          'cadencia',    count(*) FILTER (WHERE marcos ? 'cadencia'),
          'diagnostico', count(*) FILTER (WHERE marcos ? 'diagnostico'),
+         'trial',       count(*) FILTER (WHERE marcos ? 'trial'),
          'corregedoria', count(*) FILTER (WHERE marcos ? 'corregedoria'),
          'proposta',    count(*) FILTER (WHERE marcos ? 'proposta'),
          'ganho',       count(*) FILTER (WHERE marcos ? 'ganho')) AS alcancou,
        count(*) FILTER (WHERE pago_em IS NOT NULL)::int AS pagos,
        count(*) FILTER (WHERE etapa = 'perdido')::int AS perdidos,
-       count(*) FILTER (WHERE dono_id IS NULL AND etapa IN ('cadencia','diagnostico','proposta','corregedoria'))::int AS sem_dono,
+       count(*) FILTER (WHERE dono_id IS NULL AND etapa IN ('cadencia','diagnostico','trial','proposta','corregedoria'))::int AS sem_dono,
        count(*) FILTER (WHERE dono_id IS NULL AND etapa = 'prospect')::int AS fila,
        COALESCE((SELECT jsonb_object_agg(m, n) FROM (SELECT COALESCE(motivo_perda, 'Sem motivo') m, count(*)::int n
                   FROM comercial_leads WHERE arquivado_em IS NULL AND etapa = 'perdido' GROUP BY 1) y), '{}'::jsonb) AS motivos

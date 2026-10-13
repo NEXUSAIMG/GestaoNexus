@@ -5,7 +5,7 @@ import {
   agendarReuniao, desfechoReuniao, remarcarReuniao,
   registrarProposta, statusProposta, confirmarPagamento, recompensaIndicacao,
   painel, obterMetas, salvarMetas,
-  importarLista, previaImportarQuadro, importarQuadro, pegarDaFila, listarEspelhos, atualizarEspelho,
+  importarLista, prorrogarTrial, previaImportarQuadro, importarQuadro, pegarDaFila, listarEspelhos, atualizarEspelho,
 } from '../controllers/comercial.controller.js';
 import {
   listarNaoContatar, incluirNaoContatar, removerNaoContatar,
@@ -53,6 +53,7 @@ router.post('/leads/:id/arquivar', arquivar);
 
 // Atividade
 router.post('/leads/:id/toques', registrarToque);
+router.post('/leads/:id/trial/prorrogar', prorrogarTrial); // 42L
 router.post('/leads/:id/toques/estornar', estornarToqueRoteiro);
 router.post('/toques/:id/estornar', estornarToque);
 

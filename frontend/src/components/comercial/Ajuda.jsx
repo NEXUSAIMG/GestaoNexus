@@ -65,7 +65,7 @@ export function ComoFunciona({ aba }) {
 
 export function Tour({ forcar = false, onFechar }) {
   // '-2': tour novo (insistência e quadro em espelho) — aparece de novo uma vez para todos
-  const chave = 'comercial-tour-visto-2';
+  const chave = 'comercial-tour-visto-3';
   const [visivel, setVisivel] = useState(() => forcar || lerLS(chave, '') !== '1');
   const [i, setI] = useState(0);
   useEffect(() => { if (forcar) { setVisivel(true); setI(0); } }, [forcar]);
@@ -102,7 +102,7 @@ export function VistaAjuda({ cfg, onTour, onProcesso }) {
     cadencia: 'Cadência', toque: 'Toque', conexao: 'Conexão', sla: 'Prazo da etapa', portao: 'Critério para avançar (portão)',
     pontos: 'Pontos de uso', estorno: 'Estorno', semaforo: 'Semáforo', assinado_pago: 'Assinado × pago',
     nao_contatar: 'Não contatar', duplicidade: 'Duplicidade', cns: 'CNS', checagem: 'Checagem', um_a_um: '1:1',
-    proximo_passo: 'Próximo passo', origem: 'Origem', campanha: 'Campanha', insistencia: 'Insistência com método',
+    proximo_passo: 'Próximo passo', origem: 'Origem', campanha: 'Campanha', insistencia: 'Insistência com método', trial: 'Trial (14 dias)',
   }[k] || k);
 
   return (

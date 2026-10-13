@@ -11,6 +11,47 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42L — O trial volta: ciclo guiado de 14 dias (versão 1.19)
+
+Decisão da empresa em 13/10/2026, à tarde: o trial volta para todos, como
+etapa entre a Reunião de apresentação e Aguardando retorno.
+
+- **Etapa Trial (14 dias)**, com prazo de 14 dias.
+- **Portão de entrada:**
+  - reunião de apresentação realizada;
+  - diagnóstico preenchido;
+  - meta de sucesso escrita, combinada com o titular e com número;
+  - reunião de resultado já agendada (tipo "resultado").
+- **Marcos do trial** (tipo de toque `trial`, separado da implantação):
+  - D0 ativação; D1 primeiras conversas; D3 checagem de uso;
+  - D5 ajuste das respostas; D7 ponto do meio com o titular;
+  - D10 proposta; D12 reunião de resultado; D14 decisão.
+  - Eles aparecem em Hoje ("Trials: o marco de hoje"), na ficha (roteiro e
+    sinais de uso) e na aba "Trial e implantação" (trials em andamento).
+- **Uso baixo** (menos de 40 pontos a partir do D3) e **trial vencido**
+  viram alerta na Supervisão e orientação na ficha.
+- **Prorrogação:** só a gestão, uma vez, até 7 dias, com motivo
+  (`POST /comercial/leads/:id/trial/prorrogar`).
+- **Proposta no trial:** o próximo passo vira a reunião de resultado.
+- **Assinou depois do trial:** onboarding (D0) e treinamento (D2) da
+  implantação contam como feitos; a implantação segue do D7.
+- **Metas:** as taxas passam a ser reunião → trial e trial → pago (mesmas
+  chaves).
+- **Novo motivo de perda:** "Não usou no trial".
+- **Quadro em espelho:** coluna com "trial" ou "teste" no nome é
+  reconhecida como etapa Trial.
+- **Textos:**
+  - roteiros do trial: convite no fim da reunião, D0, D1, uso baixo, D7,
+    D12, D14;
+  - guia, FAQ, tour (aparece de novo) e processo desenhado com a linha do
+    trial.
+- **Migration:** `040_comercial_trial.sql` (tipo de toque `trial`,
+  `trial_fim`, `trial_prorrogado`).
+- **Testes:** `t-comercial-trial.mjs` (16 checagens);
+  `t-comercial.mjs` foi ajustado para 8 etapas.
+
+---
+
 ## Sprint 42K — 3 contatos sem resposta: fora do funil (versão 1.18)
 
 - Novo motivo de perda: **Fora do funil (sem resposta)**.

@@ -8,6 +8,7 @@ import {
   MOTIVOS_NAO_CONTATAR, JANELAS, DIAGNOSTICO_CAMPOS,
   hojeBR, mesDe, addDias, aplicarEtapa, pendenciasPortao, ehRetrocesso,
   RETORNO, MOTIVOS_VOLTAM, DIAS_PARA_VOLTAR, pendenciasPerda,
+  MARCOS_TRIAL, DIAS_TRIAL, PRORROGACAO_MAX,
 } from '../services/comercial.regras.js';
 import {
   SELECT_LEAD, enriquecer, carregarLead, reunioesDoLead, propostasDoLead,
@@ -99,7 +100,7 @@ const reuniaoSchema = z.object({
 });
 
 const toqueSchema = z.object({
-  tipo: z.enum(['cadencia', 'marco', 'avulso']),
+  tipo: z.enum(['cadencia', 'marco', 'avulso', 'trial']),
   dia: z.coerce.number().int().min(0).max(30).nullable().optional(),
   canal: txt(40),
   resultado: z.enum(RESULTADOS_CHAVES).nullable().optional(),
@@ -229,7 +230,7 @@ export async function config(req, res, next) {
     );
     res.json({
       etapas: ETAPAS, origens: ORIGENS, motivos_perda: MOTIVOS_PERDA, segmentos: SEGMENTOS,
-      cadencia: CADENCIA, retorno: RETORNO, motivos_voltam: MOTIVOS_VOLTAM, tentativas_sem_resposta: 3, dias_para_voltar: DIAS_PARA_VOLTAR, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
+      cadencia: CADENCIA, marcos_trial: MARCOS_TRIAL, dias_trial: DIAS_TRIAL, prorrogacao_max: PRORROGACAO_MAX, retorno: RETORNO, motivos_voltam: MOTIVOS_VOLTAM, tentativas_sem_resposta: 3, dias_para_voltar: DIAS_PARA_VOLTAR, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
       tipos_reuniao: TIPOS_REUNIAO, motivos_nao_contatar: MOTIVOS_NAO_CONTATAR, janelas: JANELAS,
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
@@ -452,6 +453,12 @@ export async function atualizar(req, res, next) {
       sets.marcos = mud.marcos;
       if (mud.cadencia_inicio) sets.cadencia_inicio = mud.cadencia_inicio;
       if (mud.implantacao_inicio) sets.implantacao_inicio = mud.implantacao_inicio;
+      if (mud.trial_inicio) { sets.trial_inicio = mud.trial_inicio; sets.trial_fim = mud.trial_fim; }
+      // 42L — entrou no trial: o próximo passo é a ativação (D0) hoje
+      if (novaEtapa === 'trial' && dados.proximo_passo === undefined) {
+        sets.proximo_passo = 'Trial D0: ativação (conectar WhatsApp, atendentes, respostas e meta de sucesso)';
+        sets.proxima_data = hoje;
+      }
       // Reabrir ganho desfaz o pagamento? Não: pagamento é fato. Só registra.
     }
 
@@ -464,7 +471,7 @@ export async function atualizar(req, res, next) {
         [req.params.id, ...chaves.map((k) => (jsonb.has(k) ? JSON.stringify(sets[k]) : sets[k]))],
       );
       // Histórico campo a campo (de → para)
-      const ignorar = new Set(['marcos', 'etapa_desde', 'cadencia_inicio', 'implantacao_inicio']);
+      const ignorar = new Set(['marcos', 'etapa_desde', 'cadencia_inicio', 'implantacao_inicio', 'trial_inicio', 'trial_fim']);
       for (const k of chaves) {
         if (ignorar.has(k)) continue;
         const de = paraTexto(atual[k]); const para = paraTexto(sets[k]);
@@ -472,6 +479,17 @@ export async function atualizar(req, res, next) {
         await client.query(
           `INSERT INTO comercial_alteracoes (lead_id, campo, de, para, pessoa_id) VALUES ($1,$2,$3,$4,$5)`,
           [req.params.id, k, de, para, req.pessoa.id],
+        );
+      }
+    }
+    // 42L — assinou depois do trial: a ativação e o treinamento já foram feitos
+    // no trial; a implantação continua do "bot no ar" (D7) em diante.
+    if (novaEtapa === 'ganho' && atual.etapa === 'trial' && (atual.toques_trial || {})['0']) {
+      for (const dia of [0, 2]) {
+        await client.query(
+          `INSERT INTO comercial_toques (lead_id, tipo, dia, nota, data, pessoa_id) VALUES ($1,'marco',$2,$3,$4,$5)
+           ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco','trial') AND estornado_em IS NULL DO NOTHING`,
+          [req.params.id, dia, 'Feito durante o trial', hoje, req.pessoa.id],
         );
       }
     }
@@ -528,8 +546,9 @@ export async function registrarToque(req, res, next) {
     if (d.tipo !== 'avulso' && d.dia == null) throw new AppError('Informe o dia do roteiro.', 400, 'dia_obrigatorio');
     if (d.tipo === 'cadencia' && !CADENCIA.some((c) => c.d === d.dia)) throw new AppError('Dia fora da cadência.');
     if (d.tipo === 'marco' && !MARCOS_IMPLANTACAO.some((m) => m.d === d.dia)) throw new AppError('Marco inexistente.');
-    // Contato sempre com resultado (marco de implantação é atividade interna: opcional)
-    if (d.tipo !== 'marco' && !d.resultado) {
+    if (d.tipo === 'trial' && !MARCOS_TRIAL.some((m) => m.d === d.dia)) throw new AppError('Marco do trial inexistente.');
+    // Contato sempre com resultado (marcos de implantação e do trial são atividade interna: opcional)
+    if (!['marco', 'trial'].includes(d.tipo) && !d.resultado) {
       throw new AppError('Escolha o resultado do contato (atendeu, não atendeu, caixa postal...).', 400, 'resultado_obrigatorio');
     }
     // Agendou → a reunião vem junto
@@ -549,6 +568,7 @@ export async function registrarToque(req, res, next) {
     exigirContatoLiberado(lead);
     if (lead.etapa === 'ganho' && d.tipo === 'cadencia') throw new AppError('Lead já é ganho.');
     if (d.tipo === 'marco' && !lead.implantacao_inicio) throw new AppError('A implantação ainda não começou: o cartório precisa estar como Ganho.');
+    if (d.tipo === 'trial' && lead.etapa !== 'trial') throw new AppError('Este cartório não está em trial.', 400, 'fora_do_trial');
     // Sprint 42G — em Aguardando retorno, o próximo passo vem do roteiro de
     // retorno: registrou o contato, o sistema já marca o seguinte.
     if (lead.etapa === 'proposta' && lead.proposta_enviada_em && d.tipo === 'avulso' && !(d.proximo_passo && d.proxima_data)) {
@@ -574,7 +594,7 @@ export async function registrarToque(req, res, next) {
     const { rows } = await client.query(
       `INSERT INTO comercial_toques (lead_id, tipo, dia, canal, resultado, duracao_min, nota, data, pessoa_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco') AND estornado_em IS NULL DO NOTHING
+       ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco','trial') AND estornado_em IS NULL DO NOTHING
        RETURNING id`,
       [lead.id, d.tipo, d.tipo === 'avulso' ? null : d.dia, canal, d.resultado ?? null, d.duracao_min ?? null,
         d.nota ?? null, hoje, req.pessoa.id],
@@ -652,7 +672,7 @@ export async function estornarToque(req, res, next) {
 /** POST /comercial/leads/:id/toques/estornar {tipo, dia, motivo} — desmarcar no roteiro */
 export async function estornarToqueRoteiro(req, res, next) {
   try {
-    const b = z.object({ tipo: z.enum(['cadencia', 'marco']), dia: z.coerce.number().int(), motivo: justificativa }).parse(req.body || {});
+    const b = z.object({ tipo: z.enum(['cadencia', 'marco', 'trial']), dia: z.coerce.number().int(), motivo: justificativa }).parse(req.body || {});
     const { rows } = await query(
       `SELECT id, lead_id, pessoa_id, data::text AS data, estornado_em FROM comercial_toques
         WHERE lead_id = $1 AND tipo = $2 AND dia = $3 AND estornado_em IS NULL`,
@@ -661,6 +681,32 @@ export async function estornarToqueRoteiro(req, res, next) {
     if (!rows.length) throw new NaoEncontradoError('Toque não encontrado');
     await estornarToqueRow(req, rows[0], b.motivo);
     res.json(enriquecer(await carregarLead(req.params.id)));
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /comercial/leads/:id/trial/prorrogar (gestão) — uma vez, até 7 dias,
+ * com motivo e com a nova data de decisão combinada com o titular.
+ */
+export async function prorrogarTrial(req, res, next) {
+  try {
+    exigirGestor(req, 'Só a gestão prorroga um trial.');
+    const b = z.object({ dias: z.coerce.number().int().min(1).max(PRORROGACAO_MAX), motivo: justificativa }).parse(req.body || {});
+    const lead = await carregarLead(req.params.id);
+    if (lead.etapa !== 'trial' || !lead.trial_inicio) throw new AppError('Este cartório não está em trial.', 400, 'fora_do_trial');
+    if (lead.trial_prorrogado) throw new AppError('Este trial já foi prorrogado uma vez. Agora é decidir: assinar, Aguardando retorno ou Perdido.', 400, 'ja_prorrogado');
+    const base = lead.trial_fim || addDias(lead.trial_inicio, DIAS_TRIAL);
+    const novoFim = addDias(base, b.dias);
+    await query(
+      `UPDATE comercial_leads SET trial_fim = $2, trial_prorrogado = true, proximo_passo = $3, proxima_data = $2, atualizado_em = now() WHERE id = $1`,
+      [lead.id, novoFim, `Decisão do trial (prorrogado ${b.dias} dia(s)): ${b.motivo}`],
+    );
+    await query(
+      `INSERT INTO comercial_alteracoes (lead_id, campo, de, para, pessoa_id) VALUES ($1,'trial_fim',$2,$3,$4)`,
+      [lead.id, base, `${novoFim} — ${b.motivo}`, req.pessoa.id],
+    );
+    await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.trial.prorrogar', detalhes: { lead_id: lead.id, dias: b.dias, motivo: b.motivo }, req });
+    res.json(enriquecer(await carregarLead(lead.id)));
   } catch (err) { next(err); }
 }
 
@@ -747,7 +793,7 @@ export async function registrarProposta(req, res, next) {
     const d = propostaSchema.parse(req.body);
     const lead = await carregarLead(req.params.id);
     exigirContatoLiberado(lead);
-    if (!['diagnostico', 'proposta', 'corregedoria'].includes(lead.etapa)) {
+    if (!['diagnostico', 'trial', 'proposta', 'corregedoria'].includes(lead.etapa)) {
       throw new AppError('Proposta só a partir da Reunião de apresentação.', 400, 'portao');
     }
     const hoje = hojeBR();
@@ -787,7 +833,14 @@ export async function registrarProposta(req, res, next) {
     );
     // Sprint 42G — proposta enviada já nasce com o 1º retorno marcado
     const temFuturo = lead.proxima_data && lead.proxima_data > hoje;
-    if (temFuturo) {
+    if (lead.etapa === 'trial' && lead.trial_inicio) {
+      // 42L — proposta no trial (D10): o próximo passo é a reunião de resultado
+      await client.query(
+        `UPDATE comercial_leads SET valor_mensal = $2, proximo_passo = $3, proxima_data = $4, atualizado_em = now() WHERE id = $1`,
+        [lead.id, d.valor_mensal, 'Trial D12: reunião de resultado (meta de sucesso × resultado) e pedido de decisão',
+          addDias(lead.trial_inicio, 12) > hoje ? addDias(lead.trial_inicio, 12) : addDias(hoje, 1)],
+      );
+    } else if (temFuturo) {
       await client.query(`UPDATE comercial_leads SET valor_mensal = $2, atualizado_em = now() WHERE id = $1`, [lead.id, d.valor_mensal]);
     } else {
       await client.query(

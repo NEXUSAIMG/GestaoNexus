@@ -1,4 +1,4 @@
-// Roteiros e objeções da metodologia (sem trial: apresentação → proposta → implantação).
+// Roteiros e objeções da metodologia (42L: apresentação → trial de 14 dias → proposta → implantação).
 // Sprint 42J — quem fala é a Ayio, a empresa que desenvolve e vende o Seu Cartório;
 // a cadência começa pelo e-mail de apresentação.
 
@@ -42,6 +42,34 @@ export const SCRIPTS = [
   {
     titulo: "Reunião de apresentação · demonstração",
     texto: "Mostre só o que resolve a dor que o titular falou, nesta ordem, de preferência com o WhatsApp do próprio cartório:\n1. A mensagem chegando.\n2. A resposta automática.\n3. A passagem para o atendente.\n4. O relatório que o titular vai ver.\n\nFeche a reunião combinando a proposta: \"Posso te mandar a proposta até [dia]? Quem mais precisa ver para decidir?\"",
+  },
+  {
+    titulo: "Fim da reunião · convite para o trial",
+    texto: "[Nome], o melhor jeito de decidir é ver funcionando no seu cartório. Proponho 14 dias de trial, com a gente do lado: amanhã conectamos o WhatsApp e treinamos a equipe em 45 minutos.\n\nPara valer a pena, vamos combinar o que é sucesso: [ex.: responder 90% das mensagens em até 10 minutos / tirar 3 horas por dia do escrevente]. Se isso acontecer, faz sentido seguir?\n\nE já vamos marcar a reunião de resultado com o senhor no dia [data do 12º dia], às [hora], para olharmos os números juntos.",
+  },
+  {
+    titulo: "Trial D0 · ativação",
+    texto: "Roteiro da reunião de ativação (45 min):\n1. Conectar o WhatsApp do cartório e testar uma mensagem.\n2. Criar o acesso de cada atendente e fazer cada um responder uma conversa de teste.\n3. Ligar as respostas das 10 perguntas mais comuns (horário, documentos, valores, prazos).\n4. Ler em voz alta a meta de sucesso e confirmar a reunião de resultado.\n5. Combinar: amanhã eu confiro as primeiras conversas com vocês.",
+  },
+  {
+    titulo: "Trial D1 · primeiras conversas",
+    texto: "[Nome], tudo bem? Aqui é [seu nome], da Ayio. Já chegaram conversas pelo Seu Cartório? Se alguém da equipe não conseguiu entrar ou alguma resposta não ficou boa, me diga que eu ajusto hoje.",
+  },
+  {
+    titulo: "Trial · uso baixo (ligação)",
+    texto: "[Nome], aqui é [seu nome], da Ayio. Vi que ainda passaram poucas conversas pela plataforma. O que travou? (WhatsApp não conectou? Alguém não conseguiu entrar? A equipe voltou para o celular?)\n\nPosso fazer 20 minutos com a equipe hoje ou amanhã para deixar tudo rodando? Quero que o senhor chegue na reunião do dia [data] com números de verdade.",
+  },
+  {
+    titulo: "Trial D7 · relatório ao titular",
+    texto: "Dr(a). [titular], primeira semana do Seu Cartório aí no [cartório]:\n• [n] conversas atendidas\n• tempo médio de resposta: [x] minutos\n• [n] perguntas respondidas automaticamente (as mais comuns: [assuntos])\n\nA meta que combinamos era [meta]. Estamos [no caminho / perto / ajustando X]. Nossa reunião de resultado continua [dia] às [hora]?",
+  },
+  {
+    titulo: "Trial D12 · reunião de resultado",
+    texto: "Roteiro (30 min, com o titular):\n1. Relembrar a meta de sucesso combinada.\n2. Mostrar os números do trial contra a meta (relatório).\n3. Perguntar: \"O que mudou para a equipe e para o cidadão?\"\n4. Pedir a decisão: \"Faz sentido seguirmos? A proposta que mandei fica em [valor]/mês e nada precisa ser desligado.\"\n5. Se houver dúvida, combinar o que falta e a data da resposta (até o 14º dia).",
+  },
+  {
+    titulo: "Trial D14 · decisão",
+    texto: "[Nome], hoje fecha o trial de 14 dias. Como combinamos, os números foram: [resumo]. Posso seguir com o contrato para manter tudo funcionando sem interrupção?\n\n(Se a resposta for \"vou pensar\": combine a data e mude para Aguardando retorno — os 4 retornos começam. Se for \"não\": registre o motivo.)",
   },
   {
     titulo: "Proposta e fechamento",

@@ -33,7 +33,7 @@ const A = (m, c, b) => como(adminToken, m, c, b);
 
 titulo('Config');
 const cfg = (await V('GET', '/comercial/config')).dados;
-ok(cfg.etapas.length === 7 && !cfg.etapas.some((e) => ['trial', 'qualificado'].includes(e.k)) && cfg.etapas[1].n === 'Em contatos' && cfg.marcos_implantacao.length === 5 && cfg.marcos_implantacao[1].n === 'Reunião de treinamento e ativação', 'devolve as 7 etapas (sem trial) e os marcos de implantação');
+ok(cfg.etapas.length === 8 && cfg.etapas.some((e) => e.k === 'trial') && !cfg.etapas.some((e) => e.k === 'qualificado') && cfg.etapas[1].n === 'Em contatos' && cfg.marcos_implantacao.length === 5 && cfg.marcos_implantacao[1].n === 'Reunião de treinamento e ativação', 'devolve as 8 etapas (com o trial de 14 dias) e os marcos de implantação');
 ok(cfg.resultados.some((r) => r.k === 'caixa_postal'), 'lista resultados de contato');
 ok(cfg.feriados.length > 0, 'feriados carregados');
 ok(cfg.eu.admin === false, 'vendedora não é gestão');
@@ -106,7 +106,7 @@ await V('PUT', '/comercial/leads/' + id, { meta_sucesso: 'responder em até 10 m
 
 titulo('Proposta e desconto');
 const pr0 = await V('PUT', '/comercial/leads/' + id, { etapa: 'proposta' });
-ok(pr0.status === 400 && /proposta registrada/.test(pr0.dados.erro) && !/reunião|diagnóstico|ativação|meta de sucesso/.test(pr0.dados.erro), 'com reunião e diagnóstico feitos, Aguardando retorno só pede a proposta (sem trial)');
+ok(pr0.status === 400 && /proposta registrada/.test(pr0.dados.erro) && !/reunião|diagnóstico|ativação|meta de sucesso/.test(pr0.dados.erro), 'com reunião e diagnóstico feitos, Aguardando retorno (pulando o trial) só pede a proposta');
 const desc = await V('POST', `/comercial/leads/${id}/propostas`, { plano: 'Pro', valor_mensal: 540, desconto: 'mes_gratis_ex_cliente' });
 ok(desc.status === 400 && desc.dados.codigo === 'desconto_negado', 'mês grátis só para ex-cliente');
 const pr = await V('POST', `/comercial/leads/${id}/propostas`, { plano: 'Pro', valor_mensal: 540 });

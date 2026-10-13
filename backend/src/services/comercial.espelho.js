@@ -49,6 +49,7 @@ export function palpiteEtapa(nomeColuna, tipoColuna) {
   if (/fora do funil|descart|sem interesse|negativ|perd|desist|cancel|nao fech|recus/.test(n)) return 'perdido';
   if (/corregedor/.test(n)) return 'corregedoria';
   if (/ganh|fechad|assin|onboard|treinament|desenvolv|ativa|implant|pos.?venda/.test(n)) return 'ganho';
+  if (/trial|teste|degust/.test(n)) return 'trial'; // 42L
   if (/aguardando retorno|retorno|propost|negocia/.test(n)) return 'proposta';
   if (/diagn|reuni|apresent|demo/.test(n)) return 'diagnostico';
   if (/cadenc|contat|follow|andamento/.test(n)) return 'cadencia';
@@ -292,7 +293,7 @@ export async function aplicarMovimento(client, plano, pessoaId) {
     await client.query(
       `INSERT INTO comercial_toques (lead_id, tipo, dia, nota, data, pessoa_id)
        VALUES ($1, 'marco', $2, $3, $4, $5)
-       ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco') AND estornado_em IS NULL DO NOTHING`,
+       ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco','trial') AND estornado_em IS NULL DO NOTHING`,
       [lead.id, d, 'marcado ' + nota, hoje, pessoaId],
     );
   }

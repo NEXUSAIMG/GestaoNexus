@@ -24,7 +24,7 @@ import { VistaMarketing } from '../components/comercial/Marketing.jsx';
  */
 
 const ABAS = [
-  ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['implantacao', 'Implantação'],
+  ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['implantacao', 'Trial e implantação'],
   ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
   ['marketing', 'Marketing'], ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
 ];

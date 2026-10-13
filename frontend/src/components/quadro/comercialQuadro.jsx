@@ -12,7 +12,7 @@ import { GUIA_ETAPAS } from '../comercial/guia.js';
 
 export const ETAPA_COMERCIAL = {
   prospect: 'Em prospecção', cadencia: 'Em contatos', diagnostico: 'Reunião de apresentação',
-  proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
+  trial: 'Trial (14 dias)', proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
 };
 
 const MARCO = {

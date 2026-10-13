@@ -3,9 +3,11 @@
  *
  * Etapas com prazo (SLA), cadência de 12 dias úteis, reunião de
  * apresentação (diagnóstico + demonstração), proposta e decisão.
- * SEM TRIAL (decisão da empresa, out/2026): a prova é a demonstração na
- * reunião e a implantação assistida depois do Ganho, acompanhada por marcos
- * (onboarding, treinamento, ativação, pós-venda) e pontuação de uso.
+ * TRIAL GUIADO DE 14 DIAS (decisão da empresa, 13/10/2026 à tarde — antes
+ * havia sido retirado): depois da reunião de apresentação, o cartório usa o
+ * Seu Cartório por 14 dias com marcos (ativação, checagem de uso, ponto do
+ * meio, proposta, reunião de resultado, decisão). Depois do Ganho, a
+ * implantação continua (marcos até o pós-venda) e a pontuação de uso.
  * Desdobramento da meta de trás para frente e supervisão diária por pessoa.
  *
  * Ficam aqui (e não no controller) porque o relatório semanal automático
@@ -18,6 +20,7 @@ export const ETAPAS = [
   { k: 'prospect',     n: 'Em prospecção',             sla: 2 },
   { k: 'cadencia',     n: 'Em contatos',               sla: 12 },
   { k: 'diagnostico',  n: 'Reunião de apresentação',   sla: 5 },
+  { k: 'trial',        n: 'Trial (14 dias)',           sla: 14 },
   { k: 'proposta',     n: 'Aguardando retorno',        sla: 7 },
   { k: 'corregedoria', n: 'Aguardando a Corregedoria', sla: 30 },
   { k: 'ganho',       n: 'Ganho',                sla: 0 },
@@ -25,7 +28,7 @@ export const ETAPAS = [
 ];
 export const ETAPA = Object.fromEntries(ETAPAS.map((e, i) => [e.k, { ...e, i }]));
 export const ETAPAS_CHAVES = ETAPAS.map((e) => e.k);
-export const ETAPAS_ATIVAS = ['prospect', 'cadencia', 'diagnostico', 'proposta', 'corregedoria'];
+export const ETAPAS_ATIVAS = ['prospect', 'cadencia', 'diagnostico', 'trial', 'proposta', 'corregedoria'];
 // Etapas em negociação: não podem ficar sem próximo passo datado.
 export const ETAPAS_NEGOCIACAO = ['diagnostico', 'proposta', 'corregedoria'];
 // Caminho comum de todo cartório (Corregedoria é desvio do interino):
@@ -74,7 +77,7 @@ export const STATUS_MKT = {
 };
 
 export const MOTIVOS_PERDA = [
-  'Preço', 'Sem dor', 'Sem decisor', 'Escolheu concorrente',
+  'Preço', 'Sem dor', 'Sem decisor', 'Escolheu concorrente', 'Não usou no trial',
   'Sem tempo para implantar', 'Problema técnico', 'Sumiu',
   'Fora do funil (sem interesse)', 'Fora do funil (sem resposta)', 'Desistência (usou e desistiu)', 'Outro',
 ];
@@ -108,6 +111,21 @@ export const DIAS_PARA_VOLTAR = 90;
 // Tentativas mínimas antes de "Sumiu" em reunião / corregedoria
 export const TENTATIVAS_MINIMAS = 3;
 
+// Sprint 42L — Trial guiado de 14 dias (dias corridos desde o início do trial).
+// Cada marco tem dono (quem conduz o trial) e um objetivo; o D14 é a decisão.
+export const DIAS_TRIAL = 14;
+export const PRORROGACAO_MAX = 7; // dias; só a gestão, uma vez
+export const MARCOS_TRIAL = [
+  { d: 0,  n: 'Ativação',                  acao: 'Reunião de 45 min: conectar o WhatsApp, logar os atendentes, ligar as respostas das 10 perguntas mais comuns e escrever a meta de sucesso com o titular' },
+  { d: 1,  n: 'Primeiras conversas',       acao: 'Conferir se chegaram conversas reais pela plataforma; destravar quem não conseguiu entrar' },
+  { d: 3,  n: 'Checagem de uso',           acao: 'Marcar os sinais de uso; abaixo de 40 pontos, ligar hoje e marcar uma sessão de ajuda' },
+  { d: 5,  n: 'Ajuste das respostas',      acao: 'Revisar as respostas automáticas com as perguntas reais da semana' },
+  { d: 7,  n: 'Ponto do meio com o titular', acao: 'Enviar o relatório da 1ª semana (volume, tempo de resposta, assuntos) e confirmar a reunião de resultado e quem decide' },
+  { d: 10, n: 'Proposta',                  acao: 'Enviar a proposta com os números do trial (registrar a proposta no Nexus)' },
+  { d: 12, n: 'Reunião de resultado',      acao: 'Meta de sucesso × resultado real, com o titular; pedir a decisão' },
+  { d: 14, n: 'Decisão',                   acao: 'Assinou: Ganho, sem desligar nada. Quer pensar: Aguardando retorno. Não quis: Perdido com o motivo' },
+];
+
 // Implantação assistida depois do Ganho (dias corridos desde a assinatura).
 // Mesmos nomes das colunas do quadro depois da venda.
 export const MARCOS_IMPLANTACAO = [
@@ -132,8 +150,7 @@ export const METAS_PADRAO = {
   ticket: 540,
   diasUteis: 21,
   taxaContatoDiag: 6,
-  // Chaves antigas mantidas (metas já salvas): taxaDiagTrial = reunião → proposta;
-  // taxaTrialPago = proposta → cliente pago.
+  // 42L (trial de volta): taxaDiagTrial = reunião → trial; taxaTrialPago = trial → cliente pago.
   taxaDiagTrial: 60,
   taxaTrialPago: 30,
   metaNovosDia: 25,
@@ -157,7 +174,7 @@ export const RESULTADOS_CHAVES = RESULTADOS.map((r) => r.k);
 export const RESULTADOS_CONECTAM = RESULTADOS.filter((r) => r.conecta).map((r) => r.k);
 
 // Chaves mantidas por compatibilidade com o banco; os nomes seguem o processo sem trial.
-export const TIPOS_REUNIAO = { diagnostico: 'Apresentação (diagnóstico + demonstração)', ativacao: 'Treinamento / ativação', resultado: 'Pós-venda', outra: 'Outra' };
+export const TIPOS_REUNIAO = { diagnostico: 'Apresentação (diagnóstico + demonstração)', ativacao: 'Ativação do trial / treinamento', resultado: 'Reunião de resultado do trial', outra: 'Outra' };
 export const MOTIVOS_NAO_CONTATAR = { descadastro: 'Pediu descadastro', pedido_lgpd: 'Pedido LGPD (titular de dados)', pediu_nao_contatar: 'Pediu para não ligar', outro: 'Outro' };
 export const JANELAS = { abertura: '8h30 · abertura', meio: '12h30 · meio do dia', fechamento: '17h · fechamento' };
 
@@ -224,6 +241,12 @@ export function aplicarEtapa(lead, nova, hoje = hojeBR()) {
     if (nova === 'ganho') marcos.ganho = marcos.ganho || hoje;
   }
   if (nova === 'cadencia' && !lead.cadencia_inicio) mud.cadencia_inicio = hoje;
+  // 42L: o trial só é marcado quando o cartório entra nele (pular o trial,
+  // indo direto à proposta, não conta como trial na taxa de conversão).
+  if (nova === 'trial') {
+    marcos.trial = marcos.trial || hoje;
+    if (!lead.trial_inicio) { mud.trial_inicio = hoje; mud.trial_fim = addDias(hoje, DIAS_TRIAL); }
+  }
   // Assinou: começa a implantação assistida.
   if (nova === 'ganho' && !lead.implantacao_inicio) mud.implantacao_inicio = hoje;
   return mud;
@@ -253,6 +276,17 @@ export function pendenciasPortao(lead, nova, ctx = {}) {
   // primeira passagem e para etapas puladas.
   const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]);
 
+  // 42L — entrar no trial: reunião feita, diagnóstico, meta de sucesso escrita
+  // e a reunião de resultado já marcada (o trial sem data de decisão não converte).
+  if (nova === 'trial' && !jaPassou('trial')) {
+    if (!reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada')) p.push('reunião de apresentação marcada como realizada');
+    DIAGNOSTICO_CAMPOS.filter((c) => c.obrigatorio).forEach((c) => {
+      if (diag[c.k] == null || String(diag[c.k]).trim() === '') p.push('diagnóstico: ' + c.n.toLowerCase());
+    });
+    if (!(ctx.meta_sucesso ?? lead.meta_sucesso) || !String(ctx.meta_sucesso ?? lead.meta_sucesso).trim()) p.push('meta de sucesso do trial, combinada com o titular');
+    if (!reun.some((r) => r.tipo === 'resultado' && ['agendada', 'realizada'].includes(r.status))) p.push('reunião de resultado agendada (perto do 12º dia do trial)');
+    return p;
+  }
   if (alvo >= ETAPA.proposta.i && !jaPassou('proposta')) {
     if (!reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada')) {
       p.push('reunião de apresentação marcada como realizada');
@@ -369,6 +403,37 @@ export function pendenciasPerda(l, motivo) {
     : [];
 }
 
+/** Dia do trial (0 = início) e a situação dele. l.toques_trial = {dia: data} */
+export function situacaoTrial(l, hoje = hojeBR()) {
+  if (l.etapa !== 'trial' || !l.trial_inicio) return null;
+  const dia = diffDias(l.trial_inicio, hoje);
+  const fim = l.trial_fim || addDias(l.trial_inicio, DIAS_TRIAL);
+  const pts = pontuacao(l);
+  const feitos = l.toques_trial || {};
+  const prox = MARCOS_TRIAL.find((m) => !feitos[m.d]) || null;
+  let nivel = 'ok'; let texto = 'No caminho';
+  if (dia >= 3 && pts < 40) { nivel = 'crit'; texto = 'Uso baixo'; } else if (dia >= 3 && pts < 60) { nivel = 'warn'; texto = 'Atenção ao uso'; }
+  if (hoje > fim) { nivel = 'crit'; texto = 'Trial venceu sem decisão'; }
+  return {
+    dia, fim, pontos: pts, nivel, texto, vencido: hoje > fim,
+    proximo_marco: prox ? { ...prox, previsto: addDias(l.trial_inicio, prox.d), atrasado: addDias(l.trial_inicio, prox.d) < hoje } : null,
+  };
+}
+
+/** Próximo marco do trial devido hoje (ou atrasado), ou null. */
+export function trialDevido(l, hoje = hojeBR()) {
+  if (l.etapa !== 'trial' || !l.trial_inicio) return null;
+  const feitos = l.toques_trial || {};
+  for (const m of MARCOS_TRIAL) {
+    if (feitos[m.d]) continue;
+    // a decisão vence no fim do trial (pode ter sido prorrogado)
+    const previsto = m.d === DIAS_TRIAL && l.trial_fim ? l.trial_fim : addDias(l.trial_inicio, m.d);
+    if (previsto <= hoje) return { ...m, previsto, atrasado: previsto < hoje, pontos: pontuacao(l) };
+    return null;
+  }
+  return null;
+}
+
 /** Implantação em andamento: ganho, com início registrado e pós-venda ainda não feito. */
 export function emImplantacao(l) {
   if (l.etapa !== 'ganho' || !l.implantacao_inicio) return false;
@@ -408,7 +473,8 @@ export function situacaoImplantacao(l, hoje = hojeBR()) {
 // Metas
 // ---------------------------------------------------------------------------
 export function desdobrarMeta(m) {
-  // contatos → (taxaContatoDiag) reuniões → (taxaDiagTrial) propostas → (taxaTrialPago) pagos
+  // contatos → (taxaContatoDiag) reuniões → (taxaDiagTrial) trials → (taxaTrialPago) pagos
+  // (a chave `propostas_mes` continua no retorno por compatibilidade: é o nº de trials)
   const t = (m.taxaTrialPago / 100) * (m.taxaDiagTrial / 100) * (m.taxaContatoDiag / 100);
   const contatos = t > 0 ? m.metaClientes / t : null;
   const fProposta = m.taxaTrialPago / 100;
@@ -467,12 +533,13 @@ export function montarPainel({
 
   // --- Hoje
   const toques = []; const marcos = []; const proximos = []; const parados = [];
-  const retornos = []; const voltam = []; const foraFunil = [];
+  const retornos = []; const voltam = []; const foraFunil = []; const trials = [];
   for (const l of leads) {
     if (l.bloqueado_nc) continue; // na lista de não contatar: some das filas
     const t = toqueDevido(l, hoje); if (t) toques.push({ lead: resumo(l), ...t });
     const r = retornoDevido(l, hoje); if (r) retornos.push({ lead: resumo(l), ...r });
     const ff = foraDoFunilDevido(l); if (ff) foraFunil.push({ lead: resumo(l), ...ff });
+    const tr = trialDevido(l, hoje); if (tr) trials.push({ lead: resumo(l), ...tr });
     // Perdido por "Sumiu"/"Sem tempo" volta a ser contatado depois de 90 dias
     if (l.etapa === 'perdido' && MOTIVOS_VOLTAM.includes(l.motivo_perda) && l.proxima_data && l.proxima_data <= hoje) {
       voltam.push({ lead: resumo(l), motivo: l.motivo_perda, perdido_em: l.marcos?.perdido || null });
@@ -485,7 +552,7 @@ export function montarPainel({
     if (ativo(l) && !naFila(l) && p && p.nivel === 'crit') parados.push({ lead: resumo(l), ...p });
   }
   const porPrevisto = (a, b) => (a.previsto < b.previsto ? -1 : a.previsto > b.previsto ? 1 : 0);
-  toques.sort(porPrevisto); marcos.sort(porPrevisto); retornos.sort(porPrevisto);
+  toques.sort(porPrevisto); marcos.sort(porPrevisto); retornos.sort(porPrevisto); trials.sort(porPrevisto);
   proximos.sort((a, b) => (a.proxima_data < b.proxima_data ? -1 : 1));
   parados.sort((a, b) => b.dias - a.dias);
 
@@ -507,6 +574,7 @@ export function montarPainel({
   const alcancou = (k) => (totais?.alcancou ? totais.alcancou[k] || 0 : leads.filter((l) => l.marcos && l.marcos[k]).length);
   const rCad = alcancou('cadencia'); const rDiag = alcancou('diagnostico');
   const rProposta = alcancou('proposta'); const rGanho = alcancou('ganho');
+  const rTrial = alcancou('trial'); // 42L: reunião → trial → pago
   const rPago = totais ? totais.pagos : leads.filter((l) => l.pago_em).length;
   const assinadosMes = leads.filter((l) => l.etapa === 'ganho' && String(l.marcos?.ganho || '').startsWith(mes));
   const pagosMes = leads.filter((l) => String(l.pago_em || '').startsWith(mes));
@@ -523,6 +591,7 @@ export function montarPainel({
     conexoes_hoje: conexoesHoje,
     implantacoes: leads.filter(emImplantacao).length,
     reunioes_agendadas: leads.filter((l) => l.etapa === 'diagnostico').length,
+    trials: leads.filter((l) => l.etapa === 'trial').length,
     propostas: leads.filter((l) => l.etapa === 'proposta').length,
     // Meta conta PAGOS. Assinado sem pagamento aparece separado.
     ganhos_mes: pagosMes.length,
@@ -535,11 +604,18 @@ export function montarPainel({
     por_etapa: Object.fromEntries(ETAPAS.map((e) => [e.k, totais?.por_etapa ? totais.por_etapa[e.k] || 0 : leads.filter((l) => l.etapa === e.k).length])),
     taxas: {
       contato_diag: { de: rCad, para: rDiag, real: taxa(rDiag, rCad), meta: metas.taxaContatoDiag },
-      diag_proposta: { de: rDiag, para: rProposta, real: taxa(rProposta, rDiag), meta: metas.taxaDiagTrial },
-      proposta_ganho: { de: rProposta, para: rGanho, real: taxa(rGanho, rProposta), meta: metas.taxaTrialPago },
+      // 42L: chaves antigas mantidas (a tela já usa); o meio do funil agora é o trial
+      diag_proposta: { de: rDiag, para: rTrial, real: taxa(rTrial, rDiag), meta: metas.taxaDiagTrial },
+      proposta_ganho: { de: rTrial, para: rGanho, real: taxa(rGanho, rTrial), meta: metas.taxaTrialPago },
       assinado_pago: { de: rGanho, para: rPago, real: taxa(rPago, rGanho), meta: 100 },
     },
   };
+
+  // --- Trials em andamento (42L)
+  const trialsAtivos = leads
+    .filter((l) => l.etapa === 'trial' && l.trial_inicio)
+    .map((l) => ({ lead: resumo(l), trial_inicio: l.trial_inicio, ...situacaoTrial(l, hoje) }))
+    .sort((a, b) => ((a.trial_inicio || '') < (b.trial_inicio || '') ? -1 : 1));
 
   // --- Implantação (clientes assinados até o pós-venda)
   const implantacoes = leads
@@ -557,7 +633,8 @@ export function montarPainel({
     const pendentes = toques.filter((x) => x.lead.dono_id === p.id).length
       + marcos.filter((x) => x.lead.dono_id === p.id).length
       + retornos.filter((x) => x.lead.dono_id === p.id).length
-      + foraFunil.filter((x) => x.lead.dono_id === p.id).length;
+      + foraFunil.filter((x) => x.lead.dono_id === p.id).length
+      + trials.filter((x) => x.lead.dono_id === p.id).length;
     const novos = meus.filter((l) => l.marcos?.cadencia === hoje).length;
     const mp = metaPessoa(metas, p.id);
     const total = feitos + pendentes;
@@ -575,6 +652,13 @@ export function montarPainel({
     ativos.forEach((l) => { const s = situacaoPrazo(l, hoje); if (s && s.nivel === 'crit') add(l, 'fora do prazo da etapa'); });
     ativos.forEach((l) => {
       if (ETAPAS_NEGOCIACAO.includes(l.etapa) && (!l.proxima_data || l.proxima_data < hoje)) add(l, 'sem próximo passo datado');
+    });
+    // 42L — trial: uso baixo a partir do D3 e trial vencido sem decisão
+    meus.filter((l) => l.etapa === 'trial').forEach((l) => {
+      const st = situacaoTrial(l, hoje);
+      if (!st) return;
+      if (st.vencido) add(l, `trial venceu em ${dataBr(st.fim)} sem decisão`);
+      else if (st.dia >= 3 && st.pontos < 40) add(l, `trial no dia ${st.dia} com uso baixo (${st.pontos} pontos)`);
     });
     meus.filter(emImplantacao).forEach((l) => {
       if (diffDias(l.implantacao_inicio, hoje) >= 7 && pontuacao(l) < 40) add(l, 'implantação com uso baixo (menos de 40 pontos)');
@@ -613,8 +697,8 @@ export function montarPainel({
     metas,
     plano: desdobrarMeta(metas),
     numeros,
-    hoje_listas: { toques, marcos, retornos, fora_funil: foraFunil, voltam, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
-    implantacoes,
+    hoje_listas: { toques, marcos, trials, retornos, fora_funil: foraFunil, voltam, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
+    implantacoes, trials_ativos: trialsAtivos,
     supervisao,
     sem_dono: totais ? totais.sem_dono : leads.filter((l) => ativo(l) && !l.dono_id && !naFila(l)).length,
     fila: totais ? totais.fila : leads.filter(naFila).length,

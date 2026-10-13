@@ -34,10 +34,23 @@ export const GUIA_ETAPAS = {
     fazer: [
       'Comece pelas perguntas do roteiro "Reunião de apresentação · diagnóstico" (aba Scripts).',
       'Depois demonstre com o WhatsApp do próprio cartório (roteiro "demonstração").',
+      'Antes de desligar, ofereça o trial de 14 dias: combine com o titular a meta de sucesso (com número) e marque já a reunião de resultado, perto do 12º dia.',
       'Ao fim, marque o desfecho (realizada ou faltou) e preencha o diagnóstico: mensagens por dia, quem responde, a dor, quem decide e o prazo.',
     ],
-    avancar: 'Vai para Aguardando retorno quando a reunião estiver realizada, o diagnóstico preenchido e a proposta registrada (envie em até 2 dias).',
-    prazo: '5 dias entre agendar e enviar a proposta.',
+    avancar: 'Vai para Trial quando a reunião estiver realizada, o diagnóstico preenchido, a meta de sucesso escrita e a reunião de resultado marcada.',
+    prazo: '5 dias entre agendar a reunião e começar o trial.',
+  },
+  trial: {
+    objetivo: 'O titular ver a meta de sucesso acontecer no próprio cartório em 14 dias — e decidir no fim.',
+    fazer: [
+      'D0: reunião de ativação (45 min) — WhatsApp conectado, atendentes logados, respostas das 10 perguntas mais comuns ligadas, meta de sucesso confirmada.',
+      'D1 e D3: confira se as conversas estão chegando e marque os sinais de uso. Abaixo de 40 pontos, ligue no mesmo dia.',
+      'D5: ajuste as respostas com as perguntas reais. D7: mande ao titular o relatório da 1ª semana e confirme a reunião de resultado.',
+      'D10: registre a proposta, com os números do trial. D12: reunião de resultado (meta × real) e pedido de decisão.',
+      'D14: assinou → Ganho (nada é desligado). Quer pensar → Aguardando retorno. Não quis → Perdido com o motivo.',
+    ],
+    avancar: 'Vai para Ganho quando assinar; para Aguardando retorno se a decisão ficar para depois do D14.',
+    prazo: '14 dias corridos. Prorrogar só pela gestão, uma vez, até 7 dias.',
   },
   corregedoria: {
     objetivo: 'Cartório interino que já decidiu, mas depende da autorização da corregedoria para contratar.',
@@ -50,7 +63,7 @@ export const GUIA_ETAPAS = {
     prazo: '30 dias; depois disso, conversa com a gestão.',
   },
   proposta: {
-    objetivo: 'Proposta com o cartório: acompanhar até a decisão.',
+    objetivo: 'Proposta com o cartório (depois do trial ou sem ele): acompanhar até a decisão.',
     fazer: [
       'Siga os 4 retornos que aparecem em Hoje: dia 2 (WhatsApp com um caso parecido), dia 4 (ligação), dia 6 (falar com o titular) e dia 7 (mensagem de encerramento).',
       'Tire dúvidas e envolva a TI se precisar.',
@@ -94,7 +107,8 @@ export const GLOSSARIO = {
   sla: 'Prazo máximo que um cartório pode ficar parado na mesma etapa. Passou do prazo, ele aparece em "Parados além do prazo" e na Supervisão.',
   portao: 'Critério para mudar de etapa. Ex.: só vai para Aguardando retorno com a reunião realizada, o diagnóstico preenchido e a proposta registrada. Existe para o funil mostrar a verdade: cada etapa significa a mesma coisa para todo mundo.',
   pontos: 'Pontuação de uso do cliente na implantação (0 a 100), somando os sinais marcados. 60 ou mais no dia 7: no caminho. Abaixo de 40: ligue no mesmo dia.',
-  implantacao: 'Depois da assinatura: onboarding, treinamento e ativação em até 48 horas, bot no ar, checagem de uso e pós-venda aos 30 dias. Não usamos trial: a prova é a demonstração na reunião e uma implantação rápida.',
+  implantacao: 'Depois da assinatura: onboarding, treinamento e ativação em até 48 horas, bot no ar, checagem de uso e pós-venda aos 30 dias. Quem fez o trial já chega com a ativação feita: segue do bot no ar.',
+  trial: 'Trial guiado de 14 dias depois da reunião de apresentação. Só começa com a meta de sucesso escrita (com número) e a reunião de resultado marcada. Marcos: D0 ativação, D1 primeiras conversas, D3 checagem de uso, D5 ajuste, D7 ponto do meio, D10 proposta, D12 reunião de resultado, D14 decisão. Prorrogação: só a gestão, uma vez, até 7 dias.',
   estorno: 'Como corrigir um registro errado. Nada é apagado: o registro fica riscado no histórico, com quem estornou e o motivo. Quem registrou estorna no mesmo dia; depois, só a gestão.',
   semaforo: 'Verde: atividade do dia em dia. Amarelo: entre 70% e 99%. Vermelho: abaixo de 70% — conversa rápida com a gestão para tirar o bloqueio.',
   assinado_pago: 'Assinado é quando o cliente aceita. Pago é quando o primeiro pagamento entra. A meta conta pagos — assinatura sem pagamento ainda não é cliente.',
@@ -115,7 +129,7 @@ export const COMO_FUNCIONA = {
   hoje: {
     titulo: 'Hoje é a sua lista de tarefas',
     itens: [
-      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, retornos de proposta, implantação, toques de cadência, quem saiu sem resposta, próximos passos e quem volta a ser contatado.',
+      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, marcos dos trials, retornos de proposta, implantação, toques de cadência, quem saiu sem resposta, próximos passos e quem volta a ser contatado.',
       'Três contatos sem nenhuma resposta: o cartório aparece em "3 contatos sem resposta" — coloque fora do funil; ele volta em 90 dias.',
       'Cada linha tem o botão que resolve. Ao registrar, a linha some e o próximo passo aparece sozinho.',
       'Comece o dia aqui e termine com a tela vazia.',
@@ -139,9 +153,10 @@ export const COMO_FUNCIONA = {
     ],
   },
   implantacao: {
-    titulo: 'Implantação: clientes que acabaram de assinar',
+    titulo: 'Trial e implantação: quem está testando e quem acabou de assinar',
     itens: [
-      'Do onboarding ao pós-venda de 30 dias, com o próximo marco de cada cliente.',
+      'No topo, os trials em andamento: dia do trial, uso, próximo marco e a data da decisão.',
+      'Embaixo, a implantação: do onboarding ao pós-venda de 30 dias, com o próximo marco de cada cliente.',
       'A barra é a pontuação de uso. Uso baixo (vermelho) = ligue hoje.',
       'A coluna Pagamento mostra quem ainda não pagou a primeira mensalidade.',
     ],
@@ -218,9 +233,11 @@ export const FAQ = [
   { p: 'O cliente pediu desconto.', r: 'A única concessão permitida é 1 mês grátis para ex-cliente que volta, uma vez por cartório. Qualquer outro pedido: leve para a gestão. Na conversa, compare com o custo de uma pessoa respondendo WhatsApp o dia todo.' },
   { p: 'O cliente assinou, mas a meta não mudou.', r: 'A meta conta pagos, não assinados. Preencha o CNPJ do cartório: quando o primeiro pagamento entrar no ASAAS, o sistema confirma sozinho. Se pagou fora do ASAAS, peça à gestão para confirmar com o comprovante.' },
   { p: 'A reunião não aconteceu.', r: 'Abra a reunião (em Hoje ou na ficha do cartório) e escolha "Cliente faltou" ou "Remarcar". Reunião passada sem desfecho vira alerta para você e para a gestão.' },
-  { p: 'Vamos oferecer um período de teste (trial)?', r: 'Não. A decisão da empresa é não trabalhar com trial. A prova é a reunião de apresentação, com a demonstração no WhatsApp do próprio cartório, e a implantação assistida em 48 horas depois da assinatura.' },
+  { p: 'Como funciona o trial?', r: 'São 14 dias guiados depois da reunião de apresentação. Antes de começar: meta de sucesso escrita com o titular (com número, ex.: responder 90% em até 10 minutos) e a reunião de resultado já marcada perto do 12º dia. Os marcos aparecem em Hoje: D0 ativação, D1 primeiras conversas, D3 checagem de uso, D5 ajuste das respostas, D7 relatório ao titular, D10 proposta, D12 reunião de resultado e D14 decisão.' },
+  { p: 'O trial vai acabar e o cliente pediu mais tempo.', r: 'Só a gestão prorroga, uma vez, até 7 dias, com motivo (ex.: titular viajando) e a nova data de decisão combinada. Sem motivo real, a decisão fica para Aguardando retorno: o cartório continua com a proposta e você segue os 4 retornos.' },
+  { p: 'O cartório não está usando o trial.', r: 'A partir do D3, abaixo de 40 pontos de uso, ligue no mesmo dia: descubra o que travou (WhatsApp não conectou, atendente não entrou, ninguém sabe usar) e marque uma sessão de ajuda. Trial sem uso não vira cliente — se não mudar até a reunião de resultado, o motivo de perda é "Não usou no trial".' },
   { p: 'O cartório é interino e depende da corregedoria.', r: 'Mude para "Aguardando a Corregedoria" e registre a próxima data para cobrar o retorno. Ofereça ajuda com os documentos. Autorizou e assinou? Marque como Ganho.' },
-  { p: 'Onde ficam as colunas do quadro antigo?', r: 'As etapas têm os mesmos nomes do quadro: Em prospecção, Em contatos, Reunião de apresentação, Aguardando retorno e Aguardando a Corregedoria. Enviar onboarding, Treinamento, Em desenvolvimento e Pós-venda são os marcos da implantação, na aba Implantação. Fora do funil e Desistência são motivos de Perdido.' },
+  { p: 'Onde ficam as colunas do quadro antigo?', r: 'As etapas têm os mesmos nomes do quadro: Em prospecção, Em contatos, Reunião de apresentação, Trial (14 dias), Aguardando retorno e Aguardando a Corregedoria. Se o quadro tiver uma coluna de trial, ela anda junto com a etapa Trial. Enviar onboarding, Treinamento, Em desenvolvimento e Pós-venda são os marcos da implantação, na aba Implantação. Fora do funil e Desistência são motivos de Perdido.' },
   { p: 'Fiz 3 contatos e ninguém respondeu. E agora?', r: 'Coloque o cartório "Fora do funil (sem resposta)": ele aparece em Hoje, no bloco "3 contatos sem resposta", com o botão. Não insista mais agora — o sistema programa a volta em 90 dias e ele reaparece em "Voltam a ser contatados hoje". Se alguém respondeu em algum momento, siga a cadência normal.' },
   { p: 'Por que o meu semáforo está vermelho?', r: 'Você fez menos de 70% do que estava previsto para hoje (toques e marcos pendentes) ou está abaixo da sua meta de novos ou de toques. Veja os alertas no seu cartão da Supervisão e os itens em Hoje.' },
   { p: 'Não sei o que falar na ligação.', r: 'Abra a aba Scripts. Dentro da ficha do cartório também aparece o roteiro do passo atual, com botão para copiar.' },
@@ -253,15 +270,19 @@ export const TOUR = [
     texto: 'Na aba “Processo” está o caminho inteiro de um cartório até virar cliente, a cadência de 12 dias, a implantação e a rotina do dia. Clique em cada etapa para ver o que fazer.',
   },
   {
-    titulo: '5. Insista com método',
+    titulo: '5. O trial é de 14 dias, com dia certo para decidir',
+    texto: 'Depois da reunião de apresentação vem o trial: só começa com a meta de sucesso escrita e a reunião de resultado marcada. Os marcos (ativação, checagem de uso, relatório, proposta, resultado, decisão) aparecem em Hoje, no dia certo.',
+  },
+  {
+    titulo: '6. Insista com método',
     texto: 'Cartório que não responde não é "não". Siga a cadência de 12 dias e, depois da proposta, os 4 retornos que aparecem em Hoje. "Sumiu" só é aceito depois disso — e em 90 dias o cartório volta para a sua lista.',
   },
   {
-    titulo: '6. Prefere o quadro? Ele anda junto',
+    titulo: '7. Prefere o quadro? Ele anda junto',
     texto: 'O quadro Atividade Comercial e o Comercial são espelho: mover o card muda a etapa aqui e vice-versa. No quadro, cada card mostra o próximo passo, o (?) de cada coluna diz o que fazer nela e "Destacar os meus" deixa o seu trabalho em evidência.',
   },
   {
-    titulo: '7. Errou? Tem conserto',
+    titulo: '8. Errou? Tem conserto',
     texto: 'Nada é apagado, mas tudo pode ser corrigido com um estorno e um motivo. Dúvidas? Abra a aba "Ajuda" ou clique nos ícones (?) espalhados pela tela.',
   },
 ];
@@ -282,6 +303,13 @@ export function scriptDoPasso(lead) {
     }[proximo] || 'WhatsApp · dia 12 (encerramento)';
   }
   if (lead.etapa === 'diagnostico') return 'Reunião de apresentação · diagnóstico';
+  if (lead.etapa === 'trial') {
+    const feitos = lead.toques_trial || {};
+    if (!feitos[0]) return 'Trial D0 · ativação';
+    if (!feitos[7]) return (lead.pontos ?? 100) < 40 ? 'Trial · uso baixo (ligação)' : 'Trial D7 · relatório ao titular';
+    if (!feitos[12]) return 'Trial D12 · reunião de resultado';
+    return 'Trial D14 · decisão';
+  }
   if (lead.etapa === 'proposta') {
     const n = Math.min(Number(lead.toques_pos_proposta || 0), 3);
     return ['Retorno 1/4 (dia 2) · WhatsApp com um caso', 'Retorno 2/4 (dia 4) · ligação', 'Retorno 3/4 (dia 6) · titular', 'Retorno 4/4 (dia 7) · encerramento educado'][n];

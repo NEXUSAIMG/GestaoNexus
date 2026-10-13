@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowRight, ArrowDown, Phone, MessageCircle, Mail, CalendarCheck, FileSignature,
-  BadgeCheck, XCircle, UserPlus, Search, Wallet, Sun, Coffee, Moon, Users,
+  BadgeCheck, XCircle, UserPlus, Search, Wallet, Sun, Coffee, Moon, Users, FlaskConical,
 } from 'lucide-react';
 import { GUIA_ETAPAS } from './guia.js';
 
@@ -21,7 +21,8 @@ const PASSOS = [
   { k: 'prospect', icone: UserPlus, cor: 'slate' },
   { k: 'cadencia', icone: Phone, cor: 'sky', porta: 'começou os contatos' },
   { k: 'diagnostico', icone: CalendarCheck, cor: 'indigo', porta: 'agendou a reunião' },
-  { k: 'proposta', icone: FileSignature, cor: 'orange', porta: 'reunião feita + diagnóstico + proposta' },
+  { k: 'trial', icone: FlaskConical, cor: 'amber', porta: 'reunião feita + diagnóstico + meta de sucesso + reunião de resultado marcada' },
+  { k: 'proposta', icone: FileSignature, cor: 'orange', porta: 'proposta registrada e decisão em aberto' },
   { k: 'corregedoria', icone: Search, cor: 'violet', porta: 'interino: depende da corregedoria' },
   { k: 'ganho', icone: BadgeCheck, cor: 'emerald', porta: 'cliente assinou; começa a implantação' },
 ];
@@ -160,6 +161,30 @@ export function LinhaCadencia({ cfg }) {
   );
 }
 
+/** Sprint 42L — os 8 marcos do trial de 14 dias. */
+export function LinhaTrial({ cfg }) {
+  const marcos = cfg.marcos_trial || [];
+  return (
+    <div className="space-y-2">
+      <div className="overflow-x-auto pb-1">
+        <div className="relative min-w-[640px] pt-2">
+          <div className="absolute left-6 right-6 top-[26px] h-1 rounded bg-gradient-to-r from-amber-200 via-orange-300 to-emerald-300" />
+          <div className="relative grid gap-1" style={{ gridTemplateColumns: `repeat(${marcos.length}, minmax(0, 1fr))` }}>
+            {marcos.map((m) => (
+              <div key={m.d} className="flex flex-col items-center gap-1 text-center">
+                <span className={`z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white text-xs font-bold ${m.d === 14 ? 'border-emerald-600 text-emerald-700' : 'border-amber-500 text-amber-700'}`}>D{m.d}</span>
+                <span className="text-[11px] font-semibold leading-tight text-slate-700">{m.n}</span>
+                <span className="text-[10px] leading-tight text-slate-500">{m.acao}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">Dias corridos a partir do início do trial. Só começa com a meta de sucesso escrita e a reunião de resultado marcada. Uso abaixo de 40 pontos a partir do D3: ligue no mesmo dia. Prorrogar só pela gestão, uma vez, até 7 dias.</p>
+    </div>
+  );
+}
+
 export function LinhaImplantacao({ cfg }) {
   return (
     <div className="space-y-2">
@@ -177,7 +202,7 @@ export function LinhaImplantacao({ cfg }) {
           </div>
         </div>
       </div>
-      <p className="text-xs text-slate-500">Dias corridos a partir da assinatura. Treinamento e ativação na mesma reunião, em até 48 horas. No D7 confira a pontuação de uso: 60+ no caminho, abaixo de 40 ligue no mesmo dia. No pós-venda, peça depoimento e indicação.</p>
+      <p className="text-xs text-slate-500">Dias corridos a partir da assinatura. Quem fez o trial já chega com o onboarding e o treinamento feitos: a implantação segue do D7. No D7 confira a pontuação de uso: 60+ no caminho, abaixo de 40 ligue no mesmo dia. No pós-venda, peça depoimento e indicação.</p>
     </div>
   );
 }
@@ -240,6 +265,11 @@ export function VistaProcesso({ cfg, painel }) {
         <p className="text-sm text-slate-600">Cada caixa é uma etapa. Em cada caixa, “entra quando” mostra o que faz o cartório chegar ali — o sistema só deixa avançar quando isso foi registrado.</p>
         <MapaProcesso cfg={cfg} porEtapa={painel?.numeros?.por_etapa} />
       </section>
+      <section className="space-y-3 rounded-lg border border-amber-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-slate-900">Trial: 14 dias guiados até a decisão</h2>
+        <p className="text-sm text-slate-600">Etapa “Trial (14 dias)”, depois da reunião de apresentação. Objetivo: o titular ver a meta de sucesso acontecer no próprio cartório e decidir no 14º dia.</p>
+        <LinhaTrial cfg={cfg} />
+      </section>
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-base font-semibold text-slate-900">Cadência: 8 toques em 12 dias úteis</h2>
@@ -248,7 +278,7 @@ export function VistaProcesso({ cfg, painel }) {
         </section>
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-base font-semibold text-slate-900">Implantação: do onboarding ao pós-venda</h2>
-          <p className="text-sm text-slate-600">Depois do Ganho. Objetivo: o cliente usar de verdade, pagar e indicar. Não trabalhamos com trial.</p>
+          <p className="text-sm text-slate-600">Depois do Ganho. Objetivo: o cliente usar de verdade, pagar e indicar.</p>
           <LinhaImplantacao cfg={cfg} />
         </section>
       </div>

@@ -56,7 +56,7 @@ const SELECT_ACAO = `
     LEFT JOIN pessoas_acesso rp ON rp.id = a.responsavel_id
     LEFT JOIN LATERAL (
       SELECT count(*)::int AS cartorios,
-             count(*) FILTER (WHERE l.marcos ? 'diagnostico' OR l.etapa IN ('diagnostico','proposta','corregedoria','ganho')
+             count(*) FILTER (WHERE l.marcos ? 'diagnostico' OR l.etapa IN ('diagnostico','trial','proposta','corregedoria','ganho')
                                OR EXISTS (SELECT 1 FROM comercial_reunioes r WHERE r.lead_id = l.id AND r.tipo = 'diagnostico'
                                                                               AND r.status IN ('agendada','realizada','remarcada')))::int AS reunioes,
              count(*) FILTER (WHERE l.marcos ? 'proposta' OR l.etapa IN ('proposta','corregedoria','ganho'))::int AS propostas,
@@ -98,7 +98,7 @@ export async function painelMarketing(req, res, next) {
       // Resultado por origem dos cartórios que chegaram nos últimos 90 dias
       query(
         `SELECT l.origem, count(*)::int AS cartorios,
-                count(*) FILTER (WHERE l.marcos ? 'diagnostico' OR l.etapa IN ('diagnostico','proposta','corregedoria','ganho')
+                count(*) FILTER (WHERE l.marcos ? 'diagnostico' OR l.etapa IN ('diagnostico','trial','proposta','corregedoria','ganho')
                                OR EXISTS (SELECT 1 FROM comercial_reunioes r WHERE r.lead_id = l.id AND r.tipo = 'diagnostico'
                                                                               AND r.status IN ('agendada','realizada','remarcada')))::int AS reunioes,
                 count(*) FILTER (WHERE l.marcos ? 'proposta' OR l.etapa IN ('proposta','corregedoria','ganho'))::int AS propostas,

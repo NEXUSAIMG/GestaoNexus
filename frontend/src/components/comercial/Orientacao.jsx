@@ -12,11 +12,12 @@ import { SCRIPTS } from './scripts.js';
  *
  * As "ações" são strings interpretadas pela gaveta:
  *   toque:cadencia:<dia> | toque:avulso | marco:<dia> | reuniao:<tipo> |
- *   desfecho:<id> | proposta | etapa:<k> | foco:<id do campo> | pagamento
+ *   desfecho:<id> | proposta | etapa:<k> | foco:<id do campo> | pagamento |
+ *   trial:<dia> (marco do trial) | prorrogar (gestão)
  */
 
 const CAD_DIAS = [1, 2, 4, 6, 8, 10, 11, 12];
-const ORDEM = ['prospect', 'cadencia', 'diagnostico', 'proposta', 'ganho'];
+const ORDEM = ['prospect', 'cadencia', 'diagnostico', 'trial', 'proposta', 'ganho'];
 
 function addDiasUteis(s, n, feriados) {
   const d = new Date(s + 'T12:00:00'); let k = 0;
@@ -51,7 +52,21 @@ export function criteriosPara(lead, rascunho, cfg) {
   // a reunião feita, o diagnóstico e a proposta.
   const alvo = ORDEM.indexOf(proxima);
   const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]); // mesma regra do servidor
-  if (alvo >= ORDEM.indexOf('proposta') && !jaPassou('proposta')) {
+  // Sprint 42L — entrar no trial
+  if (proxima === 'trial' && !jaPassou('trial')) {
+    const agendada = reun.find((r) => r.tipo === 'diagnostico' && r.status === 'agendada');
+    const realizada = reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada');
+    itens.push({ ok: realizada, txt: 'Reunião de apresentação marcada como realizada', acao: realizada ? null : agendada ? 'desfecho:' + agendada.id : 'reuniao:diagnostico', rotulo: agendada ? 'Registrar desfecho' : 'Agendar reunião' });
+    cfg.diagnostico_campos.filter((c) => c.obrigatorio).forEach((c) => {
+      const ok = diag[c.k] != null && String(diag[c.k]).trim() !== '';
+      itens.push({ ok, txt: 'Diagnóstico: ' + c.n.toLowerCase(), acao: ok ? null : 'foco:campo-diag-' + c.k, rotulo: 'Preencher' });
+    });
+    const meta = String(rascunho?.meta_sucesso ?? lead.meta_sucesso ?? '').trim();
+    itens.push({ ok: !!meta, txt: 'Meta de sucesso do trial, combinada com o titular', acao: meta ? null : 'foco:campo-meta', rotulo: 'Escrever' });
+    const res = reun.some((r) => r.tipo === 'resultado' && ['agendada', 'realizada'].includes(r.status));
+    itens.push({ ok: res, txt: 'Reunião de resultado agendada (perto do 12º dia)', acao: res ? null : 'reuniao:resultado', rotulo: 'Agendar' });
+  }
+  if (alvo >= ORDEM.indexOf('proposta') && !jaPassou('proposta') && proxima !== 'trial') {
     const agendada = reun.find((r) => r.tipo === 'diagnostico' && r.status === 'agendada');
     const realizada = reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada');
     itens.push({
@@ -122,6 +137,19 @@ function proximaAcaoBase(lead, cfg, admin) {
     }
     case 'corregedoria':
       return { nivel: lead.proxima_data && lead.proxima_data >= hoje ? 'ok' : 'warn', titulo: 'Aguardando a corregedoria', texto: lead.proxima_data && lead.proxima_data >= hoje ? `Próxima cobrança em ${dataBr(lead.proxima_data)}. Autorizou e assinou? Marque como ganho.` : 'Registre a próxima data para cobrar o retorno e ofereça ajuda com os documentos.', acao: lead.proxima_data && lead.proxima_data >= hoje ? 'etapa:ganho' : 'foco:campo-proximo', rotulo: lead.proxima_data && lead.proxima_data >= hoje ? 'Cliente assinou' : 'Marcar próxima cobrança' };
+    case 'trial': {
+      // Sprint 42L — trial guiado de 14 dias
+      const ini = lead.trial_inicio || hoje;
+      const fim = lead.trial_fim || addDias(ini, cfg.dias_trial || 14);
+      const feitos = lead.toques_trial || {};
+      const dia = diffDias(ini, hoje);
+      const marco = (cfg.marcos_trial || []).find((m) => !feitos[m.d] && (m.d === 14 ? fim : addDias(ini, m.d)) <= hoje);
+      if (hoje > fim) return { nivel: 'crit', titulo: 'O trial venceu: decida hoje', texto: `Terminou em ${dataBr(fim)}. Assinou? Ganho. Quer pensar? Aguardando retorno (com os 4 retornos). Não quis? Perdido com o motivo.${admin && !lead.trial_prorrogado ? ' A gestão pode prorrogar uma vez, até 7 dias.' : ''}`, acao: 'etapa:ganho', rotulo: 'Cliente assinou' };
+      if (dia >= 3 && (lead.pontos ?? 0) < 40) return { nivel: 'crit', titulo: `Uso baixo no trial (dia ${dia}): ligue hoje`, texto: `${lead.pontos ?? 0} pontos. Descubra o que travou, marque uma sessão de ajuda e atualize os sinais de uso. Trial sem uso não vira cliente.`, acao: 'toque:avulso', rotulo: 'Registrar ligação' };
+      if (marco) return { nivel: addDias(ini, marco.d) < hoje && marco.d !== 14 ? 'crit' : 'info', titulo: `Trial D${marco.d}: ${marco.n}`, texto: marco.acao, acao: marco.d === 10 && !(lead.propostas || []).some((x) => x.status === 'enviada') ? 'proposta' : 'trial:' + marco.d, rotulo: marco.d === 10 && !(lead.propostas || []).some((x) => x.status === 'enviada') ? 'Registrar proposta' : 'Marcar como feito' };
+      const prox = (cfg.marcos_trial || []).find((m) => !feitos[m.d]);
+      return { nivel: 'ok', titulo: `Trial no dia ${dia} de ${diffDias(ini, fim)}`, texto: prox ? `Próximo: D${prox.d} · ${prox.n} em ${dataBr(prox.d === 14 ? fim : addDias(ini, prox.d))}. Até lá, acompanhe o uso.` : 'Todos os marcos feitos. Registre a decisão.' };
+    }
     case 'proposta': {
       const vig = (lead.propostas || []).find((x) => x.status === 'enviada');
       if (vig && vig.validade < hoje) return { nivel: 'crit', titulo: 'A proposta venceu', texto: 'Ligue para o cartório. Se ainda houver interesse, registre uma nova proposta; se não, marque como Perdido com o motivo.', acao: 'toque:avulso', rotulo: 'Registrar ligação' };

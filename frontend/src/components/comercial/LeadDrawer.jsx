@@ -164,6 +164,9 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
     } finally { setSalvando(false); }
   }
 
+  async function marcoTrial(dia) { // 42L — marco do trial guiado
+    try { await api.post(`/comercial/leads/${id}/toques`, { tipo: 'trial', dia }); await recarregar(); onMudou(); } catch (err) { setErro(mensagemDeErro(err)); }
+  }
   async function marcoDireto(dia) {
     try { await api.post(`/comercial/leads/${id}/toques`, { tipo: 'marco', dia }); await recarregar(); onMudou(); } catch (err) { setErro(mensagemDeErro(err)); }
   }
@@ -179,6 +182,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
     const [tipo, a, b] = acao.split(':');
     if (tipo === 'toque') setModal(a === 'cadencia' ? { tipo: 'toque', toqueTipo: 'cadencia', dia: Number(b) } : { tipo: 'toque' });
     else if (tipo === 'marco') marcoDireto(Number(a));
+    else if (tipo === 'trial') marcoTrial(Number(a)); // 42L
+    else if (tipo === 'prorrogar') setModal({ tipo: 'prorrogar' });
     else if (tipo === 'reuniao') setModal({ tipo: 'reuniao', tipoReuniao: a });
     else if (tipo === 'desfecho') setModal({ tipo: 'desfecho', reuniao: lead.reunioes.find((r) => r.id === a) });
     else if (tipo === 'proposta') setModal({ tipo: 'proposta' });
@@ -208,6 +213,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
   const mostraCad = etapaReal === 'cadencia' || Object.keys(lead?.toques_cadencia || {}).length > 0;
   const mostraDiag = idx(f.etapa) >= idx('diagnostico') && f.etapa !== 'perdido' || Object.values(f.diagnostico || {}).some(Boolean);
   const mostraImpl = etapaReal === 'ganho' && !!implInicio;
+  const mostraTrial = etapaReal === 'trial' && !!lead?.trial_inicio; // 42L
   const pontos = cfg.sinais.reduce((s, x) => s + (f.sinais[x.k] ? x.p : 0), 0);
   const eu = cfg.eu?.id;
   // Responsável: gestão troca livre; os demais pegam da fila ou repassam o próprio.
@@ -257,7 +263,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
         <div className="flex flex-wrap gap-2">
           <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'toque' })}><Phone size={14} /> Registrar contato</button>
           <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'reuniao' })}><CalendarPlus size={14} /> Agendar reunião</button>
-          {['diagnostico', 'proposta', 'corregedoria'].includes(etapaReal) && (
+          {['diagnostico', 'trial', 'proposta', 'corregedoria'].includes(etapaReal) && (
             <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'proposta' })}><FileSignature size={14} /> Registrar proposta</button>
           )}
         </div>
@@ -372,8 +378,9 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
                 <input id={'campo-diag-' + c.k} className={inputCls} value={f.diagnostico[c.k] ?? ''} onChange={setDiag(c.k)} />
               </Campo>
             ))}
-            {idx(f.etapa) >= idx('proposta') && f.etapa !== 'perdido' && (
-              <Campo rotulo="O que é sucesso para o cliente" className="col-span-2"><input id="campo-meta" className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos (usado no pós-venda)" /></Campo>
+            {idx(f.etapa) >= idx('diagnostico') && f.etapa !== 'perdido' && (
+              <Campo rotulo="Meta de sucesso do trial (combinada com o titular) *" className="col-span-2" dica={<Dica texto="O que precisa acontecer em 14 dias para o titular dizer sim. Exige número: ex. responder 90% das mensagens em até 10 minutos, ou tirar 3 horas por dia do escrevente. É o que se mostra na reunião de resultado." />}>
+                <input id="campo-meta" className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos" /></Campo>
             )}
           </div>
         </Bloco>
@@ -459,6 +466,33 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
         </Bloco>
       )}
 
+      {mostraTrial && (
+        <Bloco titulo={<>Trial · dia {lead.trial?.dia ?? 0} · até {dataBr(lead.trial_fim)}{lead.trial_prorrogado ? ' (prorrogado)' : ''} <Pill nivel={nivelPontos(pontos)}>{pontos} pts</Pill></>}>
+          {lead.meta_sucesso && <p className="rounded-md bg-amber-50 px-2 py-1.5 text-sm text-amber-900"><b>Meta de sucesso:</b> {lead.meta_sucesso}</p>}
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Roteiro do trial</p>
+          {(cfg.marcos_trial || []).map((m) => {
+            const feito = (lead?.toques_trial || {})[m.d];
+            const previsto = m.d === (cfg.dias_trial || 14) ? lead.trial_fim : addDias(lead.trial_inicio, m.d);
+            return (
+              <Check key={m.d} marcado={!!feito} desab={!id}
+                onChange={() => (feito ? setModal({ tipo: 'estornar', url: `/comercial/leads/${id}/toques/estornar`, corpo: { tipo: 'trial', dia: m.d } }) : marcoTrial(m.d))}>
+                <b>D{m.d} · {m.n}</b> — {m.acao}
+                <span className="block text-xs text-slate-400">{feito ? 'feito em ' + dataBr(feito) : 'previsto para ' + dataBr(previsto)}</span>
+              </Check>
+            );
+          })}
+          <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Sinais de uso (marque e salve) · abaixo de 40 pontos a partir do D3: ligue hoje</p>
+          {cfg.sinais.map((x) => (
+            <Check key={x.k} marcado={!!f.sinais[x.k]} onChange={() => setF({ ...f, sinais: { ...f.sinais, [x.k]: !f.sinais[x.k] } })}>
+              {x.n} <span className="text-xs text-slate-400">+{x.p}</span>
+            </Check>
+          ))}
+          {gestor && !lead.trial_prorrogado && (
+            <button type="button" className={btnCls + ' mt-2 !px-2 !py-1 text-xs'} onClick={() => setModal({ tipo: 'prorrogar' })}>Prorrogar o trial (gestão, uma vez)</button>
+          )}
+        </Bloco>
+      )}
+
       {mostraImpl && (
         <Bloco titulo={<>Implantação · início {dataBr(implInicio)} <Pill nivel={nivelPontos(pontos)}>{pontos} pts</Pill></>}>
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Roteiro da implantação</p>
@@ -494,6 +528,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
       {modal?.tipo === 'estornar' && <EstornoModal url={modal.url} corpoExtra={modal.corpo} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={modal.tipoReuniao || (etapaReal === 'ganho' ? 'ativacao' : 'diagnostico')} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'desfecho' && <DesfechoModal reuniao={modal.reuniao} onFechar={() => setModal(null)} onFeito={aposModal} />}
+      {modal?.tipo === 'prorrogar' && <ProrrogarModal lead={leadMin} max={cfg.prorrogacao_max || 7} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'proposta' && <PropostaModal lead={leadMin} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'pagamento' && <PagamentoModal lead={leadMin} hoje={hoje} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'justificativa' && (
@@ -607,5 +642,26 @@ function Check({ marcado, desab, onChange, children }) {
       <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-nexus-700" checked={marcado} disabled={desab} onChange={onChange} />
       <span className="text-slate-700">{children}</span>
     </label>
+  );
+}
+
+/** Sprint 42L — prorrogação do trial (gestão, uma vez, até 7 dias). */
+function ProrrogarModal({ lead, max, onFechar, onFeito }) {
+  const [dias, setDias] = useState(3);
+  const [motivo, setMotivo] = useState('');
+  const [erro, setErro] = useState('');
+  async function salvar() {
+    try { await api.post(`/comercial/leads/${lead.id}/trial/prorrogar`, { dias: Number(dias), motivo }); onFeito(); } catch (err) { setErro(mensagemDeErro(err)); }
+  }
+  return (
+    <Modal titulo={`Prorrogar o trial · ${lead.nome}`} onFechar={onFechar}
+      rodape={<><button type="button" className={btnCls} onClick={onFechar}>Cancelar</button><button type="button" className={btnPrimCls} onClick={salvar}>Prorrogar</button></>}>
+      <Erro>{erro}</Erro>
+      <p className="text-sm text-slate-600">Só uma vez por cartório. Use quando houver um motivo real (titular viajando, equipe em férias) e combine a nova data da decisão com o titular.</p>
+      <div className="grid grid-cols-3 gap-3">
+        <Campo rotulo="Dias a mais"><input type="number" min="1" max={max} className={inputCls} value={dias} onChange={(e) => setDias(e.target.value)} /></Campo>
+        <Campo rotulo="Motivo *" className="col-span-2"><input className={inputCls} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="ex.: titular de férias até sexta" /></Campo>
+      </div>
+    </Modal>
   );
 }
