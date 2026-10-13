@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ArrowRight, ArrowDown, Phone, MessageCircle, Mail, CalendarCheck, Rocket, FileSignature,
+  ArrowRight, ArrowDown, Phone, MessageCircle, Mail, CalendarCheck, FileSignature,
   BadgeCheck, XCircle, UserPlus, Search, Wallet, Sun, Coffee, Moon, Users,
 } from 'lucide-react';
 import { GUIA_ETAPAS } from './guia.js';
@@ -12,7 +12,7 @@ import { GUIA_ETAPAS } from './guia.js';
  *                       para a outra, quantos cartórios há em cada uma agora e,
  *                       ao clicar, o que fazer naquela etapa.
  *   <LinhaCadencia /> — os 8 toques em 12 dias úteis
- *   <LinhaTrial />    — os 14 dias do trial com os marcos
+ *   <LinhaImplantacao /> — os marcos da implantação depois do Ganho
  *   <DiaDaEquipe />   — a rotina do dia e da semana
  *   <OndeEsta etapa/> — "você está aqui", dentro da ficha do cartório
  */
@@ -20,11 +20,10 @@ import { GUIA_ETAPAS } from './guia.js';
 const PASSOS = [
   { k: 'prospect', icone: UserPlus, cor: 'slate' },
   { k: 'cadencia', icone: Phone, cor: 'sky', porta: 'começou os contatos' },
-  { k: 'diagnostico', icone: Search, cor: 'indigo', porta: 'agendou a reunião' },
-  { k: 'qualificado', icone: CalendarCheck, cor: 'violet', porta: 'reunião feita + diagnóstico preenchido' },
-  { k: 'trial', icone: Rocket, cor: 'amber', porta: 'meta de sucesso + ativação agendada' },
-  { k: 'proposta', icone: FileSignature, cor: 'orange', porta: 'proposta registrada' },
-  { k: 'ganho', icone: BadgeCheck, cor: 'emerald', porta: 'cliente assinou' },
+  { k: 'diagnostico', icone: CalendarCheck, cor: 'indigo', porta: 'agendou a reunião' },
+  { k: 'proposta', icone: FileSignature, cor: 'orange', porta: 'reunião feita + diagnóstico + proposta' },
+  { k: 'corregedoria', icone: Search, cor: 'violet', porta: 'interino: depende da corregedoria' },
+  { k: 'ganho', icone: BadgeCheck, cor: 'emerald', porta: 'cliente assinou; começa a implantação' },
 ];
 
 const COR = {
@@ -161,14 +160,14 @@ export function LinhaCadencia({ cfg }) {
   );
 }
 
-export function LinhaTrial({ cfg }) {
+export function LinhaImplantacao({ cfg }) {
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto pb-1">
         <div className="relative min-w-[420px] pt-2">
           <div className="absolute left-6 right-6 top-[26px] h-1 rounded bg-gradient-to-r from-amber-200 via-amber-300 to-emerald-300" />
-          <div className="relative grid grid-cols-6 gap-1">
-            {cfg.marcos_trial.map((m) => (
+          <div className="relative grid grid-cols-5 gap-1">
+            {cfg.marcos_implantacao.map((m) => (
               <div key={m.d} className="flex flex-col items-center gap-1 text-center">
                 <span className="z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-amber-500 bg-white text-xs font-bold text-amber-700">D{m.d}</span>
                 <span className="text-[11px] font-semibold leading-tight text-slate-700">{m.n}</span>
@@ -178,7 +177,7 @@ export function LinhaTrial({ cfg }) {
           </div>
         </div>
       </div>
-      <p className="text-xs text-slate-500">Dias corridos a partir da ativação. No D3 confira a pontuação de uso: 60+ no caminho, abaixo de 40 ligue no mesmo dia. No D7 a reunião de resultado vira proposta.</p>
+      <p className="text-xs text-slate-500">Dias corridos a partir da assinatura. Treinamento e ativação na mesma reunião, em até 48 horas. No D7 confira a pontuação de uso: 60+ no caminho, abaixo de 40 ligue no mesmo dia. No pós-venda, peça depoimento e indicação.</p>
     </div>
   );
 }
@@ -186,9 +185,9 @@ export function LinhaTrial({ cfg }) {
 export function DiaDaEquipe() {
   const dia = [
     { h: '8h30', icone: Sun, t: 'Abertura', d: 'Cada pessoa abre o Hoje. A gestão faz a 1ª checagem.' },
-    { h: 'manhã', icone: Phone, t: 'Bloco de contatos', d: 'Reuniões e desfechos primeiro; depois marcos de trial e toques de cadência.' },
+    { h: 'manhã', icone: Phone, t: 'Bloco de contatos', d: 'Reuniões e desfechos primeiro; depois implantação de clientes e toques de cadência.' },
     { h: '12h30', icone: Coffee, t: 'Meio do dia', d: '2ª checagem. Quem está no amarelo ou vermelho combina o que destravar.' },
-    { h: 'tarde', icone: MessageCircle, t: 'Reuniões e retornos', d: 'Diagnósticos, ativações, propostas e próximos passos do dia.' },
+    { h: 'tarde', icone: MessageCircle, t: 'Reuniões e retornos', d: 'Reuniões de apresentação, treinamentos, propostas e próximos passos do dia.' },
     { h: '17h', icone: Moon, t: 'Fechamento', d: '3ª checagem. Meta: lista do Hoje vazia e todo cartório em negociação com próximo passo datado.' },
   ];
   return (
@@ -244,13 +243,13 @@ export function VistaProcesso({ cfg, painel }) {
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-base font-semibold text-slate-900">Cadência: 8 toques em 12 dias úteis</h2>
-          <p className="text-sm text-slate-600">Etapa “Em cadência”. Objetivo: conseguir a reunião de diagnóstico.</p>
+          <p className="text-sm text-slate-600">Etapa “Em contatos” (cadência). Objetivo: conseguir a reunião de apresentação.</p>
           <LinhaCadencia cfg={cfg} />
         </section>
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">Trial guiado: 14 dias</h2>
-          <p className="text-sm text-slate-600">Etapa “Trial guiado”. Objetivo: o cartório usar de verdade e ver resultado.</p>
-          <LinhaTrial cfg={cfg} />
+          <h2 className="text-base font-semibold text-slate-900">Implantação: do onboarding ao pós-venda</h2>
+          <p className="text-sm text-slate-600">Depois do Ganho. Objetivo: o cliente usar de verdade, pagar e indicar. Não trabalhamos com trial.</p>
+          <LinhaImplantacao cfg={cfg} />
         </section>
       </div>
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">

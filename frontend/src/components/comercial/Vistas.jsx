@@ -40,8 +40,8 @@ function Fila({ painel, onMudou, onAviso }) {
   }
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-nexus-200 bg-nexus-50 px-3 py-2 text-sm text-slate-700">
-      <span><b>{painel.fila}</b> cartório(s) na fila (Prospect sem responsável).</span>
-      <Dica texto="Listas importadas entram na fila. Cada pessoa pega um lote, os mais antigos primeiro; ao pegar, o prazo de 2 dias da etapa Prospect começa a contar." />
+      <span><b>{painel.fila}</b> cartório(s) na fila ("Em prospecção" sem responsável).</span>
+      <Dica texto="Listas importadas entram na fila. Cada pessoa pega um lote, os mais antigos primeiro; ao pegar, o prazo de 2 dias começa a contar." />
       <span className="ml-auto flex items-center gap-1.5">
         <select className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm" value={qtd} onChange={(e) => setQtd(e.target.value)} aria-label="Quantos pegar">
           {[5, 10, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
@@ -96,8 +96,8 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
       ),
     },
     {
-      k: 'marcos', titulo: 'Marcos de trial', itens: h.marcos, nivel: 'line', dica: 'pontos',
-      porque: 'Trial é onde o cliente decide. Marco atrasado é cliente esfriando.',
+      k: 'marcos', titulo: 'Implantação de clientes', itens: h.marcos, nivel: 'line', dica: 'pontos',
+      porque: 'Cliente que assinou precisa ver o resultado rápido. Marco atrasado é cliente esfriando.',
       render: (x) => (
         <li key={x.lead.id + '-' + x.d} className="flex items-start gap-3 py-2">
           <div className="min-w-0 flex-1">
@@ -209,7 +209,7 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
             <Kpi rotulo="Novos na cadência hoje" valor={n.novos_hoje} meta={m.metaNovosDia} />
             <Kpi rotulo="Toques feitos hoje" valor={n.toques_hoje} meta={m.metaToquesDia}
               sub={`${n.conexoes_hoje} conexão(ões) · ${n.toques_hoje ? pct((n.conexoes_hoje / n.toques_hoje) * 100) : '—'}`} />
-            <Kpi rotulo="Trials ativos" valor={n.trials_ativos} sub={`${h.marcos.length} marco(s) para hoje`} />
+            <Kpi rotulo="Em implantação" valor={n.implantacoes} sub={`${h.marcos.length} marco(s) para hoje`} />
           </>
         )}
         <Kpi rotulo="Clientes pagos no mês (equipe)" valor={n.pagos_mes} meta={m.metaClientes}
@@ -227,7 +227,7 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
           <p className="text-base font-semibold">Tudo em dia.</p>
           <p className="mt-1">Sem tarefas pendentes{escopo === 'meus' ? ' para você' : ''}. Bom momento para colocar mais cartórios em cadência:
-            {painel.fila ? 'pegue um lote da fila acima e ' : ''}abra o Funil, escolha cartórios em Prospect e clique em “Começar cadência hoje”. A meta da equipe é {m.metaNovosDia} novos por dia útil.</p>
+            {painel.fila ? 'pegue um lote da fila acima e ' : ''}abra o Funil, escolha cartórios em Em prospecção e clique em “Começar cadência hoje”. A meta da equipe é {m.metaNovosDia} novos por dia útil.</p>
         </div>
       )}
 
@@ -356,7 +356,7 @@ function Num({ rotulo, valor, meta }) {
 // ---------------------------------------------------------------------------
 const CAMPOS_META = [
   ['metaClientes', 'Meta de clientes pagos/mês'], ['ticket', 'Ticket médio (R$/mês)'], ['diasUteis', 'Dias úteis no mês'],
-  ['taxaContatoDiag', 'Contato → diagnóstico (%)'], ['taxaDiagTrial', 'Diagnóstico → trial (%)'], ['taxaTrialPago', 'Trial → pago (%)'],
+  ['taxaContatoDiag', 'Contato → reunião (%)'], ['taxaDiagTrial', 'Reunião → proposta (%)'], ['taxaTrialPago', 'Proposta → pago (%)'],
   ['metaNovosDia', 'Novos na cadência/dia (equipe)'], ['metaToquesDia', 'Toques/dia (equipe)'],
 ];
 const CAMPOS_PESSOA = [['novosDia', 'Novos/dia'], ['toquesDia', 'Toques/dia'], ['reunioesMes', 'Reuniões/mês'], ['pagosMes', 'Pagos/mês']];
@@ -426,8 +426,8 @@ export function VistaMetas({ painel, cfg, onSalvo }) {
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
           <dt className="text-slate-500">Contatos por dia útil</dt><dd className="text-right text-lg font-semibold">{isFinite(contatos) ? Math.ceil(contatos / (form.diasUteis || 21)) : '—'}</dd>
           <dt className="text-slate-500">Contatos no mês</dt><dd className="text-right font-semibold">{isFinite(contatos) ? Math.ceil(contatos) : '—'}</dd>
-          <dt className="text-slate-500">Diagnósticos no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago && form.taxaDiagTrial ? Math.ceil(form.metaClientes / ((form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100))) : '—'}</dd>
-          <dt className="text-slate-500">Trials no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago ? Math.ceil(form.metaClientes / (form.taxaTrialPago / 100)) : '—'}</dd>
+          <dt className="text-slate-500">Reuniões no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago && form.taxaDiagTrial ? Math.ceil(form.metaClientes / ((form.taxaTrialPago / 100) * (form.taxaDiagTrial / 100))) : '—'}</dd>
+          <dt className="text-slate-500">Propostas no mês</dt><dd className="text-right font-semibold">{form.taxaTrialPago ? Math.ceil(form.metaClientes / (form.taxaTrialPago / 100)) : '—'}</dd>
           <dt className="text-slate-500">Receita recorrente nova esperada</dt><dd className="text-right font-semibold">{brl(form.metaClientes * (form.ticket || 0))}/mês</dd>
         </dl>
         {admin && (
@@ -447,7 +447,7 @@ export function VistaMetas({ painel, cfg, onSalvo }) {
             <tr><th className="py-1">Passagem</th><th className="py-1 text-right">Volume</th><th className="py-1 text-right">Real</th><th className="py-1 text-right">Meta</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {[['Contato → diagnóstico', n.taxas.contato_diag], ['Diagnóstico → trial', n.taxas.diag_trial], ['Trial → assinado', n.taxas.trial_pago], ['Assinado → pago', n.taxas.assinado_pago]].map(([r, tx]) => (
+            {[['Contato → reunião', n.taxas.contato_diag], ['Reunião → proposta', n.taxas.diag_proposta], ['Proposta → assinado', n.taxas.proposta_ganho], ['Assinado → pago', n.taxas.assinado_pago]].map(([r, tx]) => (
               <tr key={r}><td className="py-1.5">{r}</td><td className="py-1.5 text-right font-mono">{tx.para}/{tx.de}</td><td className="py-1.5 text-right">{cmp(tx)}</td><td className="py-1.5 text-right font-mono">{tx.meta}%</td></tr>
             ))}
           </tbody>
@@ -508,7 +508,7 @@ export function VistaPlacar({ cfg, painel, versao }) {
   const metas = painel?.metas?.porPessoa || {};
   const col = [
     ['toques', 'Toques'], ['conexoes', 'Conexões'], ['taxa_conexao', '% conexão'], ['reunioes_agendadas', 'Reuniões agend.'],
-    ['reunioes_realizadas', 'Realizadas'], ['reunioes_faltou', 'Faltou'], ['taxa_comparecimento', '% compar.'], ['trials', 'Trials'],
+    ['reunioes_realizadas', 'Realizadas'], ['reunioes_faltou', 'Faltou'], ['taxa_comparecimento', '% compar.'],
     ['propostas', 'Propostas'], ['assinados', 'Assinados'], ['pagos', 'Pagos'], ['receita', 'Receita'], ['perdidos', 'Perdidos'],
     ['estornos', 'Estornos'], ['checagens', 'Checagens'], ['acoes_vencidas', 'Ações venc.'],
   ];
@@ -778,24 +778,24 @@ function Feriados({ cfg, admin }) {
 
 
 // ---------------------------------------------------------------------------
-// TRIALS
+// IMPLANTAÇÃO (clientes assinados, até o pós-venda)
 // ---------------------------------------------------------------------------
-export function VistaTrials({ painel, cfg, onAbrir }) {
-  const rows = painel.trials;
+export function VistaImplantacao({ painel, cfg, onAbrir }) {
+  const rows = painel.implantacoes || [];
   if (!rows.length) {
     return (
-      <Painel titulo="Nenhum trial em andamento">
-        <Vazio>Um cartório entra em trial quando passa pelo diagnóstico, está qualificado e tem a reunião de ativação marcada. Mude a etapa para “Trial guiado” para começar o roteiro de 14 dias.</Vazio>
+      <Painel titulo="Nenhum cliente em implantação">
+        <Vazio>Quando um cartório assina (etapa Ganho), a implantação começa: onboarding, treinamento e ativação, bot no ar, checagem de uso e pós-venda aos 30 dias.</Vazio>
       </Painel>
     );
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">Pontuação de ativação: 60 ou mais no dia 3 está no caminho; abaixo de 40, ligue no mesmo dia.</p>
+      <p className="text-sm text-slate-500">Implantação assistida: treinamento e ativação em até 48 horas. Pontos de uso: 60 ou mais no dia 7 está no caminho; abaixo de 40, ligue no mesmo dia.</p>
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <tr><th className="px-3 py-2">Cartório</th><th className="px-3 py-2">Dia</th><th className="px-3 py-2">Ativação</th><th className="px-3 py-2">Próximo marco</th><th className="px-3 py-2">Situação</th></tr>
+            <tr><th className="px-3 py-2">Cartório</th><th className="px-3 py-2">Dia</th><th className="px-3 py-2">Uso</th><th className="px-3 py-2">Próximo marco</th><th className="px-3 py-2">Pagamento</th><th className="px-3 py-2">Situação</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((t) => (
@@ -804,18 +804,18 @@ export function VistaTrials({ painel, cfg, onAbrir }) {
                   <NomeLead lead={t.lead} onAbrir={onAbrir} />
                   <div className="text-xs text-slate-500">{[t.lead.cidade, t.lead.uf].filter(Boolean).join('/')}{t.lead.dono_nome ? ' · ' + t.lead.dono_nome : ''}</div>
                 </td>
-                <td className="px-3 py-2 font-mono">D{t.dia}<span className="text-slate-400">/14</span></td>
+                <td className="px-3 py-2 font-mono">D{t.dia}<span className="text-slate-400">/30</span></td>
                 <td className="min-w-[140px] px-3 py-2">
                   <div className="flex items-center gap-2"><div className="flex-1"><Barra pct={t.pontos} nivel={nivelPontos(t.pontos)} /></div><span className="font-mono text-xs">{t.pontos}</span></div>
                 </td>
-                <td className="px-3 py-2 text-xs">{t.proximo_marco ? <>D{t.proximo_marco.d} · {t.proximo_marco.n} <span className="text-slate-400">({dataBr(t.proximo_marco.previsto)})</span></> : 'Roteiro concluído'}</td>
+                <td className="px-3 py-2 text-xs">{t.proximo_marco ? <>D{t.proximo_marco.d} · {t.proximo_marco.n} <span className={t.proximo_marco.atrasado ? 'text-red-700' : 'text-slate-400'}>({dataBr(t.proximo_marco.previsto)})</span></> : 'Concluída'}</td>
+                <td className="px-3 py-2">{t.pago_em ? <Pill nivel="ok">pago {dataBr(t.pago_em)}</Pill> : <Pill nivel="warn">aguardando</Pill>}</td>
                 <td className="px-3 py-2"><Pill nivel={t.nivel}>{t.texto}</Pill></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-400">{nomeEtapa(cfg, 'trial')}: {painel.numeros.por_etapa.trial} · {nomeEtapa(cfg, 'proposta')}: {painel.numeros.por_etapa.proposta}</p>
     </div>
   );
 }

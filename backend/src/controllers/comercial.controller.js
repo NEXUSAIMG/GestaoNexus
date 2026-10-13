@@ -4,7 +4,7 @@ import { AppError, NaoEncontradoError } from '../utils/errors.js';
 import { registrarAcao } from '../utils/audit.js';
 import {
   ETAPAS, ETAPA, ETAPAS_CHAVES, ORIGENS, ORIGENS_CHAVES, MOTIVOS_PERDA,
-  SEGMENTOS, CADENCIA, MARCOS_TRIAL, SINAIS, RESULTADOS, RESULTADOS_CHAVES, TIPOS_REUNIAO,
+  SEGMENTOS, CADENCIA, MARCOS_IMPLANTACAO, SINAIS, ETAPAS_NEGOCIACAO, RESULTADOS, RESULTADOS_CHAVES, TIPOS_REUNIAO,
   MOTIVOS_NAO_CONTATAR, JANELAS, DIAGNOSTICO_CAMPOS,
   hojeBR, mesDe, addDias, aplicarEtapa, pendenciasPortao, ehRetrocesso,
 } from '../services/comercial.regras.js';
@@ -211,20 +211,20 @@ const paraTexto = (v) => (v == null ? null : typeof v === 'object' ? JSON.string
 async function inserirLead(client, dados, pessoaId, extras = {}) {
   const hoje = hojeBR();
   const etapa = dados.etapa || 'prospect';
-  const base = { etapa: null, marcos: {}, cadencia_inicio: null, trial_inicio: null };
+  const base = { etapa: null, marcos: {}, cadencia_inicio: null, implantacao_inicio: null };
   // Importação: etapas anteriores datadas na criação do card e a etapa atual
   // na entrada da coluna — senão um "Concluído" antigo contaria como ganho do mês.
   const mud = aplicarEtapa(base, etapa, extras.data_marcos || hoje);
   if (extras.etapa_desde) {
     if (mud.marcos[etapa]) mud.marcos[etapa] = extras.etapa_desde;
     if (etapa === 'cadencia') mud.cadencia_inicio = extras.etapa_desde;
-    if (etapa === 'trial') mud.trial_inicio = extras.etapa_desde;
+    if (etapa === 'ganho') mud.implantacao_inicio = extras.etapa_desde;
   }
   const { rows } = await client.query(
     `INSERT INTO comercial_leads
        (protocolo, nome, segmento, cidade, uf, contato, telefone, email, cns, cnpj, dono_id,
         cartorio_id, etapa, etapa_desde, marcos, origem, campanha, cadencia_inicio,
-        trial_inicio, sinais, diagnostico, meta_sucesso, valor_mensal, motivo_perda, motivo_perda_obs,
+        implantacao_inicio, sinais, diagnostico, meta_sucesso, valor_mensal, motivo_perda, motivo_perda_obs,
         proximo_passo, proxima_data, notas, indicado_por_id, origem_card_id, criado_por_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20::jsonb,$21::jsonb,
              $22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
@@ -235,7 +235,7 @@ async function inserirLead(client, dados, pessoaId, extras = {}) {
       soDigitos(dados.cns), soDigitos(dados.cnpj),
       dados.dono_id ?? null, dados.cartorio_id ?? null, etapa, extras.etapa_desde || hoje,
       JSON.stringify(mud.marcos), dados.origem, dados.campanha ?? null,
-      mud.cadencia_inicio ?? null, mud.trial_inicio ?? null, JSON.stringify(dados.sinais || {}),
+      mud.cadencia_inicio ?? null, mud.implantacao_inicio ?? null, JSON.stringify(dados.sinais || {}),
       JSON.stringify(dados.diagnostico || {}), dados.meta_sucesso ?? null,
       dados.valor_mensal ?? null, etapa === 'perdido' ? dados.motivo_perda : null,
       dados.motivo_perda_obs ?? null, dados.proximo_passo ?? null, dados.proxima_data ?? null,
@@ -262,7 +262,7 @@ export async function config(req, res, next) {
     );
     res.json({
       etapas: ETAPAS, origens: ORIGENS, motivos_perda: MOTIVOS_PERDA, segmentos: SEGMENTOS,
-      cadencia: CADENCIA, marcos_trial: MARCOS_TRIAL, sinais: SINAIS, resultados: RESULTADOS,
+      cadencia: CADENCIA, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
       tipos_reuniao: TIPOS_REUNIAO, motivos_nao_contatar: MOTIVOS_NAO_CONTATAR, janelas: JANELAS,
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
@@ -474,7 +474,7 @@ export async function atualizar(req, res, next) {
       sets.etapa = mud.etapa; sets.etapa_desde = mud.etapa_desde;
       sets.marcos = mud.marcos;
       if (mud.cadencia_inicio) sets.cadencia_inicio = mud.cadencia_inicio;
-      if (mud.trial_inicio) sets.trial_inicio = mud.trial_inicio;
+      if (mud.implantacao_inicio) sets.implantacao_inicio = mud.implantacao_inicio;
       // Reabrir ganho desfaz o pagamento? Não: pagamento é fato. Só registra.
     }
 
@@ -487,7 +487,7 @@ export async function atualizar(req, res, next) {
         [req.params.id, ...chaves.map((k) => (jsonb.has(k) ? JSON.stringify(sets[k]) : sets[k]))],
       );
       // Histórico campo a campo (de → para)
-      const ignorar = new Set(['marcos', 'etapa_desde', 'cadencia_inicio', 'trial_inicio']);
+      const ignorar = new Set(['marcos', 'etapa_desde', 'cadencia_inicio', 'implantacao_inicio']);
       for (const k of chaves) {
         if (ignorar.has(k)) continue;
         const de = paraTexto(atual[k]); const para = paraTexto(sets[k]);
@@ -550,8 +550,8 @@ export async function registrarToque(req, res, next) {
     const d = toqueSchema.parse(req.body);
     if (d.tipo !== 'avulso' && d.dia == null) throw new AppError('Informe o dia do roteiro.', 400, 'dia_obrigatorio');
     if (d.tipo === 'cadencia' && !CADENCIA.some((c) => c.d === d.dia)) throw new AppError('Dia fora da cadência.');
-    if (d.tipo === 'marco' && !MARCOS_TRIAL.some((m) => m.d === d.dia)) throw new AppError('Marco inexistente.');
-    // Contato sempre com resultado (marco do trial é atividade interna: opcional)
+    if (d.tipo === 'marco' && !MARCOS_IMPLANTACAO.some((m) => m.d === d.dia)) throw new AppError('Marco inexistente.');
+    // Contato sempre com resultado (marco de implantação é atividade interna: opcional)
     if (d.tipo !== 'marco' && !d.resultado) {
       throw new AppError('Escolha o resultado do contato (atendeu, não atendeu, caixa postal...).', 400, 'resultado_obrigatorio');
     }
@@ -571,9 +571,9 @@ export async function registrarToque(req, res, next) {
     const lead = await carregarLead(req.params.id, client);
     exigirContatoLiberado(lead);
     if (lead.etapa === 'ganho' && d.tipo === 'cadencia') throw new AppError('Lead já é ganho.');
-    if (d.tipo === 'marco' && !lead.trial_inicio) throw new AppError('O trial ainda não começou.');
+    if (d.tipo === 'marco' && !lead.implantacao_inicio) throw new AppError('A implantação ainda não começou: o cartório precisa estar como Ganho.');
     // Etapas de negociação nunca ficam sem próximo passo datado
-    const negociando = ['diagnostico', 'qualificado', 'trial', 'proposta'].includes(lead.etapa);
+    const negociando = ETAPAS_NEGOCIACAO.includes(lead.etapa);
     const temFuturo = lead.proxima_data && lead.proxima_data >= hoje;
     if (d.tipo === 'avulso' && negociando && !temFuturo && !(d.proximo_passo && d.proxima_data)) {
       throw new AppError('Registre o próximo passo e a data (lead em negociação não pode ficar sem próximo passo).', 400, 'proximo_passo_obrigatorio');
@@ -759,8 +759,8 @@ export async function registrarProposta(req, res, next) {
     const d = propostaSchema.parse(req.body);
     const lead = await carregarLead(req.params.id);
     exigirContatoLiberado(lead);
-    if (!['trial', 'proposta', 'qualificado'].includes(lead.etapa)) {
-      throw new AppError('Proposta só a partir de Qualificado (depois do diagnóstico).', 400, 'portao');
+    if (!['diagnostico', 'proposta', 'corregedoria'].includes(lead.etapa)) {
+      throw new AppError('Proposta só a partir da Reunião de apresentação.', 400, 'portao');
     }
     const hoje = hojeBR();
     const enviada = d.enviada_em || hoje;
@@ -863,7 +863,7 @@ export async function recompensaIndicacao(req, res, next) {
 // Painel e metas
 // ---------------------------------------------------------------------------
 
-/** GET /comercial/painel — Hoje, Trials, Supervisão e números */
+/** GET /comercial/painel — Hoje, Implantação, Supervisão e números */
 export async function painel(req, res, next) {
   try {
     const p = await calcularPainel();
@@ -1007,15 +1007,24 @@ const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '
 /** Palpite de etapa pelo nome da coluna (o admin confirma na tela). */
 function palpiteEtapa(nomeColuna, tipoColuna) {
   const n = normalizar(nomeColuna);
-  if (/perd|desist|cancel|nao fech|recus/.test(n)) return 'perdido';
-  if (/ganh|fechad|assin|ativ|cliente|pronto para ativ/.test(n)) return 'ganho';
-  if (/propost|negocia/.test(n)) return 'proposta';
-  if (/trial|teste|onboard|implant|desenvolv/.test(n)) return 'trial';
-  if (/qualific/.test(n)) return 'qualificado';
+  if (/fora do funil|descart|sem interesse|negativ|perd|desist|cancel|nao fech|recus/.test(n)) return 'perdido';
+  // Interino que depende da corregedoria para contratar: decisão pendente
+  if (/corregedor/.test(n)) return 'corregedoria';
+  // Depois da assinatura: onboarding, treinamento, desenvolvimento, ativação, corregedoria, pós-venda
+  if (/ganh|fechad|assin|onboard|treinament|desenvolv|ativa|implant|pos.?venda/.test(n)) return 'ganho';
+  if (/aguardando retorno|retorno|propost|negocia/.test(n)) return 'proposta';
   if (/diagn|reuni|apresent|demo/.test(n)) return 'diagnostico';
   if (/cadenc|contat|follow|andamento/.test(n)) return 'cadencia';
   if (tipoColuna === 'concluida') return 'ganho';
   return 'prospect';
+}
+
+/** Motivo de perda pelo nome da coluna; senão, o padrão escolhido na tela. */
+function palpiteMotivo(nomeColuna, padrao) {
+  const n = normalizar(nomeColuna);
+  if (/desist/.test(n)) return 'Desistência (usou e desistiu)';
+  if (/fora do funil|sem interesse|negativ|recus/.test(n)) return 'Fora do funil (sem interesse)';
+  return padrao;
 }
 
 function palpiteOrigem(texto, padrao) {
@@ -1105,6 +1114,8 @@ export async function importarQuadro(req, res, next) {
       return v == null || String(v).trim() === '' ? null : String(v).trim();
     };
 
+    const { rows: cols } = await client.query(`SELECT id, nome FROM colunas WHERE quadro_id = $1`, [d.quadro_id]);
+    const nomeColuna = new Map(cols.map((x) => [x.id, x.nome]));
     const hoje = hojeBR();
     let criados = 0; let pulados = 0; let ignorados = 0; let bloqueados = 0;
     await client.query('BEGIN');
@@ -1139,14 +1150,17 @@ export async function importarQuadro(req, res, next) {
         contato: campo(cs, 'Representante/Oficial', 'Representante', 'Oficial', 'Titular', 'Contato'),
         telefone: campo(cs, 'Telefone/WhatsApp', 'Telefone', 'WhatsApp', 'Celular'),
         email: campo(cs, 'E-mail', 'Email'),
-        dono_id: c.responsavel_id,
+        // Prospect importado vai para a FILA (sem dono): a equipe pega em lotes
+        // e o prazo começa a contar quando alguém pega. Nas demais etapas o
+        // responsável do card continua dono.
+        dono_id: etapa === 'prospect' ? null : c.responsavel_id,
         origem: palpiteOrigem(campo(cs, 'Origem'), d.origem_padrao),
         campanha: d.campanha ?? null,
         etapa,
         notas,
         // Fechamentos importados sem dado completo: motivo padrão / valor fica
         // para a equipe completar (o ganho entra mesmo sem valor, só aqui).
-        motivo_perda: etapa === 'perdido' ? d.motivo_perda_padrao : null,
+        motivo_perda: etapa === 'perdido' ? palpiteMotivo(nomeColuna.get(c.coluna_id), d.motivo_perda_padrao) : null,
         valor_mensal: null,
       };
       // Importação histórica pula duplicidade com o próprio funil só via

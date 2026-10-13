@@ -1,4 +1,4 @@
-// Roteiros e objeções da metodologia (mesmos da Mesa Comercial).
+// Roteiros e objeções da metodologia (sem trial: apresentação → proposta → implantação).
 
 export const SCRIPTS = [
   {
@@ -18,12 +18,24 @@ export const SCRIPTS = [
     texto: "[Nome], vou parar de insistir para não atrapalhar sua rotina. Se o atendimento por WhatsApp virar prioridade, é só me chamar aqui.\n\nPosso voltar a falar com você daqui a 3 meses?",
   },
   {
-    titulo: "Diagnóstico (20 minutos)",
-    texto: "1. Situação: quantas mensagens chegam por dia? Quem responde, e em qual aparelho?\n2. Problema: o que mais se repete? Quanto tempo leva para responder? Já houve reclamação?\n3. Implicação: o que esse tempo custa? O que acontece quando o atendente falta ou sai? Como fica a LGPD com conversas no celular pessoal?\n4. Necessidade: se isso estivesse resolvido em 2 semanas, como seria o atendimento?\n5. Decisão: quem mais precisa participar? O titular pode estar na ativação?\n\nFechar sempre com a ativação do trial marcada na agenda.",
+    titulo: "Reunião de apresentação · diagnóstico",
+    texto: "1. Situação: quantas mensagens chegam por dia? Quem responde, e em qual aparelho?\n2. Problema: o que mais se repete? Quanto tempo leva para responder? Já houve reclamação?\n3. Implicação: o que esse tempo custa? O que acontece quando o atendente falta ou sai? Como fica a LGPD com conversas no celular pessoal?\n4. Necessidade: se isso estivesse resolvido em 2 semanas, como seria o atendimento?\n5. Decisão: quem mais precisa participar? É interino (depende da corregedoria)?\n\nDepois das perguntas, faça a demonstração e combine a data da proposta.",
   },
   {
-    titulo: "Fechamento · reunião do dia 7",
-    texto: "A meta que definimos era [meta]. Nesta semana vocês chegaram a [resultado]. Faz sentido manter isso funcionando?\n\nO plano [nome] fica em [valor] por mês. Posso enviar o contrato para assinatura hoje?",
+    titulo: "Reunião de apresentação · demonstração",
+    texto: "Mostre só o que resolve a dor que o titular falou, nesta ordem, de preferência com o WhatsApp do próprio cartório:\n1. A mensagem chegando.\n2. A resposta automática.\n3. A passagem para o atendente.\n4. O relatório que o titular vai ver.\n\nFeche a reunião combinando a proposta: \"Posso te mandar a proposta até [dia]? Quem mais precisa ver para decidir?\"",
+  },
+  {
+    titulo: "Proposta e fechamento",
+    texto: "[Nome], como combinamos na reunião: vocês recebem [volume] mensagens por dia e hoje [n] pessoas respondem no celular. Com o Seu Cartório, [o que muda para eles].\n\nO plano [nome] fica em [valor] por mês, com implantação assistida: em até 48 horas treinamos a equipe e deixamos tudo funcionando.\n\nPosso enviar o contrato para assinatura?",
+  },
+  {
+    titulo: "Aguardando retorno · acompanhamento",
+    texto: "[Nome], tudo bem? Estou acompanhando a proposta do Seu Cartório. Ficou alguma dúvida que eu possa resolver? Se ajudar, marco 10 minutos com vocês e a TI.\n\n(Interino aguardando a corregedoria: \"Já tiveram retorno da corregedoria? Posso ajudar com algum documento?\")",
+  },
+  {
+    titulo: "Implantação · onboarding (D0)",
+    texto: "[Nome], bem-vindos ao Seu Cartório! Segue o onboarding para preencher. Vamos marcar o treinamento da equipe (e já ativamos tudo na mesma reunião): [dia] às [hora] fica bom?",
   },
   {
     titulo: "Pedido de indicação",
@@ -33,8 +45,8 @@ export const SCRIPTS = [
 
 export const OBJECOES = [
   ["Está caro", "Compare com o custo de uma pessoa respondendo WhatsApp o dia todo. Pergunte: caro comparado a quê?"],
-  ["Já uso o WhatsApp normal", "O problema não é o WhatsApp, é a fila, a falta de histórico e o celular pessoal. Mostre o relatório do trial."],
-  ["Minha equipe não vai usar", "Por isso a ativação é feita junto, com a equipe. Ofereça acompanhamento na primeira semana."],
+  ["Já uso o WhatsApp normal", "O problema não é o WhatsApp, é a fila, a falta de histórico e o celular pessoal. Mostre na demonstração como fica o relatório."],
+  ["Minha equipe não vai usar", "Por isso a implantação é assistida: treinamos a equipe em até 48 horas e acompanhamos o primeiro mês."],
   ["E a LGPD e a segurança?", "Explique onde ficam os dados, quem acessa e o fluxo de consentimento; ofereça conversa com a TI."],
   ["Preciso falar com o titular", "Vamos marcar os três juntos? Nunca deixe a decisão sem data."],
   ["Já tenho sistema do cartório", "O sistema cuida dos atos; o Seu Cartório cuida do atendimento. Um não substitui o outro."],

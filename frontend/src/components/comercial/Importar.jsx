@@ -68,7 +68,7 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
         )}
         <button type="button" className={btnPrimCls} onClick={() => onFeito(resumo)}>Concluir</button>
       </>}>
-        <p className="text-sm text-slate-700"><b>{resultado.criados}</b> cartório(s) entraram {dono ? 'no funil' : 'na fila (Prospect sem responsável) — a equipe pega em Hoje → “Pegar para mim”'}.</p>
+        <p className="text-sm text-slate-700"><b>{resultado.criados}</b> cartório(s) entraram {dono ? 'no funil' : 'na fila ("Em prospecção" sem responsável) — a equipe pega em Hoje → “Pegar para mim”'}.</p>
         {rec.length > 0 && (
           <>
             <p className="text-sm text-slate-700">
@@ -105,7 +105,7 @@ export function ImportarLista({ cfg, onFechar, onFeito }) {
         <Campo rotulo="Campanha / onda"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} placeholder="ex.: E-mail onda 1" /></Campo>
         <Campo rotulo="Entram como">
           <select className={inputCls} value={etapa} onChange={(e) => { setEtapa(e.target.value); if (e.target.value === 'cadencia' && !dono) setDono(cfg.eu?.id || ''); }}>
-            <option value="prospect">Prospect</option><option value="cadencia">Em cadência (começa hoje)</option>
+            <option value="prospect">Em prospecção</option><option value="cadencia">Em contatos (começa hoje)</option>
           </select>
         </Campo>
         <Campo rotulo={`Responsável${etapa === 'cadencia' ? ' *' : ''}`}>
@@ -214,7 +214,7 @@ export function ImportarQuadro({ cfg, onFechar, onFeito }) {
             </Campo>
             <Campo rotulo="Campanha (opcional)"><input className={inputCls} value={campanha} onChange={(e) => setCampanha(e.target.value)} /></Campo>
           </div>
-          <p className="text-xs text-slate-500">Colunas mapeadas para “Perdido” entram com motivo “Outro”; para “Ganho”, sem valor — completem depois no funil. As datas das etapas vêm do card (criação e entrada na coluna), então ganhos antigos não contam como ganhos deste mês.</p>
+          <p className="text-xs text-slate-500">"Em prospecção" entra sem responsável, na fila: a equipe pega em lotes em Hoje. Perdido recebe o motivo pelo nome da coluna (“Fora do funil” = Sem interesse; “Desistência” = Desistiu depois de usar), senão “Outro”. Ganho entra sem valor e já em implantação — completem no funil. As datas vêm do card, então ganhos antigos não contam como ganhos deste mês.</p>
         </>
       )}
       {msg && <p className="text-sm text-red-700">{msg}</p>}

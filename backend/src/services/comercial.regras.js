@@ -1,28 +1,36 @@
 /**
  * Módulo Comercial — regras da metodologia (funções puras, sem banco).
  *
- * Mesmas regras da "Mesa Comercial" original: etapas com prazo (SLA),
- * cadência de 12 dias úteis, trial guiado de 14 dias com marcos e
- * pontuação de ativação, desdobramento da meta de trás para frente e
- * supervisão diária por pessoa.
+ * Etapas com prazo (SLA), cadência de 12 dias úteis, reunião de
+ * apresentação (diagnóstico + demonstração), proposta e decisão.
+ * SEM TRIAL (decisão da empresa, out/2026): a prova é a demonstração na
+ * reunião e a implantação assistida depois do Ganho, acompanhada por marcos
+ * (onboarding, treinamento, ativação, pós-venda) e pontuação de uso.
+ * Desdobramento da meta de trás para frente e supervisão diária por pessoa.
  *
  * Ficam aqui (e não no controller) porque o relatório semanal automático
  * (entrega 3) usa exatamente os mesmos cálculos.
  */
 
+// Nomes iguais às colunas do quadro "Atividade Comercial" da equipe (facilita
+// a migração). Chaves internas mantidas por compatibilidade com o banco.
 export const ETAPAS = [
-  { k: 'prospect',    n: 'Prospect',             sla: 2 },
-  { k: 'cadencia',    n: 'Em cadência',          sla: 12 },
-  { k: 'diagnostico', n: 'Diagnóstico agendado', sla: 5 },
-  { k: 'qualificado', n: 'Qualificado',          sla: 3 },
-  { k: 'trial',       n: 'Trial guiado',         sla: 14 },
-  { k: 'proposta',    n: 'Proposta',             sla: 7 },
+  { k: 'prospect',     n: 'Em prospecção',             sla: 2 },
+  { k: 'cadencia',     n: 'Em contatos',               sla: 12 },
+  { k: 'diagnostico',  n: 'Reunião de apresentação',   sla: 5 },
+  { k: 'proposta',     n: 'Aguardando retorno',        sla: 7 },
+  { k: 'corregedoria', n: 'Aguardando a Corregedoria', sla: 30 },
   { k: 'ganho',       n: 'Ganho',                sla: 0 },
   { k: 'perdido',     n: 'Perdido',              sla: 0 },
 ];
 export const ETAPA = Object.fromEntries(ETAPAS.map((e, i) => [e.k, { ...e, i }]));
 export const ETAPAS_CHAVES = ETAPAS.map((e) => e.k);
-export const ETAPAS_ATIVAS = ['prospect', 'cadencia', 'diagnostico', 'qualificado', 'trial', 'proposta'];
+export const ETAPAS_ATIVAS = ['prospect', 'cadencia', 'diagnostico', 'proposta', 'corregedoria'];
+// Etapas em negociação: não podem ficar sem próximo passo datado.
+export const ETAPAS_NEGOCIACAO = ['diagnostico', 'proposta', 'corregedoria'];
+// Caminho comum de todo cartório (Corregedoria é desvio do interino):
+// pular etapas marca as anteriores DESTE caminho como alcançadas.
+const CAMINHO = ['prospect', 'cadencia', 'diagnostico', 'proposta'];
 
 export const SEGMENTOS = ['Registro Civil', 'Tabelionato de Notas', 'Registro de Imóveis', 'Protesto', 'RTD/PJ', 'Outro'];
 
@@ -44,7 +52,8 @@ export const ORIGENS_CHAVES = Object.keys(ORIGENS);
 
 export const MOTIVOS_PERDA = [
   'Preço', 'Sem dor', 'Sem decisor', 'Escolheu concorrente',
-  'Sem tempo para implantar', 'Problema técnico', 'Sumiu', 'Outro',
+  'Sem tempo para implantar', 'Problema técnico', 'Sumiu',
+  'Fora do funil (sem interesse)', 'Desistência (usou e desistiu)', 'Outro',
 ];
 
 export const CADENCIA = [
@@ -58,13 +67,14 @@ export const CADENCIA = [
   { d: 12, canal: 'WhatsApp',           acao: 'Encerramento: posso voltar a falar em 3 meses?' },
 ];
 
-export const MARCOS_TRIAL = [
-  { d: 0,  n: 'Ativação (30 min)',     acao: 'Conectar WhatsApp, logar atendentes, escrever a meta de sucesso' },
-  { d: 1,  n: 'Primeiras conversas',   acao: 'Mensagem: já chegou a primeira conversa?' },
-  { d: 3,  n: 'Checagem de uso',       acao: 'Conferir sinais; abaixo de 40 pontos, ligar hoje' },
-  { d: 7,  n: 'Reunião de resultado',  acao: 'Números contra a meta e proposta ao titular' },
-  { d: 10, n: 'Acompanhar proposta',   acao: 'Tirar dúvidas, envolver a TI se preciso' },
-  { d: 14, n: 'Decisão',               acao: 'Assinar ou encerrar; prorrogar só com data combinada' },
+// Implantação assistida depois do Ganho (dias corridos desde a assinatura).
+// Mesmos nomes das colunas do quadro depois da venda.
+export const MARCOS_IMPLANTACAO = [
+  { d: 0,  n: 'Enviar onboarding',                 acao: 'Enviar o onboarding e marcar a reunião de treinamento em até 48 horas' },
+  { d: 2,  n: 'Reunião de treinamento e ativação', acao: 'Treinar os colaboradores e ativar: WhatsApp conectado, atendentes logados' },
+  { d: 7,  n: 'Em desenvolvimento: bot no ar',     acao: 'Bot desenvolvido e funcionando; conferir os sinais de uso (abaixo de 40 pontos, agir hoje)' },
+  { d: 15, n: 'Checagem de uso',                   acao: 'Ligar para o titular: o atendimento melhorou? Algo travou?' },
+  { d: 30, n: 'Pós-venda',                         acao: 'Acompanhamento: mostrar o resultado do mês; pedir depoimento e indicação' },
 ];
 
 export const SINAIS = [
@@ -81,7 +91,9 @@ export const METAS_PADRAO = {
   ticket: 540,
   diasUteis: 21,
   taxaContatoDiag: 6,
-  taxaDiagTrial: 55,
+  // Chaves antigas mantidas (metas já salvas): taxaDiagTrial = reunião → proposta;
+  // taxaTrialPago = proposta → cliente pago.
+  taxaDiagTrial: 60,
   taxaTrialPago: 30,
   metaNovosDia: 25,
   metaToquesDia: 80,
@@ -103,7 +115,8 @@ export const RESULTADOS = [
 export const RESULTADOS_CHAVES = RESULTADOS.map((r) => r.k);
 export const RESULTADOS_CONECTAM = RESULTADOS.filter((r) => r.conecta).map((r) => r.k);
 
-export const TIPOS_REUNIAO = { diagnostico: 'Diagnóstico', ativacao: 'Ativação do trial', resultado: 'Reunião de resultado (D7)', outra: 'Outra' };
+// Chaves mantidas por compatibilidade com o banco; os nomes seguem o processo sem trial.
+export const TIPOS_REUNIAO = { diagnostico: 'Apresentação (diagnóstico + demonstração)', ativacao: 'Treinamento / ativação', resultado: 'Pós-venda', outra: 'Outra' };
 export const MOTIVOS_NAO_CONTATAR = { descadastro: 'Pediu descadastro', pedido_lgpd: 'Pedido LGPD (titular de dados)', pediu_nao_contatar: 'Pediu para não ligar', outro: 'Outro' };
 export const JANELAS = { abertura: '8h30 · abertura', meio: '12h30 · meio do dia', fechamento: '17h · fechamento' };
 
@@ -165,11 +178,13 @@ export function aplicarEtapa(lead, nova, hoje = hojeBR()) {
     marcos.perdido = marcos.perdido || hoje;
   } else {
     const idx = ETAPA[nova].i;
-    ETAPAS.slice(0, Math.min(idx + 1, 6)).forEach((e) => { if (!marcos[e.k]) marcos[e.k] = hoje; });
+    CAMINHO.filter((k) => ETAPA[k].i <= idx).forEach((k) => { if (!marcos[k]) marcos[k] = hoje; });
+    if (nova === 'corregedoria' && !marcos.corregedoria) marcos.corregedoria = hoje;
     if (nova === 'ganho') marcos.ganho = marcos.ganho || hoje;
   }
   if (nova === 'cadencia' && !lead.cadencia_inicio) mud.cadencia_inicio = hoje;
-  if (nova === 'trial' && !lead.trial_inicio) mud.trial_inicio = hoje;
+  // Assinou: começa a implantação assistida.
+  if (nova === 'ganho' && !lead.implantacao_inicio) mud.implantacao_inicio = hoje;
   return mud;
 }
 
@@ -178,8 +193,8 @@ export function aplicarEtapa(lead, nova, hoje = hojeBR()) {
 // ---------------------------------------------------------------------------
 /**
  * O que falta para o lead entrar na etapa `nova`. Os portões são
- * cumulativos: ir de Prospect direto para Trial exige também o que
- * Qualificado exige.
+ * cumulativos: Aguardando retorno exige a reunião de apresentação feita, o
+ * diagnóstico e a proposta; Corregedoria e Ganho exigem o mesmo.
  *
  * @param ctx { reunioes: [{tipo,status}], propostas: [{status}], valor_mensal }
  * @returns lista de pendências (vazia = pode avançar)
@@ -197,19 +212,13 @@ export function pendenciasPortao(lead, nova, ctx = {}) {
   // primeira passagem e para etapas puladas.
   const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]);
 
-  if (alvo >= ETAPA.qualificado.i && !jaPassou('qualificado')) {
+  if (alvo >= ETAPA.proposta.i && !jaPassou('proposta')) {
     if (!reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada')) {
-      p.push('reunião de diagnóstico marcada como realizada');
+      p.push('reunião de apresentação marcada como realizada');
     }
     DIAGNOSTICO_CAMPOS.filter((c) => c.obrigatorio).forEach((c) => {
       if (diag[c.k] == null || String(diag[c.k]).trim() === '') p.push('diagnóstico: ' + c.n.toLowerCase());
     });
-  }
-  if (alvo >= ETAPA.trial.i && !jaPassou('trial')) {
-    if (!lead.meta_sucesso || !String(lead.meta_sucesso).trim()) p.push('meta de sucesso do trial escrita');
-    if (!reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status))) {
-      p.push('reunião de ativação agendada');
-    }
   }
   if (alvo >= ETAPA.proposta.i && !jaPassou('proposta')) {
     if (!props.some((x) => ['enviada', 'aceita'].includes(x.status))) p.push('proposta registrada (plano, valor e validade)');
@@ -253,32 +262,38 @@ export function toqueDevido(l, hoje = hojeBR()) {
   return null;
 }
 
-/** Próximo marco de trial devido (ou null). l.toques_marco = {dia: data} */
+/** Implantação em andamento: ganho, com início registrado e pós-venda ainda não feito. */
+export function emImplantacao(l) {
+  if (l.etapa !== 'ganho' || !l.implantacao_inicio) return false;
+  const ultimo = MARCOS_IMPLANTACAO[MARCOS_IMPLANTACAO.length - 1].d;
+  return !(l.toques_marco || {})[ultimo];
+}
+
+/** Próximo marco de implantação devido (ou null). l.toques_marco = {dia: data} */
 export function marcoDevido(l, hoje = hojeBR()) {
-  if (!['trial', 'proposta'].includes(l.etapa) || !l.trial_inicio) return null;
+  if (!emImplantacao(l)) return null;
   const feitos = l.toques_marco || {};
-  for (const m of MARCOS_TRIAL) {
+  for (const m of MARCOS_IMPLANTACAO) {
     if (feitos[m.d]) continue;
-    const previsto = addDias(l.trial_inicio, m.d);
+    const previsto = addDias(l.implantacao_inicio, m.d);
     if (previsto <= hoje) return { ...m, previsto, atrasado: previsto < hoje };
     return null;
   }
   return null;
 }
 
-export function situacaoTrial(l, hoje = hojeBR()) {
-  const dia = l.trial_inicio ? diffDias(l.trial_inicio, hoje) : 0;
+export function situacaoImplantacao(l, hoje = hojeBR()) {
+  const dia = l.implantacao_inicio ? diffDias(l.implantacao_inicio, hoje) : 0;
   const pts = pontuacao(l);
   let nivel = 'ok'; let texto = 'No caminho';
-  if (dia >= 3 && pts < 40) { nivel = 'crit'; texto = 'Em risco'; }
-  else if (dia >= 3 && pts < 60) { nivel = 'warn'; texto = 'Atenção'; }
-  else if (dia > 14) { nivel = 'crit'; texto = 'Prazo vencido'; }
-  if (l.etapa === 'proposta') { texto = 'Proposta enviada'; if (nivel !== 'crit') nivel = 'neu'; }
+  if (dia >= 7 && pts < 40) { nivel = 'crit'; texto = 'Uso baixo'; }
+  else if (dia >= 7 && pts < 60) { nivel = 'warn'; texto = 'Atenção'; }
+  if (!l.pago_em && dia > 7) { nivel = nivel === 'ok' ? 'warn' : nivel; texto = texto === 'No caminho' ? 'Sem pagamento' : texto; }
   const feitos = l.toques_marco || {};
-  const prox = MARCOS_TRIAL.find((m) => !feitos[m.d]) || null;
+  const prox = MARCOS_IMPLANTACAO.find((m) => !feitos[m.d]) || null;
   return {
     dia, pontos: pts, nivel, texto,
-    proximo_marco: prox ? { ...prox, previsto: addDias(l.trial_inicio || hoje, prox.d) } : null,
+    proximo_marco: prox ? { ...prox, previsto: addDias(l.implantacao_inicio || hoje, prox.d), atrasado: addDias(l.implantacao_inicio || hoje, prox.d) < hoje } : null,
   };
 }
 
@@ -286,15 +301,16 @@ export function situacaoTrial(l, hoje = hojeBR()) {
 // Metas
 // ---------------------------------------------------------------------------
 export function desdobrarMeta(m) {
+  // contatos → (taxaContatoDiag) reuniões → (taxaDiagTrial) propostas → (taxaTrialPago) pagos
   const t = (m.taxaTrialPago / 100) * (m.taxaDiagTrial / 100) * (m.taxaContatoDiag / 100);
   const contatos = t > 0 ? m.metaClientes / t : null;
-  const fTrial = m.taxaTrialPago / 100;
-  const fDiag = fTrial * (m.taxaDiagTrial / 100);
+  const fProposta = m.taxaTrialPago / 100;
+  const fReuniao = fProposta * (m.taxaDiagTrial / 100);
   return {
     contatos_mes: contatos != null ? Math.ceil(contatos) : null,
     contatos_dia: contatos != null ? Math.ceil(contatos / (m.diasUteis || 21)) : null,
-    diagnosticos_mes: fDiag > 0 ? Math.ceil(m.metaClientes / fDiag) : null,
-    trials_mes: fTrial > 0 ? Math.ceil(m.metaClientes / fTrial) : null,
+    diagnosticos_mes: fReuniao > 0 ? Math.ceil(m.metaClientes / fReuniao) : null,
+    propostas_mes: fProposta > 0 ? Math.ceil(m.metaClientes / fProposta) : null,
     receita_nova: m.metaClientes * (Number(m.ticket) || 0),
   };
 }
@@ -314,7 +330,7 @@ export function metaPessoa(metas, pessoaId) {
 }
 
 // ---------------------------------------------------------------------------
-// Painel: Hoje + Trials + Supervisão + números (um cálculo só)
+// Painel: Hoje + Implantação + Supervisão + números (um cálculo só)
 // ---------------------------------------------------------------------------
 /**
  * @param leads          leads não arquivados (com toques_cadencia/toques_marco/atualizado_dia)
@@ -376,7 +392,7 @@ export function montarPainel({
   // `totais` (agregados do banco) quando o painel não carrega todos os leads
   const alcancou = (k) => (totais?.alcancou ? totais.alcancou[k] || 0 : leads.filter((l) => l.marcos && l.marcos[k]).length);
   const rCad = alcancou('cadencia'); const rDiag = alcancou('diagnostico');
-  const rTrial = alcancou('trial'); const rGanho = alcancou('ganho');
+  const rProposta = alcancou('proposta'); const rGanho = alcancou('ganho');
   const rPago = totais ? totais.pagos : leads.filter((l) => l.pago_em).length;
   const assinadosMes = leads.filter((l) => l.etapa === 'ganho' && String(l.marcos?.ganho || '').startsWith(mes));
   const pagosMes = leads.filter((l) => String(l.pago_em || '').startsWith(mes));
@@ -391,7 +407,8 @@ export function montarPainel({
     novos_hoje: leads.filter((l) => l.marcos?.cadencia === hoje).length,
     toques_hoje: toquesHoje.length,
     conexoes_hoje: conexoesHoje,
-    trials_ativos: leads.filter((l) => l.etapa === 'trial').length,
+    implantacoes: leads.filter(emImplantacao).length,
+    reunioes_agendadas: leads.filter((l) => l.etapa === 'diagnostico').length,
     propostas: leads.filter((l) => l.etapa === 'proposta').length,
     // Meta conta PAGOS. Assinado sem pagamento aparece separado.
     ganhos_mes: pagosMes.length,
@@ -404,17 +421,17 @@ export function montarPainel({
     por_etapa: Object.fromEntries(ETAPAS.map((e) => [e.k, totais?.por_etapa ? totais.por_etapa[e.k] || 0 : leads.filter((l) => l.etapa === e.k).length])),
     taxas: {
       contato_diag: { de: rCad, para: rDiag, real: taxa(rDiag, rCad), meta: metas.taxaContatoDiag },
-      diag_trial:   { de: rDiag, para: rTrial, real: taxa(rTrial, rDiag), meta: metas.taxaDiagTrial },
-      trial_pago:   { de: rTrial, para: rGanho, real: taxa(rGanho, rTrial), meta: metas.taxaTrialPago },
+      diag_proposta: { de: rDiag, para: rProposta, real: taxa(rProposta, rDiag), meta: metas.taxaDiagTrial },
+      proposta_ganho: { de: rProposta, para: rGanho, real: taxa(rGanho, rProposta), meta: metas.taxaTrialPago },
       assinado_pago: { de: rGanho, para: rPago, real: taxa(rPago, rGanho), meta: 100 },
     },
   };
 
-  // --- Trials
-  const trials = leads
-    .filter((l) => ['trial', 'proposta'].includes(l.etapa))
-    .map((l) => ({ lead: resumo(l), trial_inicio: l.trial_inicio, ...situacaoTrial(l, hoje) }))
-    .sort((a, b) => ((a.trial_inicio || '') < (b.trial_inicio || '') ? -1 : 1));
+  // --- Implantação (clientes assinados até o pós-venda)
+  const implantacoes = leads
+    .filter(emImplantacao)
+    .map((l) => ({ lead: resumo(l), implantacao_inicio: l.implantacao_inicio, pago_em: l.pago_em, ...situacaoImplantacao(l, hoje) }))
+    .sort((a, b) => ((a.implantacao_inicio || '') < (b.implantacao_inicio || '') ? -1 : 1));
 
   // --- Supervisão (semáforo por pessoa)
   const supervisao = pessoas.map((p) => {
@@ -437,11 +454,14 @@ export function montarPainel({
     const alertas = [];
     const add = (l, motivo) => alertas.push({ lead: resumo(l), motivo });
     ativos.forEach((l) => {
-      if (l.etapa === 'trial' && l.trial_inicio && diffDias(l.trial_inicio, hoje) >= 3 && pontuacao(l) < 40) add(l, 'trial abaixo de 40 pontos');
+      // (alertas de implantação ficam abaixo: lead ganho não está em `ativos`)
     });
     ativos.forEach((l) => { const s = situacaoPrazo(l, hoje); if (s && s.nivel === 'crit') add(l, 'fora do prazo da etapa'); });
     ativos.forEach((l) => {
-      if (['diagnostico', 'qualificado', 'trial', 'proposta'].includes(l.etapa) && (!l.proxima_data || l.proxima_data < hoje)) add(l, 'sem próximo passo datado');
+      if (ETAPAS_NEGOCIACAO.includes(l.etapa) && (!l.proxima_data || l.proxima_data < hoje)) add(l, 'sem próximo passo datado');
+    });
+    meus.filter(emImplantacao).forEach((l) => {
+      if (diffDias(l.implantacao_inicio, hoje) >= 7 && pontuacao(l) < 40) add(l, 'implantação com uso baixo (menos de 40 pontos)');
     });
     semDesfecho.filter((r) => (r.responsavel_id || r.lead.dono_id) === p.id).forEach((r) => {
       alertas.push({ lead: r.lead, motivo: `reunião de ${dataBr(dataDe(r.inicio))} sem desfecho registrado` });
@@ -473,7 +493,7 @@ export function montarPainel({
     plano: desdobrarMeta(metas),
     numeros,
     hoje_listas: { toques, marcos, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
-    trials,
+    implantacoes,
     supervisao,
     sem_dono: totais ? totais.sem_dono : leads.filter((l) => ativo(l) && !l.dono_id && !naFila(l)).length,
     fila: totais ? totais.fila : leads.filter(naFila).length,

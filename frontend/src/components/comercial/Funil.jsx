@@ -91,7 +91,7 @@ export default function Funil({ cfg, admin, gestor, versao, onAbrir, onNovo, onI
                       {l.dono_nome ? <Pill>{l.dono_nome}</Pill> : <Pill nivel="warn">sem responsável</Pill>}
                       <Pill nivel="line">{cfg.origens[l.origem] || l.origem}</Pill>
                       {l.prazo && <Pill nivel={l.prazo.nivel}>{l.prazo.dias}d / {l.prazo.sla}d</Pill>}
-                      {l.pontos != null && ['trial', 'proposta'].includes(l.etapa) && <Pill nivel={nivelPontos(l.pontos)}>{l.pontos} pts</Pill>}
+                      {l.pontos != null && l.etapa === 'ganho' && l.implantacao_inicio && <Pill nivel={nivelPontos(l.pontos)}>{l.pontos} pts de uso</Pill>}
                       {l.etapa === 'perdido' && l.motivo_perda && <Pill nivel="line">{l.motivo_perda}</Pill>}
                       {l.etapa === 'ganho' && (l.valor_mensal ? <Pill nivel="ok">{brl(l.valor_mensal)}/mês</Pill> : <Pill nivel="warn">sem valor</Pill>)}
                       {l.etapa === 'ganho' && (l.pago_em ? <Pill nivel="ok">pago</Pill> : <Pill nivel="warn">aguardando pagamento</Pill>)}

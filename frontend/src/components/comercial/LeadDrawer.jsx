@@ -202,10 +202,10 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
 
   const etapaReal = lead?.etapa;
   const cadInicio = lead?.cadencia_inicio || (f.etapa === 'cadencia' ? hoje : null);
-  const trialInicio = lead?.trial_inicio;
+  const implInicio = lead?.implantacao_inicio;
   const mostraCad = etapaReal === 'cadencia' || Object.keys(lead?.toques_cadencia || {}).length > 0;
   const mostraDiag = idx(f.etapa) >= idx('diagnostico') && f.etapa !== 'perdido' || Object.values(f.diagnostico || {}).some(Boolean);
-  const mostraTrial = ['trial', 'proposta', 'ganho'].includes(f.etapa) || !!trialInicio;
+  const mostraImpl = etapaReal === 'ganho' && !!implInicio;
   const pontos = cfg.sinais.reduce((s, x) => s + (f.sinais[x.k] ? x.p : 0), 0);
   const eu = cfg.eu?.id;
   // Responsável: gestão troca livre; os demais pegam da fila ou repassam o próprio.
@@ -255,7 +255,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
         <div className="flex flex-wrap gap-2">
           <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'toque' })}><Phone size={14} /> Registrar contato</button>
           <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'reuniao' })}><CalendarPlus size={14} /> Agendar reunião</button>
-          {['qualificado', 'trial', 'proposta'].includes(etapaReal) && (
+          {['diagnostico', 'proposta', 'corregedoria'].includes(etapaReal) && (
             <button type="button" className={btnCls} onClick={() => setModal({ tipo: 'proposta' })}><FileSignature size={14} /> Registrar proposta</button>
           )}
         </div>
@@ -269,7 +269,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
       {!id && (
         <div className="rounded-md bg-nexus-50 p-3 text-sm text-slate-700">
           Preencha o nome e a origem (de onde ele veio). Com CNS ou CNPJ o sistema evita cadastro repetido.
-          O cartório entra como <b>Prospect</b>; ao salvar, a ficha mostra o próximo passo.
+          O cartório entra como <b>Em prospecção</b>; ao salvar, a ficha mostra o próximo passo.
         </div>
       )}
 
@@ -349,8 +349,8 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
                 <input id={'campo-diag-' + c.k} className={inputCls} value={f.diagnostico[c.k] ?? ''} onChange={setDiag(c.k)} />
               </Campo>
             ))}
-            {idx(f.etapa) >= idx('qualificado') && f.etapa !== 'perdido' && (
-              <Campo rotulo="Meta de sucesso do trial *" className="col-span-2"><input id="campo-meta" className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos" /></Campo>
+            {idx(f.etapa) >= idx('proposta') && f.etapa !== 'perdido' && (
+              <Campo rotulo="O que é sucesso para o cliente" className="col-span-2"><input id="campo-meta" className={inputCls} value={f.meta_sucesso || ''} onChange={set('meta_sucesso')} placeholder="ex.: responder 90% das mensagens em até 10 minutos (usado no pós-venda)" /></Campo>
             )}
           </div>
         </Bloco>
@@ -436,25 +436,25 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
         </Bloco>
       )}
 
-      {mostraTrial && (
-        <Bloco titulo={<>Trial guiado{trialInicio ? ' · início ' + dataBr(trialInicio) : ''} <Pill nivel={nivelPontos(pontos)}>{pontos} pts</Pill></>}>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Sinais de ativação</p>
+      {mostraImpl && (
+        <Bloco titulo={<>Implantação · início {dataBr(implInicio)} <Pill nivel={nivelPontos(pontos)}>{pontos} pts</Pill></>}>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Roteiro da implantação</p>
+          {cfg.marcos_implantacao.map((m) => {
+            const feito = (lead?.toques_marco || {})[m.d];
+            return (
+              <Check key={m.d} marcado={!!feito} desab={!id}
+                onChange={() => (feito ? setModal({ tipo: 'estornar', url: `/comercial/leads/${id}/toques/estornar`, corpo: { tipo: 'marco', dia: m.d } }) : marcoDireto(m.d))}>
+                <b>D{m.d} · {m.n}</b> — {m.acao}
+                <span className="block text-xs text-slate-400">{feito ? 'feito em ' + dataBr(feito) : 'previsto para ' + dataBr(addDias(implInicio, m.d))}</span>
+              </Check>
+            );
+          })}
+          <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Sinais de uso (marque e salve)</p>
           {cfg.sinais.map((x) => (
             <Check key={x.k} marcado={!!f.sinais[x.k]} onChange={() => setF({ ...f, sinais: { ...f.sinais, [x.k]: !f.sinais[x.k] } })}>
               {x.n} <span className="text-xs text-slate-400">+{x.p}</span>
             </Check>
           ))}
-          <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">Roteiro de 14 dias</p>
-          {cfg.marcos_trial.map((m) => {
-            const feito = (lead?.toques_marco || {})[m.d];
-            return (
-              <Check key={m.d} marcado={!!feito} desab={!id || !trialInicio}
-                onChange={() => (feito ? setModal({ tipo: 'estornar', url: `/comercial/leads/${id}/toques/estornar`, corpo: { tipo: 'marco', dia: m.d } }) : marcoDireto(m.d))}>
-                <b>D{m.d} · {m.n}</b> — {m.acao}
-                <span className="block text-xs text-slate-400">{feito ? 'feito em ' + dataBr(feito) : trialInicio ? 'previsto para ' + dataBr(addDias(trialInicio, m.d)) : ''}</span>
-              </Check>
-            );
-          })}
         </Bloco>
       )}
 
@@ -469,7 +469,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
 
       {modal?.tipo === 'toque' && <ToqueModal cfg={cfg} lead={leadMin} tipo={modal.toqueTipo || 'avulso'} dia={modal.dia} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'estornar' && <EstornoModal url={modal.url} corpoExtra={modal.corpo} onFechar={() => setModal(null)} onFeito={aposModal} />}
-      {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={modal.tipoReuniao || (etapaReal === 'qualificado' ? 'ativacao' : etapaReal === 'trial' ? 'resultado' : 'diagnostico')} onFechar={() => setModal(null)} onFeito={aposModal} />}
+      {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={modal.tipoReuniao || (etapaReal === 'ganho' ? 'ativacao' : 'diagnostico')} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'desfecho' && <DesfechoModal reuniao={modal.reuniao} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'proposta' && <PropostaModal lead={leadMin} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'pagamento' && <PagamentoModal lead={leadMin} hoje={hoje} onFechar={() => setModal(null)} onFeito={aposModal} />}
@@ -506,7 +506,7 @@ const ROTULO_CAMPO = {
   nome: 'Nome', segmento: 'Segmento', cidade: 'Cidade', uf: 'UF', contato: 'Titular', telefone: 'Telefone', email: 'E-mail',
   cns: 'CNS', cnpj: 'CNPJ', dono_id: 'Responsável', origem: 'Origem', campanha: 'Campanha', valor_mensal: 'Valor mensal',
   motivo_perda: 'Motivo da perda', motivo_perda_obs: 'Detalhe da perda', proximo_passo: 'Próximo passo', proxima_data: 'Data do próximo passo',
-  notas: 'Anotações', meta_sucesso: 'Meta de sucesso', diagnostico: 'Diagnóstico', sinais: 'Sinais do trial', etapa: 'Etapa',
+  notas: 'Anotações', meta_sucesso: 'Meta de sucesso', diagnostico: 'Diagnóstico', sinais: 'Sinais de uso', etapa: 'Etapa',
   pagamento: 'Pagamento', arquivado: 'Arquivado', recompensa_indicacao: 'Indicação', indicado_por_id: 'Indicado por',
 };
 
@@ -521,7 +521,7 @@ function Historico({ cfg, lead, hoje, gestor, onEstornar }) {
       em: t.criado_em, quem: t.pessoa_nome, riscado: !!t.estornado_em,
       // Contato avulso não tem caixinha no roteiro: o estorno é por aqui.
       estornavel: !t.estornado_em && t.tipo === 'avulso' && (gestor || (t.pessoa_id === cfg.eu?.id && t.data === hoje)) ? t : null,
-      txt: `${t.tipo === 'cadencia' ? `Toque dia ${t.dia}` : t.tipo === 'marco' ? `Marco do trial D${t.dia}` : 'Contato'}${t.canal ? ' · ' + t.canal : ''}${t.resultado ? ' · ' + res(t.resultado) : ''}${t.duracao_min ? ` · ${t.duracao_min} min` : ''}${t.nota ? ': ' + t.nota : ''}`
+      txt: `${t.tipo === 'cadencia' ? `Toque dia ${t.dia}` : t.tipo === 'marco' ? `Implantação D${t.dia}` : 'Contato'}${t.canal ? ' · ' + t.canal : ''}${t.resultado ? ' · ' + res(t.resultado) : ''}${t.duracao_min ? ` · ${t.duracao_min} min` : ''}${t.nota ? ': ' + t.nota : ''}`
         + (t.estornado_em ? ` [ESTORNADO por ${t.estornado_por_nome || '—'}: ${t.estorno_motivo}]` : ''),
     })),
     ...(lead.alteracoes || []).filter((a) => a.campo !== 'etapa').map((a) => {

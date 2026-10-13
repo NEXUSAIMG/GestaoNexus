@@ -6,7 +6,7 @@ import Funil from '../components/comercial/Funil.jsx';
 import LeadDrawer from '../components/comercial/LeadDrawer.jsx';
 import { ImportarLista, ImportarQuadro } from '../components/comercial/Importar.jsx';
 import {
-  VistaHoje, VistaTrials, VistaSupervisao, VistaMetas, VistaScripts, VistaPlacar, VistaControles,
+  VistaHoje, VistaImplantacao, VistaSupervisao, VistaMetas, VistaScripts, VistaPlacar, VistaControles,
 } from '../components/comercial/Vistas.jsx';
 import { ToqueModal } from '../components/comercial/Acoes.jsx';
 import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.jsx';
@@ -16,13 +16,13 @@ import { VistaProcesso } from '../components/comercial/Processo.jsx';
  * Comercial — Sprint 42.
  *
  * Funil de vendas do Seu Cartório com a metodologia de venda SaaS:
- * Hoje (o que fazer), Funil, Trials, Supervisão (semáforo por pessoa),
+ * Hoje (o que fazer), Funil, Implantação, Supervisão (semáforo por pessoa),
  * Metas (desdobramento + taxas reais + motivos de perda) e Scripts.
  * Todos os cálculos vêm prontos do backend (GET /comercial/painel).
  */
 
 const ABAS = [
-  ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['trials', 'Trials'],
+  ['hoje', 'Hoje'], ['processo', 'Processo'], ['funil', 'Funil'], ['implantacao', 'Implantação'],
   ['supervisao', 'Supervisão'], ['placar', 'Placar'], ['metas', 'Metas e indicadores'],
   ['controles', 'Controles'], ['scripts', 'Scripts'], ['ajuda', 'Ajuda'],
 ];
@@ -34,14 +34,14 @@ function soMeus(painel, eu) {
   return {
     ...painel,
     hoje_listas: Object.fromEntries(Object.entries(h).map(([k, v]) => [k, v.filter(meu)])),
-    trials: painel.trials.filter(meu),
+    implantacoes: (painel.implantacoes || []).filter(meu),
   };
 }
 
 export default function Comercial() {
   const { pessoa } = useAuth();
   const admin = !!pessoa?.administrador;
-  const [aba, setAba] = useState(() => { try { return localStorage.getItem('comercial-aba') || 'hoje'; } catch { return 'hoje'; } });
+  const [aba, setAba] = useState(() => { try { const v = localStorage.getItem('comercial-aba'); return v && v !== 'trials' ? v : 'hoje'; } catch { return 'hoje'; } });
   const [cfg, setCfg] = useState(null);
   const [painel, setPainel] = useState(null);
   const [erro, setErro] = useState('');
@@ -129,7 +129,7 @@ export default function Comercial() {
               onAviso={setAviso}
               onToque={(lead, tipo, dia) => setToque({ lead, tipo, dia })} onMarco={marcarMarco} />
           )}
-          {painel && aba === 'trials' && <VistaTrials painel={painel} cfg={cfg} onAbrir={abrir} />}
+          {painel && aba === 'implantacao' && <VistaImplantacao painel={painel} cfg={cfg} onAbrir={abrir} />}
           {painel && aba === 'supervisao' && <VistaSupervisao painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar} />}
           {painel && aba === 'placar' && <VistaPlacar painel={painel} cfg={cfg} versao={versao} />}
           {painel && aba === 'metas' && <VistaMetas painel={painel} cfg={cfg} onSalvo={recarregar} />}

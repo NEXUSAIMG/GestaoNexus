@@ -27,7 +27,7 @@ function useEnvio(onFeito) {
   return { erro, setErro, enviando, enviar };
 }
 
-const NEGOCIANDO = ['diagnostico', 'qualificado', 'trial', 'proposta'];
+const NEGOCIANDO = ['diagnostico', 'proposta', 'corregedoria'];
 
 /** Registrar toque (cadência ou avulso) com resultado obrigatório. */
 export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar, onFeito }) {
@@ -75,7 +75,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
       </div>
       <fieldset>
         <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-600">Resultado * <Dica termo="conexao" /></legend>
-        <p className="mb-2 text-xs text-slate-500">Escolha o que aconteceu, mesmo que não tenha atendido. “Agendou reunião” já pede data e hora{['prospect', 'cadencia'].includes(lead.etapa) ? '; se for reunião de diagnóstico, o cartório passa para Diagnóstico' : ''}.</p>
+        <p className="mb-2 text-xs text-slate-500">Escolha o que aconteceu, mesmo que não tenha atendido. “Agendou reunião” já pede data e hora{['prospect', 'cadencia'].includes(lead.etapa) ? '; se for reunião de diagnóstico, o cartório passa para Reunião de apresentação' : ''}.</p>
         <div className="grid grid-cols-2 gap-1.5">
           {cfg.resultados.map((r) => (
             <label key={r.k} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm ${resultado === r.k ? 'border-nexus-500 bg-nexus-50' : 'border-slate-200'}`}>

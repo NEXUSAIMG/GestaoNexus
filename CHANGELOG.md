@@ -11,6 +11,32 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42E — Comercial sem trial, com os nomes do quadro da equipe
+
+Decisão da empresa: não há trial. A prova é a reunião de apresentação (com
+demonstração no WhatsApp do cartório) e a implantação assistida depois da
+assinatura. As etapas usam os mesmos nomes do quadro "Atividade Comercial".
+
+- Funil: Em prospecção → Em contatos → Reunião de apresentação → Aguardando
+  retorno → Aguardando a Corregedoria (interino) → Ganho | Perdido.
+- Portão de "Aguardando retorno": reunião realizada + diagnóstico + proposta.
+- Ganho começa a **implantação** (`implantacao_inicio`), com marcos: enviar
+  onboarding (D0), reunião de treinamento e ativação (D2), em desenvolvimento:
+  bot no ar (D7), checagem de uso (D15), pós-venda (D30). Aba Trials virou
+  Implantação; pontos de uso valem na implantação.
+- Motivos de perda novos: "Fora do funil (sem interesse)" e "Desistência
+  (usou e desistiu)", aplicados pelo nome da coluna na importação.
+- Importar do quadro: "Em prospecção" entra **sem responsável, na fila**;
+  palpites de etapa pelos nomes das colunas da equipe.
+- Metas: taxas renomeadas (contato → reunião → proposta → pago); chaves
+  antigas mantidas para não perder metas salvas.
+- Migração `037_comercial_sem_trial.sql`: etapa `corregedoria`, coluna
+  `implantacao_inicio`; leads em `trial`/`qualificado` são remapeados.
+
+**Testar**: `npm run migrate` e `cd testes && npm run api` (193 checagens).
+
+---
+
 ## Sprint 42D — Comercial: varredura antes de ir ao ar
 
 Revisão completa do módulo (backend e telas) com correção de tudo que

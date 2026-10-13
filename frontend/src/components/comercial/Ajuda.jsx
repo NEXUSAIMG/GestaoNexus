@@ -99,7 +99,7 @@ export function VistaAjuda({ cfg, onTour, onProcesso }) {
   const glos = Object.entries(GLOSSARIO).filter(([k, v]) => !q || (k + ' ' + v).toLowerCase().includes(q));
   const nomeTermo = (k) => ({
     cadencia: 'Cadência', toque: 'Toque', conexao: 'Conexão', sla: 'Prazo da etapa', portao: 'Critério para avançar (portão)',
-    pontos: 'Pontos do trial', estorno: 'Estorno', semaforo: 'Semáforo', assinado_pago: 'Assinado × pago',
+    pontos: 'Pontos de uso', estorno: 'Estorno', semaforo: 'Semáforo', assinado_pago: 'Assinado × pago',
     nao_contatar: 'Não contatar', duplicidade: 'Duplicidade', cns: 'CNS', checagem: 'Checagem', um_a_um: '1:1',
     proximo_passo: 'Próximo passo', origem: 'Origem', campanha: 'Campanha',
   }[k] || k);

@@ -16,7 +16,7 @@ import { SCRIPTS } from './scripts.js';
  */
 
 const CAD_DIAS = [1, 2, 4, 6, 8, 10, 11, 12];
-const ORDEM = ['prospect', 'cadencia', 'diagnostico', 'qualificado', 'trial', 'proposta', 'ganho'];
+const ORDEM = ['prospect', 'cadencia', 'diagnostico', 'proposta', 'ganho'];
 
 function addDiasUteis(s, n, feriados) {
   const d = new Date(s + 'T12:00:00'); let k = 0;
@@ -32,29 +32,30 @@ export function criteriosPara(lead, rascunho, cfg) {
   if (!lead) return null;
   const etapaAtual = lead.etapa;
   const i = ORDEM.indexOf(etapaAtual);
-  if (i < 0 || etapaAtual === 'ganho') return null;
-  const proxima = ORDEM[i + 1];
+  if (etapaAtual === 'ganho') return null;
+  // Aguardando a Corregedoria fica fora da linha principal: dali, o próximo é Ganho.
+  const proxima = etapaAtual === 'corregedoria' ? 'ganho' : ORDEM[i + 1];
+  if (i < 0 && etapaAtual !== 'corregedoria') return null;
   const reun = lead.reunioes || [];
   const props = lead.propostas || [];
   const diag = { ...(lead.diagnostico || {}), ...(rascunho?.diagnostico || {}) };
-  const meta = rascunho?.meta_sucesso ?? lead.meta_sucesso;
   const itens = [];
   if (proxima === 'cadencia') {
     itens.push({ ok: true, txt: 'Cadastro feito', acao: null });
   }
   if (proxima === 'diagnostico') {
     const ag = reun.some((r) => r.tipo === 'diagnostico' && ['agendada', 'realizada'].includes(r.status));
-    itens.push({ ok: ag, txt: 'Reunião de diagnóstico agendada (registre um contato com "Agendou reunião")', acao: ag ? null : 'toque:avulso', rotulo: 'Registrar contato' });
+    itens.push({ ok: ag, txt: 'Reunião de apresentação agendada (registre um contato com "Agendou reunião")', acao: ag ? null : 'toque:avulso', rotulo: 'Registrar contato' });
   }
-  // Os portões são cumulativos (igual ao servidor): para entrar em Proposta,
-  // também valem os critérios de Qualificado e de Trial.
+  // Os portões são cumulativos (igual ao servidor): Aguardando retorno exige
+  // a reunião feita, o diagnóstico e a proposta.
   const alvo = ORDEM.indexOf(proxima);
   const jaPassou = (k) => !!(lead.marcos && lead.marcos[k]); // mesma regra do servidor
-  if (alvo >= ORDEM.indexOf('qualificado') && !jaPassou('qualificado')) {
+  if (alvo >= ORDEM.indexOf('proposta') && !jaPassou('proposta')) {
     const agendada = reun.find((r) => r.tipo === 'diagnostico' && r.status === 'agendada');
     const realizada = reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada');
     itens.push({
-      ok: realizada, txt: 'Reunião de diagnóstico marcada como realizada',
+      ok: realizada, txt: 'Reunião de apresentação marcada como realizada',
       acao: realizada ? null : agendada ? 'desfecho:' + agendada.id : 'reuniao:diagnostico',
       rotulo: agendada ? 'Registrar desfecho' : 'Agendar reunião',
     });
@@ -62,12 +63,6 @@ export function criteriosPara(lead, rascunho, cfg) {
       const ok = diag[c.k] != null && String(diag[c.k]).trim() !== '';
       itens.push({ ok, txt: 'Diagnóstico: ' + c.n.toLowerCase(), acao: ok ? null : 'foco:campo-diag-' + c.k, rotulo: 'Preencher' });
     });
-  }
-  if (alvo >= ORDEM.indexOf('trial') && !jaPassou('trial')) {
-    const ok1 = !!(meta && String(meta).trim());
-    itens.push({ ok: ok1, txt: 'Meta de sucesso do trial escrita', acao: ok1 ? null : 'foco:campo-meta', rotulo: 'Escrever' });
-    const ok2 = reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status));
-    itens.push({ ok: ok2, txt: 'Reunião de ativação agendada', acao: ok2 ? null : 'reuniao:ativacao', rotulo: 'Agendar' });
   }
   if (alvo >= ORDEM.indexOf('proposta') && !jaPassou('proposta')) {
     const ok = props.some((x) => ['enviada', 'aceita'].includes(x.status));
@@ -113,40 +108,37 @@ function proximaAcaoBase(lead, cfg, admin) {
     }
     case 'diagnostico': {
       const realizada = reun.some((r) => r.tipo === 'diagnostico' && r.status === 'realizada');
-      if (!realizada && futura) return { nivel: 'ok', titulo: `Reunião em ${dataHoraBr(futura.inicio)}`, texto: 'Prepare-se com o roteiro de Diagnóstico (abaixo, em "O que falar"). Depois da reunião, volte aqui para registrar o desfecho.' };
-      if (!realizada) return { nivel: 'warn', titulo: 'Agende a reunião de diagnóstico', texto: 'Este cartório está em Diagnóstico mas não tem reunião marcada.', acao: 'reuniao:diagnostico', rotulo: 'Agendar reunião' };
+      if (!realizada && futura) return { nivel: 'ok', titulo: `Reunião em ${dataHoraBr(futura.inicio)}`, texto: 'Prepare-se com o roteiro da apresentação (abaixo, em "O que falar"): primeiro as perguntas, depois a demonstração com o WhatsApp do próprio cartório. Depois da reunião, volte aqui para registrar o desfecho.' };
+      if (!realizada) return { nivel: 'warn', titulo: 'Agende a reunião de apresentação', texto: 'Este cartório está em Reunião agendada mas não tem reunião marcada.', acao: 'reuniao:diagnostico', rotulo: 'Agendar reunião' };
       const falta = cfg.diagnostico_campos.filter((c) => c.obrigatorio && !(lead.diagnostico || {})[c.k]);
       if (falta.length) return { nivel: 'warn', titulo: 'Preencha o diagnóstico', texto: `Falta: ${falta.map((c) => c.n.toLowerCase()).join(', ')}.`, acao: 'foco:campo-diag-' + falta[0].k, rotulo: 'Preencher agora' };
-      return { nivel: 'info', titulo: 'Tudo pronto: avance para Qualificado', texto: 'A reunião aconteceu e o diagnóstico está completo.', acao: 'etapa:qualificado', rotulo: 'Avançar para Qualificado' };
+      const vigD = (lead.propostas || []).find((x) => x.status === 'enviada');
+      if (!vigD) return { nivel: 'warn', titulo: 'Envie a proposta em até 2 dias', texto: 'Plano e valor, com a dor e os números que o titular falou na reunião. Argumento de valor: implantação assistida em 48 horas.', acao: 'proposta', rotulo: 'Registrar proposta' };
+      return { nivel: 'info', titulo: 'Proposta enviada: mude para Aguardando retorno', texto: 'Assim o funil mostra que a decisão está com o cartório, com prazo de 7 dias.', acao: 'etapa:proposta', rotulo: 'Mudar para Aguardando retorno' };
     }
-    case 'qualificado': {
-      if (!lead.meta_sucesso) return { nivel: 'warn', titulo: 'Escreva a meta de sucesso do trial', texto: 'Combine com o cartório o que significa "deu certo" (ex.: responder 90% das mensagens em até 10 minutos).', acao: 'foco:campo-meta', rotulo: 'Escrever meta' };
-      const ativ = reun.some((r) => r.tipo === 'ativacao' && ['agendada', 'realizada'].includes(r.status));
-      if (!ativ) return { nivel: 'warn', titulo: 'Agende a reunião de ativação', texto: '30 minutos para conectar o WhatsApp e logar os atendentes, com o titular presente.', acao: 'reuniao:ativacao', rotulo: 'Agendar ativação' };
-      return { nivel: 'info', titulo: 'Tudo pronto: comece o trial', texto: 'Meta escrita e ativação agendada. O trial de 14 dias começa hoje.', acao: 'etapa:trial', rotulo: 'Iniciar trial' };
-    }
-    case 'trial': {
-      const ini = lead.trial_inicio || hoje;
-      const dia = diffDias(ini, hoje);
-      const feitos = lead.toques_marco || {};
-      const marco = cfg.marcos_trial.find((m) => !feitos[m.d] && addDias(ini, m.d) <= hoje);
-      if (marco) return { nivel: addDias(ini, marco.d) < hoje ? 'crit' : 'info', titulo: `Marco D${marco.d}: ${marco.n}`, texto: marco.acao, acao: 'marco:' + marco.d, rotulo: 'Marcar como feito' };
-      if (dia >= 3 && (lead.pontos ?? 0) < 40) return { nivel: 'crit', titulo: 'Uso baixo no trial: ligue hoje', texto: `Dia ${dia} com ${lead.pontos ?? 0} pontos. Descubra o que travou e marque os sinais de uso que mudarem.`, acao: 'toque:avulso', rotulo: 'Registrar ligação' };
-      if (dia >= 7 && !(lead.propostas || []).some((x) => x.status === 'enviada')) return { nivel: 'warn', titulo: 'Hora da proposta', texto: 'Na reunião de resultado (D7), mostre os números contra a meta e registre a proposta.', acao: 'proposta', rotulo: 'Registrar proposta' };
-      if ((lead.propostas || []).some((x) => x.status === 'enviada')) return { nivel: 'info', titulo: 'Proposta enviada: mude para Proposta', texto: 'Assim o funil mostra que a negociação está na reta final.', acao: 'etapa:proposta', rotulo: 'Mudar para Proposta' };
-      const pm = cfg.marcos_trial.find((m) => !feitos[m.d]);
-      return { nivel: 'ok', titulo: `Trial no dia ${dia} de 14`, texto: pm ? `Próximo marco: D${pm.d} · ${pm.n} em ${dataBr(addDias(ini, pm.d))}.` : 'Roteiro concluído.' };
-    }
+    case 'corregedoria':
+      return { nivel: lead.proxima_data && lead.proxima_data >= hoje ? 'ok' : 'warn', titulo: 'Aguardando a corregedoria', texto: lead.proxima_data && lead.proxima_data >= hoje ? `Próxima cobrança em ${dataBr(lead.proxima_data)}. Autorizou e assinou? Marque como ganho.` : 'Registre a próxima data para cobrar o retorno e ofereça ajuda com os documentos.', acao: lead.proxima_data && lead.proxima_data >= hoje ? 'etapa:ganho' : 'foco:campo-proximo', rotulo: lead.proxima_data && lead.proxima_data >= hoje ? 'Cliente assinou' : 'Marcar próxima cobrança' };
     case 'proposta': {
       const vig = (lead.propostas || []).find((x) => x.status === 'enviada');
       if (vig && vig.validade < hoje) return { nivel: 'crit', titulo: 'A proposta venceu', texto: 'Ligue para o cartório. Se ainda houver interesse, registre uma nova proposta; se não, marque como Perdido com o motivo.', acao: 'toque:avulso', rotulo: 'Registrar ligação' };
-      return { nivel: 'info', titulo: 'Acompanhe até o fechamento', texto: vig ? `Proposta válida até ${dataBr(vig.validade)}. Assinou? Marque como ganho — o valor vem da proposta.` : 'Assinou? Marque como ganho.', acao: 'etapa:ganho', rotulo: 'Cliente assinou' };
+      return { nivel: 'info', titulo: 'Acompanhe até o fechamento', texto: vig ? `Proposta válida até ${dataBr(vig.validade)}. Assinou? Marque como ganho — o valor vem da proposta e a implantação começa.` : 'Assinou? Marque como ganho.', acao: 'etapa:ganho', rotulo: 'Cliente assinou' };
     }
-    case 'ganho':
+    case 'ganho': {
+      // Implantação assistida: marcos depois da assinatura
+      if (lead.implantacao_inicio) {
+        const ini = lead.implantacao_inicio;
+        const feitos = lead.toques_marco || {};
+        const marco = cfg.marcos_implantacao.find((m) => !feitos[m.d] && addDias(ini, m.d) <= hoje);
+        if (marco) return { nivel: addDias(ini, marco.d) < hoje ? 'crit' : 'info', titulo: `Implantação D${marco.d}: ${marco.n}`, texto: marco.acao, acao: 'marco:' + marco.d, rotulo: 'Marcar como feito' };
+        const dia = diffDias(ini, hoje);
+        if (dia >= 5 && (lead.pontos ?? 0) < 40 && !feitos[30]) return { nivel: 'crit', titulo: 'Uso baixo na implantação: ligue hoje', texto: `Dia ${dia} com ${lead.pontos ?? 0} pontos. Descubra o que travou e marque os sinais de uso que mudarem.`, acao: 'toque:avulso', rotulo: 'Registrar ligação' };
+      }
+
       if (lead.pago_em) return { nivel: 'ok', titulo: 'Cliente pago', texto: 'Peça uma indicação: quem indicar ganha um mês grátis quando o indicado pagar. Use o script "Pedido de indicação".' };
       if (!lead.cnpj) return { nivel: 'warn', titulo: 'Preencha o CNPJ', texto: 'Com o CNPJ, o Nexus confere sozinho o primeiro pagamento no ASAAS — e só aí o cliente conta na meta.', acao: 'foco:campo-cnpj', rotulo: 'Preencher CNPJ' };
       if (admin) return { nivel: 'warn', titulo: 'Aguardando o 1º pagamento', texto: 'O ASAAS confere pelo CNPJ. Se o cliente pagou por fora, confirme com o comprovante.', acao: 'pagamento', rotulo: 'Confirmar pagamento' };
       return { nivel: 'warn', titulo: 'Aguardando o 1º pagamento', texto: 'O ASAAS confere pelo CNPJ automaticamente. Se o cliente pagou por fora, avise a gestão para confirmar com o comprovante.' };
+    }
     case 'perdido':
       return { nivel: 'neu', titulo: 'Negociação encerrada', texto: `Motivo: ${lead.motivo_perda || '—'}. Para reabrir, mude a etapa e escreva a justificativa.` };
     default:

@@ -33,7 +33,7 @@ const A = (m, c, b) => como(adminToken, m, c, b);
 
 titulo('Config');
 const cfg = (await V('GET', '/comercial/config')).dados;
-ok(cfg.etapas.length === 8, 'devolve as 8 etapas');
+ok(cfg.etapas.length === 7 && !cfg.etapas.some((e) => ['trial', 'qualificado'].includes(e.k)) && cfg.etapas[1].n === 'Em contatos' && cfg.marcos_implantacao.length === 5 && cfg.marcos_implantacao[1].n === 'Reunião de treinamento e ativação', 'devolve as 7 etapas (sem trial) e os marcos de implantação');
 ok(cfg.resultados.some((r) => r.k === 'caixa_postal'), 'lista resultados de contato');
 ok(cfg.feriados.length > 0, 'feriados carregados');
 ok(cfg.eu.admin === false, 'vendedora não é gestão');
@@ -69,8 +69,10 @@ const lst = await V('GET', '/comercial/nao-contatar?busca=' + encodeURIComponent
 const ncId = lst.dados[0]?.id;
 ok((await V('DELETE', '/comercial/nao-contatar/' + ncId)).status === 403, 'vendedora não remove da lista');
 
-const pulo = await V('POST', '/comercial/leads', { nome: 'Pulo ' + sufixo, origem: 'inbound', etapa: 'trial' });
-ok(pulo.status === 400 && pulo.dados.codigo === 'portao', 'não cria lead direto em Trial');
+const pulo = await V('POST', '/comercial/leads', { nome: 'Pulo ' + sufixo, origem: 'inbound', etapa: 'proposta' });
+ok(pulo.status === 400 && pulo.dados.codigo === 'portao', 'não cria lead direto em Aguardando retorno');
+const semTrial = await V('POST', '/comercial/leads', { nome: 'Trial ' + sufixo, origem: 'inbound', etapa: 'trial' });
+ok(semTrial.status === 400, 'etapa trial não existe mais');
 
 titulo('Toques com resultado');
 await V('PUT', '/comercial/leads/' + id, { etapa: 'cadencia' });
@@ -87,9 +89,9 @@ const ag = await V('POST', `/comercial/leads/${id}/toques`, {
 ok(ag.status === 201 && ag.dados.etapa === 'diagnostico', 'agendou diagnóstico → lead vai para Diagnóstico');
 
 titulo('Portões de etapa');
-const q1 = await V('PUT', '/comercial/leads/' + id, { etapa: 'qualificado' });
-ok(q1.status === 400 && q1.dados.codigo === 'portao', 'Qualificado bloqueado sem diagnóstico realizado');
-ok(/reunião de diagnóstico/.test(q1.dados.erro) && /dor principal/.test(q1.dados.erro), 'mensagem lista o que falta');
+const q1 = await V('PUT', '/comercial/leads/' + id, { etapa: 'proposta' });
+ok(q1.status === 400 && q1.dados.codigo === 'portao', 'Aguardando retorno bloqueado sem reunião realizada');
+ok(/reunião de apresentação/.test(q1.dados.erro) && /dor principal/.test(q1.dados.erro), 'mensagem lista o que falta');
 let det = (await V('GET', '/comercial/leads/' + id)).dados;
 const reuFutura = det.reunioes.find((r) => r.status === 'agendada');
 const fut = await V('POST', `/comercial/reunioes/${reuFutura.id}/desfecho`, { status: 'realizada' });
@@ -100,31 +102,31 @@ const nova = rem.dados.reunioes.find((r) => r.status === 'agendada');
 const real = await V('POST', `/comercial/reunioes/${nova.id}/desfecho`, { status: 'realizada', nota: 'titular presente' });
 ok(real.status === 200, 'marca diagnóstico realizado');
 await V('PUT', '/comercial/leads/' + id, { diagnostico: { msgs_dia: 120, atendentes: 3, dor: 'fila no WhatsApp', decisor: 'titular', prazo: 'novembro' } });
-const q2 = await V('PUT', '/comercial/leads/' + id, { etapa: 'qualificado', proximo_passo: 'marcar ativação', proxima_data: hoje });
-ok(q2.status === 200 && q2.dados.etapa === 'qualificado', 'com diagnóstico completo, vai para Qualificado');
-
-const tr1 = await V('PUT', '/comercial/leads/' + id, { etapa: 'trial' });
-ok(tr1.status === 400 && /meta de sucesso/.test(tr1.dados.erro) && /ativação/.test(tr1.dados.erro), 'Trial exige meta de sucesso e ativação');
-await V('POST', `/comercial/leads/${id}/reunioes`, { tipo: 'ativacao', inicio: isoEm(60) });
-const tr2 = await V('PUT', '/comercial/leads/' + id, { etapa: 'trial', meta_sucesso: 'responder em até 10 min' });
-ok(tr2.status === 200 && tr2.dados.trial_inicio === hoje, 'Trial liberado e iniciado');
+await V('PUT', '/comercial/leads/' + id, { meta_sucesso: 'responder em até 10 min', proximo_passo: 'enviar proposta', proxima_data: hoje });
 
 titulo('Proposta e desconto');
 const pr0 = await V('PUT', '/comercial/leads/' + id, { etapa: 'proposta' });
-ok(pr0.status === 400 && /proposta registrada/.test(pr0.dados.erro), 'Proposta exige proposta registrada');
+ok(pr0.status === 400 && /proposta registrada/.test(pr0.dados.erro) && !/reunião|diagnóstico|ativação|meta de sucesso/.test(pr0.dados.erro), 'com reunião e diagnóstico feitos, Aguardando retorno só pede a proposta (sem trial)');
 const desc = await V('POST', `/comercial/leads/${id}/propostas`, { plano: 'Pro', valor_mensal: 540, desconto: 'mes_gratis_ex_cliente' });
 ok(desc.status === 400 && desc.dados.codigo === 'desconto_negado', 'mês grátis só para ex-cliente');
 const pr = await V('POST', `/comercial/leads/${id}/propostas`, { plano: 'Pro', valor_mensal: 540 });
 ok(pr.status === 201 && pr.dados.propostas[0].validade, 'registra proposta com validade (padrão 7 dias)');
-await V('PUT', '/comercial/leads/' + id, { etapa: 'proposta' });
+const pr1 = await V('PUT', '/comercial/leads/' + id, { etapa: 'proposta' });
+ok(pr1.status === 200 && pr1.dados.etapa === 'proposta', 'proposta registrada → Aguardando retorno');
+const cg = await V('PUT', '/comercial/leads/' + id, { etapa: 'corregedoria', proximo_passo: 'cobrar retorno da corregedoria', proxima_data: hoje });
+ok(cg.status === 200 && cg.dados.etapa === 'corregedoria', 'interino vai para Aguardando a Corregedoria');
 
 titulo('Assinado × pago');
 const g = await V('PUT', '/comercial/leads/' + id, { etapa: 'ganho' });
 ok(g.status === 200 && g.dados.valor_mensal === 540, 'ganho herda o valor da proposta');
+ok(g.dados.implantacao_inicio === hoje, 'ganho começa a implantação');
+const mk = await V('POST', `/comercial/leads/${id}/toques`, { tipo: 'marco', dia: 0 });
+ok(mk.status === 201 && mk.dados.toques_marco['0'], 'marco de implantação (onboarding) registrado');
 det = (await V('GET', '/comercial/leads/' + id)).dados;
 ok(det.propostas[0].status === 'aceita', 'proposta vira aceita');
 let pn = (await V('GET', '/comercial/painel')).dados;
 ok(pn.hoje_listas.aguardando_pagamento.some((x) => x.lead.id === id), 'assinado aparece aguardando pagamento');
+ok(pn.implantacoes.some((x) => x.lead.id === id && x.proximo_marco && x.proximo_marco.d === 2), 'aparece em Implantação com o próximo marco (treinamento)');
 const pagoV = await V('POST', `/comercial/leads/${id}/pagamento`, { pago_em: hoje, valor: 540, referencia: 'PIX 123' });
 ok(pagoV.status === 403, 'vendedora não confirma pagamento');
 const pagoA = await A('POST', `/comercial/leads/${id}/pagamento`, { pago_em: hoje, valor: 540, referencia: 'PIX 123' });
