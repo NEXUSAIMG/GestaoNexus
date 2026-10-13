@@ -10,12 +10,8 @@ import {
 } from './ui.js';
 import { estiloCapaCard } from '../../constants/kanbanVisual.js';
 import FichaCliente, { ehCardCliente } from './FichaCliente.jsx';
+import { ETAPA_COMERCIAL, LinhaProximoPasso } from './comercialQuadro.jsx';
 
-// Sprint 42F — nomes das etapas do Comercial (iguais às colunas da equipe)
-const ETAPA_COMERCIAL = {
-  prospect: 'Em prospecção', cadencia: 'Em contatos', diagnostico: 'Reunião de apresentação',
-  proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
-};
 
 /**
  * Card do board.
@@ -28,7 +24,7 @@ const ETAPA_COMERCIAL = {
  * "normal, sem nada" continua limpo como era antes.
  */
 
-export function CardSortable({ card, etiquetas, campos, aoClicar, marcado, aoMarcar, selecaoAtiva }) {
+export function CardSortable({ card, etiquetas, campos, aoClicar, marcado, aoMarcar, selecaoAtiva, destaque, etapaDaColuna }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
   } = useSortable({ id: card.id });
@@ -41,12 +37,12 @@ export function CardSortable({ card, etiquetas, campos, aoClicar, marcado, aoMar
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card card={card} etiquetas={etiquetas} campos={campos} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} selecaoAtiva={selecaoAtiva} />
+      <Card card={card} etiquetas={etiquetas} campos={campos} aoClicar={aoClicar} marcado={marcado} aoMarcar={aoMarcar} selecaoAtiva={selecaoAtiva} destaque={destaque} etapaDaColuna={etapaDaColuna} />
     </div>
   );
 }
 
-export default function Card({ card, etiquetas, campos = [], aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva }) {
+export default function Card({ card, etiquetas, campos = [], aoClicar, arrastando, marcado, aoMarcar, selecaoAtiva, destaque, etapaDaColuna }) {
   const etqs = (card.etiqueta_ids || [])
     .map((id) => etiquetas.find((e) => e.id === id))
     .filter(Boolean);
@@ -120,6 +116,9 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
         // do board: alguém vai tentar tocar nisso sem poder.
         !arrastando && bloqueado && !marcado ? 'border-red-300' : '',
         !arrastando && !bloqueado && !marcado ? 'border-slate-200' : '',
+        // Sprint 42H — "Destacar os meus": os da pessoa em evidência, os outros apagados
+        !arrastando && destaque === 'meu' && !marcado ? 'ring-2 ring-nexus-400' : '',
+        !arrastando && destaque === 'outro' ? 'opacity-40 grayscale hover:opacity-80' : '',
       ].join(' ')}
     >
       {aoMarcar && (
@@ -192,18 +191,20 @@ export default function Card({ card, etiquetas, campos = [], aoClicar, arrastand
 
       <div className="text-sm font-medium text-slate-900 leading-snug">{card.titulo}</div>
 
-      {card.comercial && (
+      {/* Sprint 42H — o selo só aparece quando diz algo que a coluna não diz */}
+      {card.comercial && (card.comercial.etapa !== etapaDaColuna || card.comercial.etapa === 'ganho') && (
         <div
           className={'mt-1 inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium '
             + (card.comercial.etapa === 'ganho' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : card.comercial.etapa === 'perdido' ? 'border-slate-200 bg-slate-50 text-slate-500'
                 : 'border-indigo-200 bg-indigo-50 text-indigo-800')}
-          title="Este card está ligado a um lead do Comercial: mover aqui muda a etapa lá, e vice-versa"
+          title="Etapa deste cartório no Comercial. Mover o card muda a etapa lá, e o que muda lá move o card. Abra o card para ir à ficha."
         >
           <Handshake size={10} className="shrink-0" />
           <span className="truncate">Comercial · {ETAPA_COMERCIAL[card.comercial.etapa] || card.comercial.etapa}{card.comercial.etapa === 'ganho' && card.comercial.pago ? ' · pago' : ''}</span>
         </div>
       )}
+      {card.comercial && <LinhaProximoPasso comercial={card.comercial} />}
 
       {cliente && (
         <FichaCliente

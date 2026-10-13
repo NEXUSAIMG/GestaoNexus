@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { CardSortable } from './Card.jsx';
+import { ChipColuna, cardEhMeu } from './comercialQuadro.jsx';
 import { TIPOS_COLUNA } from './ui.js';
 import { CORES_KANBAN, COR_HEX, estiloHeaderColuna } from '../../constants/kanbanVisual.js';
 
@@ -31,6 +32,7 @@ export default function Coluna({
   coluna, cards, cartoriosNestaFase = [], podeEditar, etiquetas, campos = [],
   aoClicarCard, aoNovoCard, aoArquivarColuna, aoMudarColuna,
   selecionados, aoSelecionarCard, selecaoAtiva,
+  infoComercial, destacarDe, // Sprint 42H — espelho do Comercial e "Destacar os meus"
 }) {
   const sortable = useSortable({ id: 'col-' + coluna.id });
   const drop = useDroppable({ id: 'coluna-' + coluna.id });
@@ -302,6 +304,15 @@ export default function Coluna({
         </div>
       )}
 
+      {infoComercial !== undefined && (
+        <div className="-mt-1 px-3 pb-1"><ChipColuna info={infoComercial} nomeColuna={coluna.nome} /></div>
+      )}
+      {destacarDe && cards.length > 0 && (
+        <div className="-mt-0.5 px-3 pb-1 pl-7 text-[10px] text-slate-500">
+          {(() => { const n = cards.filter((c) => cardEhMeu(c, destacarDe)).length; return n ? `${n} seu(s) aqui` : 'nenhum seu aqui'; })()}
+        </div>
+      )}
+
       {estourado && (
         <div className="mx-2 mb-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-[10px] text-amber-800">
           WIP estourado: {totalReal} cards para um limite de {limite}. Termine antes de começar.
@@ -341,6 +352,8 @@ export default function Coluna({
               marcado={selecionados ? selecionados.has(card.id) : undefined}
               aoMarcar={aoSelecionarCard ? (e) => aoSelecionarCard(card.id, e) : undefined}
               selecaoAtiva={selecaoAtiva}
+              destaque={destacarDe ? (cardEhMeu(card, destacarDe) ? 'meu' : 'outro') : undefined}
+              etapaDaColuna={infoComercial?.etapa}
             />
           ))}
         </SortableContext>

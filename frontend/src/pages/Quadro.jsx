@@ -13,6 +13,7 @@ import QuadroCalendario from '../components/QuadroCalendario.jsx';
 import Card from '../components/quadro/Card.jsx';
 import Coluna, { BotaoNovaColuna } from '../components/quadro/Coluna.jsx';
 import FiltroBar from '../components/quadro/FiltroBar.jsx';
+import { FaixaEspelho } from '../components/quadro/comercialQuadro.jsx';
 import ModalCard from '../components/quadro/ModalCard.jsx';
 import ModalConfigQuadro from '../components/quadro/ModalConfigQuadro.jsx';
 import ModalSprints from '../components/quadro/ModalSprints.jsx';
@@ -73,6 +74,16 @@ export default function Quadro() {
   const [filtroAtrasados, setFiltroAtrasados] = useState(false);
   const [filtroPrioridade, setFiltroPrioridade] = useState('');
   const [filtroBloqueados, setFiltroBloqueados] = useState(false);
+  // Sprint 42H — "Destacar os meus": os cards da pessoa em evidência e os
+  // outros apagados (nada some do quadro). A escolha fica guardada por pessoa.
+  const chaveDestaque = 'quadro-destacar-meus:' + (pessoa?.id || '');
+  const [destacarMeus, setDestacarMeusState] = useState(() => {
+    try { return localStorage.getItem(chaveDestaque) === '1'; } catch { return false; }
+  });
+  const setDestacarMeus = (v) => {
+    setDestacarMeusState(v);
+    try { localStorage.setItem(chaveDestaque, v ? '1' : '0'); } catch { /* sem storage: só nesta visita */ }
+  };
 
   // Drag
   const [arrastando, setArrastando] = useState(null);
@@ -470,6 +481,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('kanban')}
+              title="Colunas com os cards: arraste para mudar de etapa"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'kanban' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -480,6 +492,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('calendario')}
+              title="Cards com prazo, num calendário do mês"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'calendario' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -490,6 +503,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('tabela')}
+              title="Todos os cards numa lista, para ordenar e editar rápido"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'tabela' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -500,6 +514,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('timeline')}
+              title="Cards no tempo, do início ao prazo"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'timeline' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -510,6 +525,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('carga')}
+              title="Quantos cards cada pessoa tem agora"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'carga' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -520,6 +536,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('agrupada')}
+              title="Cards separados em faixas (por pessoa, prioridade ou etiqueta)"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'agrupada' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -530,6 +547,7 @@ export default function Quadro() {
             <button
               type="button"
               onClick={() => setAba('metricas')}
+              title="Números do quadro: entregas, tempo por coluna e atrasos"
               className={[
                 'inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                 aba === 'metricas' ? 'bg-nexus-700 text-white' : 'text-slate-600 hover:bg-slate-50',
@@ -555,6 +573,9 @@ export default function Quadro() {
               setFiltroPrioridade={setFiltroPrioridade}
               filtroBloqueados={filtroBloqueados}
               setFiltroBloqueados={setFiltroBloqueados}
+              destacarMeus={destacarMeus}
+              setDestacarMeus={setDestacarMeus}
+              nMeus={quadro.cards.filter((c) => (c.responsaveis || []).some((r) => r.id === pessoa?.id) || c.comercial?.dono_id === pessoa?.id).length}
             />
           )}
 
@@ -562,7 +583,7 @@ export default function Quadro() {
             type="button"
             onClick={() => setModalSprints(true)}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            title="Sprints"
+            title="Ciclos de trabalho do quadro (ex.: 2 semanas): o que entra e o que foi entregue"
           >
             <Flag size={13} /> Sprints
           </button>
@@ -571,7 +592,7 @@ export default function Quadro() {
             type="button"
             onClick={() => setModalSustentacao(true)}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            title="Sustentação"
+            title="Fila de chamados de suporte deste quadro"
           >
             <LifeBuoy size={13} /> Sustentação
           </button>
@@ -597,6 +618,8 @@ export default function Quadro() {
           )}
         </div>
       </header>
+
+      <FaixaEspelho espelho={quadro.espelho_comercial} />
 
       {aba === 'metricas' ? (
         <div className="flex-1 overflow-y-auto">
@@ -659,6 +682,8 @@ export default function Quadro() {
                     aoMudarColuna={carregar}
                     selecionados={selecionados}
                     selecaoAtiva={selecionados.size > 0}
+                    infoComercial={quadro.espelho_comercial ? (quadro.espelho_comercial.colunas?.[col.id] || null) : undefined}
+                    destacarDe={destacarMeus ? pessoa?.id : undefined}
                     aoSelecionarCard={quadro.pode_editar ? aoSelecionarCard : undefined}
                     aoArquivarColuna={async () => {
                       if (!confirm('Arquivar a coluna "' + col.nome + '"? Os cards ficam no histórico mas saem do board.')) return;

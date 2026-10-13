@@ -11,6 +11,41 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42H — Tudo explicado na tela (versão 1.15)
+
+A equipe precisa entender cada tela sem treinamento. O foco é o quadro
+"Atividade Comercial", onde a explicação ainda faltava:
+
+- **Destacar os meus** (todos os quadros): os cards da pessoa ficam em
+  evidência e os dos outros, apagados (nada some). Cada coluna mostra quantos
+  são seus, e a escolha fica guardada por pessoa.
+- **Faixa "Este quadro anda junto com o Comercial"**, que pode ser recolhida:
+  como avançar, o que é a seta do card, o (?) das colunas e onde registrar o
+  contato.
+- **O que é cada coluna**: um chip embaixo do nome com (?) que mostra a etapa
+  no Comercial, o objetivo, quando avança e o prazo, o marco da implantação
+  ou que a coluna "fica só no quadro". O backend devolve
+  `quadro.espelho_comercial.colunas`.
+- **Próximo passo no card**: aparece a linha com a seta e a data, em vermelho
+  quando está atrasado e em laranja quando é hoje. Em Em contatos, o card
+  lembra de seguir a cadência. O selo de etapa só aparece quando a coluna
+  não diz a mesma coisa.
+- **Card aberto**: a caixa "Ligado ao Comercial" traz o objetivo da etapa e o
+  próximo passo, e avisa quando ainda não há próximo passo combinado.
+- **Dicas** (title) nos filtros, nas vistas e nos botões do quadro.
+- **Comercial**:
+  - o tour tem dois passos novos (insistência e quadro em espelho) e aparece
+    de novo uma vez para todos;
+  - "Como funciona" de Hoje e a etapa Aguardando retorno citam os 4 retornos;
+  - duas perguntas novas no FAQ.
+
+Arquivos: `components/quadro/comercialQuadro.jsx` (novo), `Card.jsx`,
+`Coluna.jsx`, `FiltroBar.jsx`, `ModalCard.jsx`, `pages/Quadro.jsx`,
+`comercial/guia.js`, `comercial/Ajuda.jsx`, `quadros.controller.js`,
+`cards.controller.js`. Testes: 2 checagens novas em `t-comercial-espelho.mjs`.
+
+---
+
 ## Sprint 42G — Insistência com método (versão 1.14)
 
 O ponto fraco apontado pela gestão é a insistência com os clientes. Em vez

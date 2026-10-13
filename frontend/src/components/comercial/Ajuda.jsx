@@ -64,7 +64,8 @@ export function ComoFunciona({ aba }) {
 }
 
 export function Tour({ forcar = false, onFechar }) {
-  const chave = 'comercial-tour-visto';
+  // '-2': tour novo (insistência e quadro em espelho) — aparece de novo uma vez para todos
+  const chave = 'comercial-tour-visto-2';
   const [visivel, setVisivel] = useState(() => forcar || lerLS(chave, '') !== '1');
   const [i, setI] = useState(0);
   useEffect(() => { if (forcar) { setVisivel(true); setI(0); } }, [forcar]);

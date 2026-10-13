@@ -348,7 +348,8 @@ export async function obter(req, res, next) {
 
     // Sprint 42F — lead do Comercial ligado a este card (se houver)
     const { rows: lr } = await query(
-      `SELECT l.id AS lead_id, l.etapa, l.etapa_desde::text AS etapa_desde, pd.nome AS dono_nome
+      `SELECT l.id AS lead_id, l.etapa, l.etapa_desde::text AS etapa_desde, pd.nome AS dono_nome,
+              l.proximo_passo, l.proxima_data::text AS proxima_data
          FROM comercial_leads l LEFT JOIN pessoas_acesso pd ON pd.id = l.dono_id
         WHERE l.origem_card_id = $1 AND l.arquivado_em IS NULL LIMIT 1`,
       [req.params.id],

@@ -93,6 +93,11 @@ const board = (await get(`/quadros/${quadroId}`)).dados;
 const noBoard = board.cards.find((c) => c.id === c1.dados.id);
 ok(noBoard?.campos?.[campoTel] === telNovo, 'telefone editado no Comercial aparece no campo do card');
 ok(noBoard?.comercial?.etapa === 'diagnostico', 'selo do card acompanha a etapa');
+const ec = board.espelho_comercial;
+ok(ec?.colunas?.[col['Em contatos']]?.etapa === 'cadencia' && ec.colunas[col['Ideias soltas']]?.etapa === 'ignorar'
+  && ec.colunas[col['Em Desenvolvimento']]?.marco === 7, '(42H) quadro diz o que cada coluna é no Comercial');
+ok(noBoard && 'proximo_passo' in noBoard.comercial && 'proxima_data' in noBoard.comercial && noBoard.comercial.dono_id === eu.id,
+  '(42H) card traz o próximo passo e o responsável do lead');
 
 // Perdido pela ficha → card vai para a coluna do motivo
 await put(`/comercial/leads/${leadId}`, { etapa: 'perdido', motivo_perda: 'Desistência (usou e desistiu)' });

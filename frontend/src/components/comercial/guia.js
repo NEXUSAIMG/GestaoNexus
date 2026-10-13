@@ -52,7 +52,8 @@ export const GUIA_ETAPAS = {
   proposta: {
     objetivo: 'Proposta com o cartório: acompanhar até a decisão.',
     fazer: [
-      'Acompanhe até a validade; tire dúvidas e envolva a TI se precisar.',
+      'Siga os 4 retornos que aparecem em Hoje: dia 2 (WhatsApp com um caso parecido), dia 4 (ligação), dia 6 (falar com o titular) e dia 7 (mensagem de encerramento).',
+      'Tire dúvidas e envolva a TI se precisar.',
       'Interino que depende da corregedoria: mude para "Aguardando a Corregedoria".',
       'Assinou? Mude para Ganho: o valor vem da proposta e a implantação começa.',
       'Recusou? Marque a proposta como recusada e o cartório como Perdido, com o motivo.',
@@ -114,9 +115,10 @@ export const COMO_FUNCIONA = {
   hoje: {
     titulo: 'Hoje é a sua lista de tarefas',
     itens: [
-      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, implantação de clientes, toques de cadência, próximos passos.',
+      'Trabalhe de cima para baixo: reuniões, desfechos pendentes, retornos de proposta, implantação, toques de cadência, próximos passos e quem volta a ser contatado.',
       'Cada linha tem o botão que resolve. Ao registrar, a linha some e o próximo passo aparece sozinho.',
       'Comece o dia aqui e termine com a tela vazia.',
+      '"Só os meus" mostra o seu trabalho; "Toda a equipe" mostra o de todos. Usa o quadro? Lá também tem o botão "Destacar os meus".',
     ],
   },
   processo: {
@@ -186,6 +188,8 @@ export const FAQ = [
   { p: 'Por que não consigo marcar como perdido por "Sumiu"?', r: 'Porque ainda falta insistir com método. Em Em contatos, a cadência precisa estar completa (o último toque é a mensagem de encerramento). Em Aguardando retorno, os 4 retornos da proposta. Em Reunião ou Corregedoria, pelo menos 3 tentativas. Se o cartório respondeu que não quer, o motivo é outro (Sem interesse, Preço, Concorrente...) e não tem essa trava.' },
   { p: 'O que fazer depois de mandar a proposta?', r: 'Siga os retornos que aparecem em Hoje: dia 2, WhatsApp com um caso parecido; dia 4, ligação para tirar dúvidas e confirmar a data; dia 6, falar com o titular; dia 7, a mensagem de encerramento. Ao registrar cada contato, o sistema já marca o próximo. Melhor ainda: na reunião, combine a data da decisão antes de mandar a proposta.' },
   { p: 'Posso continuar usando o quadro Atividade Comercial?', r: 'Pode. Com o espelho ligado (Controles → Quadro e Comercial em espelho), o quadro e o Comercial andam juntos: mover o card muda a etapa aqui, e mudar a etapa aqui move o card. Nome, responsável, telefone, contato, e-mail e cidade também ficam iguais nos dois. Card novo numa coluna do funil vira cartório aqui, e cartório cadastrado aqui ganha card lá. Se o Comercial não deixar o card andar (falta reunião, proposta etc.), o quadro mostra o que falta e o botão para abrir a ficha.' },
+  { p: 'Como vejo só os meus cards no quadro?', r: 'No quadro, clique em "Destacar os meus" (na barra de filtros). Os seus cards ficam com contorno e os dos outros, apagados — nada some, você continua vendo o quadro inteiro. Cada coluna mostra quantos são seus. O Nexus lembra a sua escolha; clique de novo para voltar ao normal. Para esconder os outros de vez, use o filtro de responsável.' },
+  { p: 'O que é a linha com a seta embaixo do card?', r: 'É o próximo passo do cartório, com a data, igual ao do Comercial. Vermelho: atrasado. Laranja: é hoje. Ao registrar o contato no Comercial, o próximo passo muda sozinho e o card mostra o novo.' },
   { p: 'Registrei um toque errado. Como corrijo?', r: 'Abra o cartório, desmarque o toque na cadência (contato avulso: abra o Histórico completo e clique em "estornar") e escreva o motivo. Isso é um estorno: o registro fica riscado, não some. No mesmo dia, você mesma estorna; depois disso, peça à gestão.' },
   { p: 'O sistema não me deixa mudar a etapa. Por quê?', r: 'Cada etapa tem um critério (portão). A ficha do cartório mostra a lista do que falta, com o botão para resolver cada item — por exemplo, "Agendar reunião" ou "Preencher diagnóstico". Resolva os itens e tente de novo.' },
   { p: 'Quero voltar um cartório para uma etapa anterior.', r: 'Pode. Mude a etapa e escreva a justificativa quando o sistema pedir. Ela fica no histórico. Ao reabrir um Perdido, os critérios valem de novo: só a etapa que ele já tinha alcançado antes fica dispensada.' },
@@ -233,7 +237,15 @@ export const TOUR = [
     texto: 'Na aba “Processo” está o caminho inteiro de um cartório até virar cliente, a cadência de 12 dias, a implantação e a rotina do dia. Clique em cada etapa para ver o que fazer.',
   },
   {
-    titulo: '5. Errou? Tem conserto',
+    titulo: '5. Insista com método',
+    texto: 'Cartório que não responde não é "não". Siga a cadência de 12 dias e, depois da proposta, os 4 retornos que aparecem em Hoje. "Sumiu" só é aceito depois disso — e em 90 dias o cartório volta para a sua lista.',
+  },
+  {
+    titulo: '6. Prefere o quadro? Ele anda junto',
+    texto: 'O quadro Atividade Comercial e o Comercial são espelho: mover o card muda a etapa aqui e vice-versa. No quadro, cada card mostra o próximo passo, o (?) de cada coluna diz o que fazer nela e "Destacar os meus" deixa o seu trabalho em evidência.',
+  },
+  {
+    titulo: '7. Errou? Tem conserto',
     texto: 'Nada é apagado, mas tudo pode ser corrigido com um estorno e um motivo. Dúvidas? Abra a aba "Ajuda" ou clique nos ícones (?) espalhados pela tela.',
   },
 ];

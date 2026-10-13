@@ -4,6 +4,7 @@ import { NaoEncontradoError, AppError, NaoAutorizadoError } from '../utils/error
 import { registrarAcao } from '../utils/audit.js';
 import { ehMembroDaEquipe } from './equipes.controller.js';
 import { corSchema, presetSchema } from '../utils/kanban-visual.js';
+import { espelhoDoQuadro, palpiteMarco } from '../services/comercial.espelho.js';
 
 /**
  * Quadros — Sprint 10.
@@ -146,7 +147,10 @@ const CARD_BOARD_SELECT = `
            '[]'::json
          ) AS responsaveis,
          -- Sprint 42F — card de um lead do Comercial (quadro em espelho)
-         (SELECT json_build_object('lead_id', l.id, 'etapa', l.etapa, 'pago', l.pago_em IS NOT NULL)
+         -- Sprint 42H — + próximo passo e responsável, para o card dizer o que fazer
+         (SELECT json_build_object('lead_id', l.id, 'etapa', l.etapa, 'pago', l.pago_em IS NOT NULL,
+                                   'proximo_passo', l.proximo_passo, 'proxima_data', l.proxima_data::text,
+                                   'dono_id', l.dono_id)
             FROM comercial_leads l
            WHERE l.origem_card_id = c.id AND l.arquivado_em IS NULL
            LIMIT 1) AS comercial
@@ -262,9 +266,22 @@ export async function obter(req, res, next) {
       ),
     ]);
 
+    // Sprint 42H — quadro em espelho com o Comercial: o que cada coluna
+    // significa lá (etapa do funil, marco da implantação ou "só no quadro"),
+    // para a tela explicar sozinha.
+    const esp = await espelhoDoQuadro(req.params.id);
+    const espelhoComercial = esp ? {
+      somente_etiqueta: esp.somente_etiqueta || null,
+      colunas: Object.fromEntries(colR.rows.map((c) => {
+        const etapa = (esp.mapa || {})[c.id] || 'ignorar';
+        return [c.id, { etapa, marco: etapa === 'ganho' ? palpiteMarco(c.nome) : null }];
+      })),
+    } : null;
+
     res.json({
       ...serializar(qR.rows[0]),
       pode_editar: podeEditar,
+      espelho_comercial: espelhoComercial,
       colunas: colR.rows,
       cards: cardsR.rows.map(mapearCardBoard),
       etiquetas: etiqR.rows,

@@ -18,10 +18,8 @@ import CardTimer from './CardTimer.jsx';
 import CardCampos from './CardCampos.jsx';
 import { ehCardCliente } from './FichaCliente.jsx';
 
-const ETAPA_COMERCIAL = {
-  prospect: 'Em prospecção', cadencia: 'Em contatos', diagnostico: 'Reunião de apresentação',
-  proposta: 'Aguardando retorno', corregedoria: 'Aguardando a Corregedoria', ganho: 'Ganho', perdido: 'Perdido',
-};
+import { ETAPA_COMERCIAL, proximoPasso } from './comercialQuadro.jsx';
+import { GUIA_ETAPAS } from '../comercial/guia.js';
 import {
   COR_CHIP, CORES, corForte, inputCls, PRIORIDADES, semAcento,
 } from './ui.js';
@@ -321,18 +319,33 @@ export default function ModalCard({
         </div>
       )}
 
-      {editando && comercial && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
-          <span>
-            Ligado ao Comercial: <strong>{ETAPA_COMERCIAL[comercial.etapa] || comercial.etapa}</strong>
-            {comercial.dono_nome ? ' · ' + comercial.dono_nome : ' · na fila'}.
-            {' '}Mover o card muda a etapa lá; título, responsável e contatos andam juntos.
-          </span>
-          <Link to={'/comercial?lead=' + comercial.lead_id} className="shrink-0 rounded border border-indigo-300 bg-white px-2 py-1 font-medium text-indigo-800 hover:bg-indigo-100">
-            Abrir no Comercial
-          </Link>
-        </div>
-      )}
+      {editando && comercial && (() => {
+        // Sprint 42H — a caixa explica o que é a etapa e o que fazer agora
+        const p = proximoPasso(comercial);
+        const g = GUIA_ETAPAS[comercial.etapa];
+        return (
+          <div className="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="min-w-0 flex-1">
+                Ligado ao Comercial: <strong>{ETAPA_COMERCIAL[comercial.etapa] || comercial.etapa}</strong>
+                {comercial.dono_nome ? ' · ' + comercial.dono_nome : ' · na fila (sem responsável)'}.
+                {g && <span className="text-indigo-800"> {g.objetivo}</span>}
+              </span>
+              <Link to={'/comercial?lead=' + comercial.lead_id} className="shrink-0 rounded border border-indigo-300 bg-white px-2 py-1 font-medium text-indigo-800 hover:bg-indigo-100">
+                Abrir no Comercial
+              </Link>
+            </div>
+            {p && (
+              <p className={'mt-1.5 rounded bg-white/70 px-2 py-1 ' + (p.nivel === 'crit' ? 'text-red-700' : p.nivel === 'warn' ? 'text-amber-800' : 'text-slate-700')}>
+                {p.falta ? p.texto : <><b>Próximo passo:</b> {p.texto}{p.quando ? <b> · {p.quando}</b> : null}</>}
+              </p>
+            )}
+            <p className="mt-1.5 text-[11px] text-indigo-700">
+              Contatos, reunião e proposta se registram no Comercial (a ficha diz o que falta para avançar). Mover o card muda a etapa lá; título, responsável e contatos andam juntos.
+            </p>
+          </div>
+        );
+      })()}
 
       {(!editando || aba === 'detalhes') && (
         <form onSubmit={submeter} className="space-y-3">

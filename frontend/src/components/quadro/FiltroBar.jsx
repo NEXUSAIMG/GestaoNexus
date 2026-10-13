@@ -1,4 +1,4 @@
-import { AlertCircle, X, Ban, Search } from 'lucide-react';
+import { AlertCircle, X, Ban, Search, Sparkles } from 'lucide-react';
 import { PRIORIDADES } from './ui.js';
 
 /**
@@ -14,12 +14,31 @@ export default function FiltroBar({
   filtroAtrasados, setFiltroAtrasados,
   filtroPrioridade, setFiltroPrioridade,
   filtroBloqueados, setFiltroBloqueados,
+  destacarMeus, setDestacarMeus, nMeus = 0, // Sprint 42H
 }) {
   const algumAtivo = filtroBusca || filtroResponsavel || filtroEtiqueta || filtroAtrasados
     || filtroPrioridade !== '' || filtroBloqueados;
 
   return (
     <div className="flex items-center gap-1.5 text-xs">
+      {setDestacarMeus && (
+        <button
+          type="button"
+          onClick={() => setDestacarMeus(!destacarMeus)}
+          aria-pressed={!!destacarMeus}
+          className={[
+            'inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 font-medium',
+            destacarMeus
+              ? 'border-nexus-500 bg-nexus-700 text-white'
+              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+          ].join(' ')}
+          title={destacarMeus
+            ? 'Mostrando os seus cards em destaque e os dos outros apagados. Clique para voltar ao normal.'
+            : 'Deixa os seus cards em evidência e apaga os dos outros (nada some). O Nexus lembra a sua escolha.'}
+        >
+          <Sparkles size={11} /> {destacarMeus ? `Destacando os meus (${nMeus})` : 'Destacar os meus'}
+        </button>
+      )}
       <div className="relative">
         <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -27,6 +46,7 @@ export default function FiltroBar({
           value={filtroBusca}
           onChange={(e) => setFiltroBusca(e.target.value)}
           placeholder="Buscar cards…"
+          title="Procura no título e na descrição dos cards"
           className="w-44 rounded-lg border border-slate-300 bg-white py-1.5 pl-7 pr-6 text-xs text-slate-700 focus:border-nexus-500 focus:outline-none"
         />
         {filtroBusca && (
@@ -44,6 +64,7 @@ export default function FiltroBar({
       <select
         className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700"
         value={filtroResponsavel}
+        title="Mostra só os cards de uma pessoa (os outros somem)"
         onChange={(e) => setFiltroResponsavel(e.target.value)}
       >
         <option value="">Todos os responsáveis</option>
@@ -54,6 +75,7 @@ export default function FiltroBar({
       <select
         className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700"
         value={filtroEtiqueta}
+        title="Mostra só os cards com esta etiqueta"
         onChange={(e) => setFiltroEtiqueta(e.target.value)}
       >
         <option value="">Todas as etiquetas</option>
@@ -63,6 +85,7 @@ export default function FiltroBar({
       <select
         className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700"
         value={filtroPrioridade}
+        title="Mostra só os cards desta prioridade (P0 = urgente)"
         onChange={(e) => setFiltroPrioridade(e.target.value)}
       >
         <option value="">Qualquer prioridade</option>
@@ -94,6 +117,7 @@ export default function FiltroBar({
             ? 'border-red-300 bg-red-50 text-red-700'
             : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
         ].join(' ')}
+        title="Só cards com prazo vencido"
       >
         <AlertCircle size={11} /> Atrasados
       </button>
