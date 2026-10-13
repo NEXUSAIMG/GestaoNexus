@@ -7,6 +7,7 @@ import {
   SEGMENTOS, CADENCIA, MARCOS_IMPLANTACAO, SINAIS, ETAPAS_NEGOCIACAO, RESULTADOS, RESULTADOS_CHAVES, TIPOS_REUNIAO,
   MOTIVOS_NAO_CONTATAR, JANELAS, DIAGNOSTICO_CAMPOS,
   hojeBR, mesDe, addDias, aplicarEtapa, pendenciasPortao, ehRetrocesso,
+  RETORNO, MOTIVOS_VOLTAM, DIAS_PARA_VOLTAR, pendenciasPerda,
 } from '../services/comercial.regras.js';
 import {
   SELECT_LEAD, enriquecer, carregarLead, reunioesDoLead, propostasDoLead,
@@ -227,7 +228,7 @@ export async function config(req, res, next) {
     );
     res.json({
       etapas: ETAPAS, origens: ORIGENS, motivos_perda: MOTIVOS_PERDA, segmentos: SEGMENTOS,
-      cadencia: CADENCIA, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
+      cadencia: CADENCIA, retorno: RETORNO, motivos_voltam: MOTIVOS_VOLTAM, dias_para_voltar: DIAS_PARA_VOLTAR, marcos_implantacao: MARCOS_IMPLANTACAO, sinais: SINAIS, resultados: RESULTADOS,
       tipos_reuniao: TIPOS_REUNIAO, motivos_nao_contatar: MOTIVOS_NAO_CONTATAR, janelas: JANELAS,
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
@@ -414,12 +415,16 @@ export async function atualizar(req, res, next) {
       {
         const [reunioes, propostas] = await Promise.all([reunioesDoLead(atual.id, client), propostasDoLead(atual.id, client)]);
         const pend = pendenciasPortao(efetivo, novaEtapa, { reunioes, propostas, valor_mensal: efetivo.valor_mensal });
+        // Sprint 42G — "Sumiu" só depois de insistir com método
+        if (novaEtapa === 'perdido') pend.push(...pendenciasPerda(atual, sets.motivo_perda));
         if (pend.length) {
           if (dados.forcar_portao && ehGestor(req) && dados.justificativa) {
             justif = `[portão forçado pela gestão] ${dados.justificativa} — pendências: ${pend.join('; ')}`;
             portaoForcado = true;
           } else {
-            const e = new AppError(`Para ir a "${ETAPA[novaEtapa].n}" falta: ${pend.join('; ')}.`, 400, 'portao');
+            const e = new AppError(novaEtapa === 'perdido'
+              ? `Antes de marcar como perdido por "Sumiu", falta insistir: ${pend.join('; ')}.`
+              : `Para ir a "${ETAPA[novaEtapa].n}" falta: ${pend.join('; ')}.`, 400, 'portao');
             e.detalhes = pend.map((x) => ({ campo: 'portao', mensagem: x }));
             throw e;
           }
@@ -432,6 +437,11 @@ export async function atualizar(req, res, next) {
             if (!(Number(sets.valor_mensal ?? atual.valor_mensal) > 0)) sets.valor_mensal = vig.valor_mensal;
           }
         }
+      }
+      // Sprint 42G — perdido por "Sumiu"/"Sem tempo" já fica com o retorno de 90 dias marcado
+      if (novaEtapa === 'perdido' && MOTIVOS_VOLTAM.includes(sets.motivo_perda) && dados.proxima_data === undefined) {
+        sets.proximo_passo = `Retorno programado: voltar a contatar (perdido por "${sets.motivo_perda}")`;
+        sets.proxima_data = addDias(hoje, DIAS_PARA_VOLTAR);
       }
       // Lead da fila (sem dono) que anda no funil fica com quem moveu.
       if (!atual.dono_id && sets.dono_id === undefined && novaEtapa !== 'perdido') sets.dono_id = req.pessoa.id;
@@ -537,6 +547,17 @@ export async function registrarToque(req, res, next) {
     exigirContatoLiberado(lead);
     if (lead.etapa === 'ganho' && d.tipo === 'cadencia') throw new AppError('Lead já é ganho.');
     if (d.tipo === 'marco' && !lead.implantacao_inicio) throw new AppError('A implantação ainda não começou: o cartório precisa estar como Ganho.');
+    // Sprint 42G — em Aguardando retorno, o próximo passo vem do roteiro de
+    // retorno: registrou o contato, o sistema já marca o seguinte.
+    if (lead.etapa === 'proposta' && lead.proposta_enviada_em && d.tipo === 'avulso' && !(d.proximo_passo && d.proxima_data)) {
+      const feitos = Number(lead.toques_pos_proposta || 0) + (hoje > lead.proposta_enviada_em ? 1 : 0);
+      const passo = RETORNO[feitos];
+      if (passo) {
+        const previsto = addDias(lead.proposta_enviada_em, passo.d);
+        d.proximo_passo = `Retorno ${feitos + 1}/${RETORNO.length} (${passo.canal}): ${passo.acao}`;
+        d.proxima_data = previsto > hoje ? previsto : addDias(hoje, 1);
+      }
+    }
     // Etapas de negociação nunca ficam sem próximo passo datado
     const negociando = ETAPAS_NEGOCIACAO.includes(lead.etapa);
     const temFuturo = lead.proxima_data && lead.proxima_data >= hoje;
@@ -762,7 +783,16 @@ export async function registrarProposta(req, res, next) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [lead.id, d.plano, d.valor_mensal, d.desconto, enviada, validade, d.observacoes ?? null, req.pessoa.id],
     );
-    await client.query(`UPDATE comercial_leads SET valor_mensal = $2, atualizado_em = now() WHERE id = $1`, [lead.id, d.valor_mensal]);
+    // Sprint 42G — proposta enviada já nasce com o 1º retorno marcado
+    const temFuturo = lead.proxima_data && lead.proxima_data > hoje;
+    if (temFuturo) {
+      await client.query(`UPDATE comercial_leads SET valor_mensal = $2, atualizado_em = now() WHERE id = $1`, [lead.id, d.valor_mensal]);
+    } else {
+      await client.query(
+        `UPDATE comercial_leads SET valor_mensal = $2, proximo_passo = $3, proxima_data = $4, atualizado_em = now() WHERE id = $1`,
+        [lead.id, d.valor_mensal, `Retorno 1/${RETORNO.length} (${RETORNO[0].canal}): ${RETORNO[0].acao}`, addDias(enviada, RETORNO[0].d)],
+      );
+    }
     await client.query('COMMIT');
     await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.proposta.registrar', detalhes: { lead_id: lead.id, proposta_id: rows[0].id, valor: d.valor_mensal, desconto: d.desconto }, req });
     res.status(201).json({ id: rows[0].id, propostas: await propostasDoLead(lead.id) });

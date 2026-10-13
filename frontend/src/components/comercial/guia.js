@@ -86,6 +86,7 @@ export const GUIA_ETAPAS = {
 // Glossário (usado pelos ícones "?")
 // ---------------------------------------------------------------------------
 export const GLOSSARIO = {
+  insistencia: 'Insistir com método: toda conversa termina com data, todo retorno leva algo novo (um caso, um vídeo, um número) e o último contato é o encerramento educado. "Sumiu" só depois da cadência ou do roteiro de retorno completos; quem sumiu ou estava sem tempo volta a ser contatado em 90 dias.',
   cadencia: 'Roteiro de 8 toques em 12 dias úteis (ligação, WhatsApp, e-mail) para conseguir a primeira conversa. O sistema mostra em Hoje o toque de cada dia.',
   toque: 'Qualquer contato feito com o cartório: ligação, mensagem, e-mail. Todo toque é registrado com o resultado.',
   conexao: 'Toque em que você falou com alguém: atendeu, agendou, pediu retorno, recusou ou respondeu a mensagem. Toques são esforço; conexões são o que gera reunião.',
@@ -182,6 +183,8 @@ export const COMO_FUNCIONA = {
 // Perguntas frequentes
 // ---------------------------------------------------------------------------
 export const FAQ = [
+  { p: 'Por que não consigo marcar como perdido por "Sumiu"?', r: 'Porque ainda falta insistir com método. Em Em contatos, a cadência precisa estar completa (o último toque é a mensagem de encerramento). Em Aguardando retorno, os 4 retornos da proposta. Em Reunião ou Corregedoria, pelo menos 3 tentativas. Se o cartório respondeu que não quer, o motivo é outro (Sem interesse, Preço, Concorrente...) e não tem essa trava.' },
+  { p: 'O que fazer depois de mandar a proposta?', r: 'Siga os retornos que aparecem em Hoje: dia 2, WhatsApp com um caso parecido; dia 4, ligação para tirar dúvidas e confirmar a data; dia 6, falar com o titular; dia 7, a mensagem de encerramento. Ao registrar cada contato, o sistema já marca o próximo. Melhor ainda: na reunião, combine a data da decisão antes de mandar a proposta.' },
   { p: 'Posso continuar usando o quadro Atividade Comercial?', r: 'Pode. Com o espelho ligado (Controles → Quadro e Comercial em espelho), o quadro e o Comercial andam juntos: mover o card muda a etapa aqui, e mudar a etapa aqui move o card. Nome, responsável, telefone, contato, e-mail e cidade também ficam iguais nos dois. Card novo numa coluna do funil vira cartório aqui, e cartório cadastrado aqui ganha card lá. Se o Comercial não deixar o card andar (falta reunião, proposta etc.), o quadro mostra o que falta e o botão para abrir a ficha.' },
   { p: 'Registrei um toque errado. Como corrijo?', r: 'Abra o cartório, desmarque o toque na cadência (contato avulso: abra o Histórico completo e clique em "estornar") e escreva o motivo. Isso é um estorno: o registro fica riscado, não some. No mesmo dia, você mesma estorna; depois disso, peça à gestão.' },
   { p: 'O sistema não me deixa mudar a etapa. Por quê?', r: 'Cada etapa tem um critério (portão). A ficha do cartório mostra a lista do que falta, com o botão para resolver cada item — por exemplo, "Agendar reunião" ou "Preencher diagnóstico". Resolva os itens e tente de novo.' },

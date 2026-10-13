@@ -63,6 +63,20 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
   const minha = painel.supervisao.find((s) => s.pessoa.id === cfg.eu?.id);
   const pessoal = escopo === 'meus' && minha;
 
+  // Sprint 42G — reabre o perdido para nova conversa (retorno programado)
+  async function voltarAContatar(x) {
+    try {
+      await api.put('/comercial/leads/' + x.lead.id, {
+        etapa: 'cadencia',
+        justificativa: `Retorno programado de ${cfg.dias_para_voltar || 90} dias (perdido por "${x.motivo}")`,
+        proximo_passo: 'Retomada: ligar ao titular e perguntar se o momento mudou',
+        proxima_data: painel.hoje,
+      });
+      onAviso?.(`${x.lead.nome} voltou para Em contatos, com a ligação de retomada para hoje.`);
+      onMudou?.();
+    } catch (err) { onAviso?.(mensagemDeErro(err)); }
+  }
+
   // Roteiro do dia, na ordem em que deve ser feito. Cada bloco diz por que
   // está nessa posição — é o que a pessoa precisa para decidir sozinha.
   const blocos = [
@@ -92,6 +106,23 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
             <p className="text-xs text-slate-500">{cfg.tipos_reuniao[r.tipo]} · {dataHoraBr(r.inicio)}{r.responsavel_nome ? ' · ' + r.responsavel_nome : ''}</p>
           </div>
           <button type="button" className={btnMini} onClick={() => setDesfecho(r)}>Como foi?</button>
+        </li>
+      ),
+    },
+    {
+      k: 'retornos', titulo: 'Retornos de proposta', itens: h.retornos || [], nivel: 'warn', dica: 'insistencia',
+      porque: 'Proposta na mesa é o dinheiro mais perto. Cada retorno leva algo novo; o último é o encerramento educado. Registrou, o sistema marca o próximo.',
+      render: (x) => (
+        <li key={x.lead.id + '-r' + x.n} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">
+              <b className="text-slate-700">Retorno {x.n}/{x.de} · {x.canal}</b> — {x.acao}
+              {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
+              {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
+            </p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'avulso')}>Registrar</button>
         </li>
       ),
     },
@@ -139,6 +170,19 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
           </div>
           <Pill nivel={x.vencido ? 'crit' : 'neu'}>{x.vencido ? 'venceu ' + dataBr(x.proxima_data) : 'hoje'}</Pill>
           <button type="button" className={linkMini} onClick={() => onAbrir(x.lead.id)}>abrir</button>
+        </li>
+      ),
+    },
+    {
+      k: 'voltam', titulo: 'Voltam a ser contatados hoje', itens: h.voltam || [], nivel: 'line', dica: 'insistencia',
+      porque: `Perdidos por "Sumiu" ou "Sem tempo" há ${cfg.dias_para_voltar || 90} dias. O momento do cartório pode ter mudado: reabra e ligue.`,
+      render: (x) => (
+        <li key={x.lead.id + '-v'} className="flex items-start gap-3 py-2">
+          <div className="min-w-0 flex-1">
+            <NomeLead lead={x.lead} onAbrir={onAbrir} />
+            <p className="text-xs text-slate-500">perdido {x.perdido_em ? 'em ' + dataBr(x.perdido_em) : ''} por “{x.motivo}”{x.lead.dono_nome ? ' · ' + x.lead.dono_nome : ''}</p>
+          </div>
+          <button type="button" className={btnMini} onClick={() => voltarAContatar(x)}>Voltar a contatar</button>
         </li>
       ),
     },
@@ -293,6 +337,12 @@ export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
               {s.meta_novos ? <Num rotulo="Novos" valor={s.novos} meta={s.meta_novos} /> : <Num rotulo="Atualiz." valor={s.atualizados_hoje} />}
             </div>
             <Barra pct={Math.max(4, s.indice)} nivel={s.sinal} />
+            {s.insistencia && (
+              <p className="text-xs leading-relaxed text-slate-600">
+                Insistência no mês: {s.insistencia.perdidos} perdido(s), média de <b className={s.insistencia.media_contatos < 5 ? 'text-red-700' : 'text-slate-800'}>{String(s.insistencia.media_contatos ?? 0).replace('.', ',')} contatos</b> antes de perder{s.insistencia.sumiu ? ` · ${s.insistencia.sumiu} por "Sumiu"` : ''}
+                {' '}<Dica termo="insistencia" />
+              </p>
+            )}
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <ClipboardCheck size={14} /><Dica termo="checagem" />
               {Object.entries(cfg.janelas).map(([k, n]) => {

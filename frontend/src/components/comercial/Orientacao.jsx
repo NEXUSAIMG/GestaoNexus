@@ -121,6 +121,17 @@ function proximaAcaoBase(lead, cfg, admin) {
     case 'proposta': {
       const vig = (lead.propostas || []).find((x) => x.status === 'enviada');
       if (vig && vig.validade < hoje) return { nivel: 'crit', titulo: 'A proposta venceu', texto: 'Ligue para o cartório. Se ainda houver interesse, registre uma nova proposta; se não, marque como Perdido com o motivo.', acao: 'toque:avulso', rotulo: 'Registrar ligação' };
+      // Sprint 42G — roteiro de retorno: insistir com método
+      if (vig && cfg.retorno) {
+        const feitos = Number(lead.toques_pos_proposta || 0);
+        const passo = cfg.retorno[feitos];
+        if (passo) {
+          const previsto = addDias(vig.enviada_em, passo.d);
+          if (previsto <= hoje) return { nivel: previsto < hoje ? 'crit' : 'info', titulo: `Retorno ${feitos + 1}/${cfg.retorno.length} · ${passo.canal}`, texto: passo.acao + ' Use o roteiro em Scripts.', acao: 'toque:avulso', rotulo: 'Registrar contato' };
+          return { nivel: 'info', titulo: 'Aguardando o retorno', texto: `Próximo contato: retorno ${feitos + 1}/${cfg.retorno.length} (${passo.canal}) em ${dataBr(previsto)}. Assinou antes? Marque como ganho.`, acao: 'etapa:ganho', rotulo: 'Cliente assinou' };
+        }
+        return { nivel: 'warn', titulo: 'Roteiro de retorno completo', texto: 'Os 4 retornos foram feitos, inclusive o encerramento. Se respondeu, registre e siga; se não, marque como Perdido por "Sumiu": o sistema programa a retomada em 90 dias.', acao: 'toque:avulso', rotulo: 'Registrar contato' };
+      }
       return { nivel: 'info', titulo: 'Acompanhe até o fechamento', texto: vig ? `Proposta válida até ${dataBr(vig.validade)}. Assinou? Marque como ganho — o valor vem da proposta e a implantação começa.` : 'Assinou? Marque como ganho.', acao: 'etapa:ganho', rotulo: 'Cliente assinou' };
     }
     case 'ganho': {

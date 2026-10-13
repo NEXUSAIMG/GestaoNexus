@@ -11,6 +11,35 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42G — Insistência com método (versão 1.14)
+
+O ponto fraco apontado pela gestão é a insistência com os clientes. Em vez
+de depender de coragem, a insistência vira processo:
+
+- **Roteiro de retorno da proposta** (`RETORNO`): dia 2 WhatsApp com um caso,
+  dia 4 ligação, dia 6 o titular, dia 7 encerramento educado. Aparece em Hoje
+  ("Retornos de proposta") e na ficha; registrar o proposta já marca o 1º
+  retorno, e registrar cada contato marca o próximo sozinho.
+- **Portão de "Sumiu"** (`pendenciasPerda`): só depois da cadência completa
+  (Em contatos), do roteiro de retorno completo (Aguardando retorno) ou de 3
+  tentativas (Reunião/Corregedoria). Motivos que são resposta do cartório
+  (preço, sem interesse...) não têm trava. Gestão pode forçar com justificativa.
+- **Retomada em 90 dias**: perdido por "Sumiu" ou "Sem tempo para implantar"
+  já sai com o retorno marcado; no dia, aparece em Hoje ("Voltam a ser
+  contatados hoje") com o botão "Voltar a contatar".
+- **Supervisão**: alerta de retorno de proposta atrasado e a linha
+  "Insistência no mês" (perdidos e média de contatos antes de perder).
+- Scripts novos (combinar a data da decisão, retornos 1 a 4, corregedoria,
+  retomada), glossário e FAQ.
+
+**Arquivos:** `comercial.regras.js`, `comercial.dados.js`, `comercial.controller.js`,
+`Vistas.jsx`, `Orientacao.jsx`, `scripts.js`, `guia.js`, `Ajuda.jsx`.
+Sem migração.
+
+**Testar:** `node testes/t-comercial-insistencia.mjs` (13 verificações).
+
+---
+
 ## 1.13 — Importação do quadro não quebra com campo longo
 
 Produção: importar o quadro "Atividade Comercial" dava "Erro interno do

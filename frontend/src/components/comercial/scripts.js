@@ -30,8 +30,32 @@ export const SCRIPTS = [
     texto: "[Nome], como combinamos na reunião: vocês recebem [volume] mensagens por dia e hoje [n] pessoas respondem no celular. Com o Seu Cartório, [o que muda para eles].\n\nO plano [nome] fica em [valor] por mês, com implantação assistida: em até 48 horas treinamos a equipe e deixamos tudo funcionando.\n\nPosso enviar o contrato para assinatura?",
   },
   {
-    titulo: "Aguardando retorno · acompanhamento",
-    texto: "[Nome], tudo bem? Estou acompanhando a proposta do Seu Cartório. Ficou alguma dúvida que eu possa resolver? Se ajudar, marco 10 minutos com vocês e a TI.\n\n(Interino aguardando a corregedoria: \"Já tiveram retorno da corregedoria? Posso ajudar com algum documento?\")",
+    titulo: "Na reunião · combinar a data da decisão",
+    texto: "Antes de mandar a proposta: \"Para eu mandar tudo certinho: quem mais participa da decisão? E até quando vocês conseguem me dar o retorno? Dia [data] fica bom?\"\n\nCom a data combinada, cobrar no dia vira cumprir o combinado, e não insistir.",
+  },
+  {
+    titulo: "Retorno 1/4 (dia 2) · WhatsApp com um caso",
+    texto: "[Nome], tudo bem? Lembrei de vocês: o [cartório parecido], de [cidade], tinha a mesma fila no WhatsApp e hoje [resultado, ex.: responde em minutos sem tirar ninguém do balcão]. Ficou alguma dúvida sobre a proposta?",
+  },
+  {
+    titulo: "Retorno 2/4 (dia 4) · ligação",
+    texto: "[Nome], é o [seu nome], do Seu Cartório. Liguei para saber se ficou alguma dúvida na proposta e confirmar: a decisão continua para [data combinada]? Mais alguém precisa ver? Posso fazer 10 minutos com vocês e a TI.",
+  },
+  {
+    titulo: "Retorno 3/4 (dia 6) · titular",
+    texto: "Dr(a). [titular], tudo bem? Mandei a proposta para [quem recebeu] e queria ouvir do senhor(a): o que pesa mais na decisão? Em resumo: [dor que ele falou] → [o que muda]. Por [valor]/mês, com a implantação feita por nós em 48 horas. Podemos fechar?",
+  },
+  {
+    titulo: "Retorno 4/4 (dia 7) · encerramento educado",
+    texto: "[Nome], não quero ser inconveniente: vou entender que agora não é o momento e encerro a proposta por aqui. Se mudar, é só me chamar que retomamos de onde paramos. Obrigado pela atenção!\n\n(É a mensagem que mais recebe resposta. Se não vier nada, aí sim: Perdido por \"Sumiu\", e o sistema programa o retorno em 90 dias.)",
+  },
+  {
+    titulo: "Aguardando a Corregedoria · acompanhamento quinzenal",
+    texto: "[Nome], tudo bem? Já tiveram retorno da corregedoria? Posso ajudar com algum documento ou uma explicação técnica para o pedido.",
+  },
+  {
+    titulo: "Retomada depois de 90 dias",
+    texto: "[Nome], tudo bem? Conversamos há uns meses sobre o atendimento por WhatsApp do cartório. Muita coisa mudou desde então: [novidade ou caso novo]. O momento de vocês mudou? Posso mostrar em 15 minutos.",
   },
   {
     titulo: "Implantação · onboarding (D0)",

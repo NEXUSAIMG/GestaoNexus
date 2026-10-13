@@ -44,7 +44,7 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.13', // bump a cada deploy novo (1.13 = importação do quadro aceita campos longos)
+    versao: '1.14', // bump a cada deploy novo (1.14 = Sprint 42G insistência com método)
     sprints_ativas: 'até 34 (Projetos: subtarefas, dependências, campos personalizados, '
       + 'WIP, tipo de coluna, vínculos de negócio, apontamento de horas)',
   });

@@ -101,7 +101,7 @@ export function VistaAjuda({ cfg, onTour, onProcesso }) {
     cadencia: 'Cadência', toque: 'Toque', conexao: 'Conexão', sla: 'Prazo da etapa', portao: 'Critério para avançar (portão)',
     pontos: 'Pontos de uso', estorno: 'Estorno', semaforo: 'Semáforo', assinado_pago: 'Assinado × pago',
     nao_contatar: 'Não contatar', duplicidade: 'Duplicidade', cns: 'CNS', checagem: 'Checagem', um_a_um: '1:1',
-    proximo_passo: 'Próximo passo', origem: 'Origem', campanha: 'Campanha',
+    proximo_passo: 'Próximo passo', origem: 'Origem', campanha: 'Campanha', insistencia: 'Insistência com método',
   }[k] || k);
 
   return (

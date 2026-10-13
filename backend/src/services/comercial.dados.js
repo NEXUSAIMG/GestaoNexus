@@ -85,6 +85,13 @@ export const SELECT_LEAD = `
          COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text)
                      FROM comercial_toques t
                     WHERE t.lead_id = l.id AND t.tipo = 'marco' AND t.estornado_em IS NULL), '{}'::jsonb) AS toques_marco,
+         -- Sprint 42G — insistência: proposta vigente e contatos desde o envio / na etapa
+         (SELECT max(x.enviada_em)::text FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada') AS proposta_enviada_em,
+         (SELECT count(*)::int FROM comercial_toques t
+           WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso')
+             AND t.data > (SELECT max(x.enviada_em) FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada')) AS toques_pos_proposta,
+         (SELECT count(*)::int FROM comercial_toques t
+           WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso') AND t.data >= l.etapa_desde) AS toques_na_etapa,
          EXISTS (
            SELECT 1 FROM comercial_nao_contatar nc
             WHERE nc.removido_em IS NULL AND (
@@ -401,7 +408,8 @@ export async function calcularPainel() {
      OR (l.etapa = 'prospect' AND l.dono_id IS NOT NULL)
      OR (l.etapa = 'ganho' AND (l.pago_em IS NULL OR l.pago_em >= $1 OR l.marcos->>'ganho' >= $2
                                OR l.implantacao_inicio >= ($1::date - 45)))
-     OR (l.etapa = 'perdido' AND l.marcos->>'perdido' >= $2))`, [inicioMes, inicioMes]),
+     OR (l.etapa = 'perdido' AND l.marcos->>'perdido' >= $2)
+     OR (l.etapa = 'perdido' AND l.motivo_perda IN ('Sumiu','Sem tempo para implantar') AND l.proxima_data <= $3))`, [inicioMes, inicioMes, hoje]),
     query(`SELECT t.lead_id, t.pessoa_id, t.resultado FROM comercial_toques t
              JOIN comercial_leads l ON l.id = t.lead_id AND l.arquivado_em IS NULL
             WHERE t.data = $1 AND t.estornado_em IS NULL`, [hoje]),
@@ -419,13 +427,26 @@ export async function calcularPainel() {
             WHERE c.data = $1`, [hoje]),
     query(`SELECT a.id, a.pessoa_id, a.acao, a.prazo::text AS prazo FROM comercial_acoes a WHERE a.status = 'aberta' ORDER BY a.prazo`),
   ]);
+  // Sprint 42G — insistência por pessoa: perdidos do mês e média de contatos antes de perder
+  const { rows: ins } = await query(
+    `SELECT l.dono_id,
+            count(*)::int AS perdidos,
+            count(*) FILTER (WHERE l.motivo_perda = 'Sumiu')::int AS sumiu,
+            round(avg((SELECT count(*) FROM comercial_toques t
+                        WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso'))), 1)::float AS media_contatos
+       FROM comercial_leads l
+      WHERE l.etapa = 'perdido' AND l.arquivado_em IS NULL AND l.dono_id IS NOT NULL AND l.marcos->>'perdido' >= $1
+      GROUP BY l.dono_id`,
+    [inicioMes],
+  );
+  const insistencia = Object.fromEntries(ins.map((r) => [r.dono_id, r]));
   const comLead = new Set(leads.filter((l) => ETAPAS_ATIVAS.includes(l.etapa)).map((l) => l.dono_id));
   const comMeta = new Set([
     ...Object.keys(metas.novosPorPessoa || {}).filter((k) => Number(metas.novosPorPessoa[k]) > 0),
     ...Object.keys(metas.porPessoa || {}).filter((k) => Object.values(metas.porPessoa[k] || {}).some((v) => Number(v) > 0)),
   ]);
   const sup = pessoas.filter((p) => comLead.has(p.id) || comMeta.has(p.id));
-  return montarPainel({ leads, toquesHoje, metas, pessoas: sup, hoje, reunioes, propostas, checagensHoje, acoes, totais });
+  return montarPainel({ leads, toquesHoje, metas, pessoas: sup, hoje, reunioes, propostas, checagensHoje, acoes, totais, insistencia });
 }
 
 /** Agregados do funil inteiro (não arquivado), calculados no banco. */

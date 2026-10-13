@@ -67,6 +67,22 @@ export const CADENCIA = [
   { d: 12, canal: 'WhatsApp',           acao: 'Encerramento: posso voltar a falar em 3 meses?' },
 ];
 
+// Sprint 42G — Insistência com método.
+// Roteiro de retorno da proposta (dias corridos desde o envio). Cada contato
+// leva algo novo; o último é o encerramento educado — a mensagem que mais
+// responde. Só depois dele dá para dizer que o cartório "sumiu".
+export const RETORNO = [
+  { d: 2, canal: 'WhatsApp',           acao: 'Caso de um cartório parecido e "ficou alguma dúvida sobre a proposta?"' },
+  { d: 4, canal: 'Ligação',            acao: 'Ligar: tirar dúvidas, confirmar quem decide e a data combinada' },
+  { d: 6, canal: 'Ligação ao titular', acao: 'Falar com o titular (não só com quem recebeu): resumo do valor e pedido de decisão' },
+  { d: 7, canal: 'WhatsApp',           acao: 'Encerramento: "Vou entender que agora não é o momento e encerro por aqui. Se mudar, é só me chamar."' },
+];
+// Perdido por estes motivos volta a ser contatado em 90 dias
+export const MOTIVOS_VOLTAM = ['Sumiu', 'Sem tempo para implantar'];
+export const DIAS_PARA_VOLTAR = 90;
+// Tentativas mínimas antes de "Sumiu" em reunião / corregedoria
+export const TENTATIVAS_MINIMAS = 3;
+
 // Implantação assistida depois do Ganho (dias corridos desde a assinatura).
 // Mesmos nomes das colunas do quadro depois da venda.
 export const MARCOS_IMPLANTACAO = [
@@ -262,6 +278,49 @@ export function toqueDevido(l, hoje = hojeBR()) {
   return null;
 }
 
+/**
+ * Próximo contato do roteiro de retorno da proposta (ou null).
+ * l.proposta_enviada_em = envio da proposta vigente;
+ * l.toques_pos_proposta = contatos registrados depois do envio.
+ */
+export function retornoDevido(l, hoje = hojeBR()) {
+  if (l.etapa !== 'proposta' || !l.proposta_enviada_em) return null;
+  const feitos = Number(l.toques_pos_proposta || 0);
+  if (feitos >= RETORNO.length) return null;
+  const passo = RETORNO[feitos];
+  const previsto = addDias(l.proposta_enviada_em, passo.d);
+  if (previsto > hoje) return null;
+  return { ...passo, n: feitos + 1, de: RETORNO.length, previsto, atrasado: previsto < hoje };
+}
+
+/**
+ * Portão de perda por "Sumiu": só depois de insistir com método.
+ *   - Em prospecção / Em contatos: a cadência inteira (o último é o encerramento)
+ *   - Aguardando retorno: o roteiro de retorno inteiro
+ *   - Reunião / Corregedoria: pelo menos 3 tentativas nesta etapa
+ * Os outros motivos (preço, sem interesse, concorrente...) são resposta do
+ * cartório: não têm portão.
+ */
+export function pendenciasPerda(l, motivo) {
+  if (motivo !== 'Sumiu') return [];
+  if (['prospect', 'cadencia'].includes(l.etapa)) {
+    const feitos = CADENCIA.filter((c) => (l.toques_cadencia || {})[c.d]).length;
+    return feitos < CADENCIA.length
+      ? [`cadência completa antes de "Sumiu" (feitos ${feitos} de ${CADENCIA.length} contatos; o último é a mensagem de encerramento)`]
+      : [];
+  }
+  if (l.etapa === 'proposta') {
+    const feitos = Math.min(Number(l.toques_pos_proposta || 0), RETORNO.length);
+    return feitos < RETORNO.length
+      ? [`roteiro de retorno da proposta completo antes de "Sumiu" (feitos ${feitos} de ${RETORNO.length}; o último é a mensagem de encerramento)`]
+      : [];
+  }
+  const n = Number(l.toques_na_etapa || 0);
+  return n < TENTATIVAS_MINIMAS
+    ? [`pelo menos ${TENTATIVAS_MINIMAS} tentativas de contato nesta etapa antes de "Sumiu" (feitas ${n})`]
+    : [];
+}
+
 /** Implantação em andamento: ganho, com início registrado e pós-venda ainda não feito. */
 export function emImplantacao(l) {
   if (l.etapa !== 'ganho' || !l.implantacao_inicio) return false;
@@ -345,7 +404,7 @@ export function metaPessoa(metas, pessoaId) {
 export function montarPainel({
   leads, toquesHoje, metas, pessoas, hoje = hojeBR(),
   reunioes = [], propostas = [], checagensHoje = [], acoes = [], agora = new Date(),
-  totais = null,
+  totais = null, insistencia = {},
 }) {
   const mes = mesDe(hoje);
   const ativo = (l) => ETAPAS_ATIVAS.includes(l.etapa);
@@ -360,9 +419,15 @@ export function montarPainel({
 
   // --- Hoje
   const toques = []; const marcos = []; const proximos = []; const parados = [];
+  const retornos = []; const voltam = [];
   for (const l of leads) {
     if (l.bloqueado_nc) continue; // na lista de não contatar: some das filas
     const t = toqueDevido(l, hoje); if (t) toques.push({ lead: resumo(l), ...t });
+    const r = retornoDevido(l, hoje); if (r) retornos.push({ lead: resumo(l), ...r });
+    // Perdido por "Sumiu"/"Sem tempo" volta a ser contatado depois de 90 dias
+    if (l.etapa === 'perdido' && MOTIVOS_VOLTAM.includes(l.motivo_perda) && l.proxima_data && l.proxima_data <= hoje) {
+      voltam.push({ lead: resumo(l), motivo: l.motivo_perda, perdido_em: l.marcos?.perdido || null });
+    }
     const m = marcoDevido(l, hoje); if (m) marcos.push({ lead: resumo(l), ...m, pontos: pontuacao(l) });
     if (ativo(l) && l.proxima_data && l.proxima_data <= hoje) {
       proximos.push({ lead: resumo(l), proximo_passo: l.proximo_passo, proxima_data: l.proxima_data, vencido: l.proxima_data < hoje });
@@ -371,7 +436,7 @@ export function montarPainel({
     if (ativo(l) && !naFila(l) && p && p.nivel === 'crit') parados.push({ lead: resumo(l), ...p });
   }
   const porPrevisto = (a, b) => (a.previsto < b.previsto ? -1 : a.previsto > b.previsto ? 1 : 0);
-  toques.sort(porPrevisto); marcos.sort(porPrevisto);
+  toques.sort(porPrevisto); marcos.sort(porPrevisto); retornos.sort(porPrevisto);
   proximos.sort((a, b) => (a.proxima_data < b.proxima_data ? -1 : 1));
   parados.sort((a, b) => b.dias - a.dias);
 
@@ -441,7 +506,8 @@ export function montarPainel({
     const feitos = meusToques.length;
     const conexoes = meusToques.filter((t) => RESULTADOS_CONECTAM.includes(t.resultado)).length;
     const pendentes = toques.filter((x) => x.lead.dono_id === p.id).length
-      + marcos.filter((x) => x.lead.dono_id === p.id).length;
+      + marcos.filter((x) => x.lead.dono_id === p.id).length
+      + retornos.filter((x) => x.lead.dono_id === p.id).length;
     const novos = meus.filter((l) => l.marcos?.cadencia === hoje).length;
     const mp = metaPessoa(metas, p.id);
     const total = feitos + pendentes;
@@ -469,6 +535,9 @@ export function montarPainel({
     propostasVencendo.filter((x) => x.lead.dono_id === p.id).forEach((x) => {
       alertas.push({ lead: x.lead, motivo: x.vencida ? 'proposta vencida sem resposta' : 'proposta vence em até 2 dias' });
     });
+    retornos.filter((x) => x.lead.dono_id === p.id && x.atrasado).forEach((x) => {
+      alertas.push({ lead: x.lead, motivo: `proposta sem o retorno ${x.n}/${x.de} (${x.canal}) previsto para ${dataBr(x.previsto)}` });
+    });
     aguardandoPagamento.filter((x) => x.lead.dono_id === p.id && (x.dias ?? 0) > 7).forEach((x) => {
       alertas.push({ lead: x.lead, motivo: `assinado há ${x.dias} dias e ainda sem pagamento` });
     });
@@ -483,6 +552,8 @@ export function montarPainel({
       ativos: ativos.length,
       alertas,
       checagens: checagensHoje.filter((c) => c.pessoa_id === p.id),
+      // Insistência: perdidos do mês e média de contatos antes de perder
+      insistencia: insistencia[p.id] || null,
       acoes: minhasAcoes.map((a) => ({ ...a, vencida: a.prazo < hoje })),
     };
   });
@@ -492,7 +563,7 @@ export function montarPainel({
     metas,
     plano: desdobrarMeta(metas),
     numeros,
-    hoje_listas: { toques, marcos, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
+    hoje_listas: { toques, marcos, retornos, voltam, proximos, parados, reunioes: reunioesHoje, sem_desfecho: semDesfecho, propostas_vencendo: propostasVencendo, aguardando_pagamento: aguardandoPagamento },
     implantacoes,
     supervisao,
     sem_dono: totais ? totais.sem_dono : leads.filter((l) => ativo(l) && !l.dono_id && !naFila(l)).length,
