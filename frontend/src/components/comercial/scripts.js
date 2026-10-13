@@ -1,21 +1,39 @@
 // Roteiros e objeções da metodologia (sem trial: apresentação → proposta → implantação).
+// Sprint 42J — quem fala é a Ayio, a empresa que desenvolve e vende o Seu Cartório;
+// a cadência começa pelo e-mail de apresentação.
 
 export const SCRIPTS = [
   {
-    titulo: "Abertura por ligação",
-    texto: "Bom dia, [nome]. Aqui é [vendedor], do Seu Cartório. Cuidamos do atendimento por WhatsApp de cartórios de vários estados, como o [cartório de referência da região]. Liguei porque a maioria dos titulares nos conta que a equipe perde horas respondendo as mesmas perguntas. Isso acontece aí também?\n\nSe sim: Posso marcar 20 minutos para entender como é hoje e mostrar o que outros cartórios mudaram? Quinta às 10h ou às 15h?",
+    titulo: "E-mail · dia 1 (apresentação)",
+    texto: "Assunto: [cartório]: atendimento por WhatsApp sem ocupar o balcão\n\n[Nome], bom dia.\n\nSou [vendedor], da Ayio, a empresa que desenvolve o Seu Cartório: a plataforma de atendimento por WhatsApp feita para cartórios.\n\nO [cartório de referência] recebia [volume] mensagens por dia e tinha [n] pessoas respondendo no celular. Com o Seu Cartório, [resultado concreto].\n\nVou ligar para você amanhã para entender como é o atendimento aí no [cartório]. Se preferir, responda este e-mail com o melhor horário para uma conversa de 20 minutos.\n\n[vendedor]\nAyio · Seu Cartório\n[telefone / WhatsApp]",
   },
   {
-    titulo: "WhatsApp · dia 1 (sem resposta na ligação)",
-    texto: "Olá, [nome]! Sou [vendedor], do Seu Cartório. Tentei falar por telefone agora há pouco.\n\nAjudamos cartórios como o [referência] a responder o WhatsApp em minutos sem ocupar o balcão. Vocês recebem muitas mensagens por dia aí no [cartório]?",
+    titulo: "Ligação · dia 2 (abertura)",
+    texto: "Bom dia, [nome]. Aqui é [vendedor], da Ayio, a empresa do Seu Cartório. Ontem mandei um e-mail para você sobre o atendimento por WhatsApp do cartório, conseguiu ver?\n\nCuidamos do atendimento por WhatsApp de cartórios de vários estados, como o [cartório de referência da região]. A maioria dos titulares nos conta que a equipe perde horas respondendo as mesmas perguntas. Isso acontece aí também?\n\nSe sim: Posso marcar 20 minutos para entender como é hoje e mostrar o que outros cartórios mudaram? Quinta às 10h ou às 15h?",
   },
   {
-    titulo: "E-mail · dia 2",
-    texto: "Assunto: Como o [cartório de referência] liberou a equipe do WhatsApp\n\n[Nome], bom dia.\n\nO [cartório de referência] recebia [volume] mensagens por dia e tinha [n] pessoas respondendo no celular. Com o Seu Cartório, [resultado concreto].\n\nVale uma conversa de 20 minutos para ver se faz sentido para o [cartório]? Responda com o melhor horário.\n\n[assinatura]",
+    titulo: "WhatsApp · dia 2 (sem resposta na ligação)",
+    texto: "Olá, [nome]! Sou [vendedor], da Ayio, a empresa do Seu Cartório. Mandei um e-mail ontem e tentei falar por telefone agora há pouco.\n\nAjudamos cartórios como o [referência] a responder o WhatsApp em minutos sem ocupar o balcão. Vocês recebem muitas mensagens por dia aí no [cartório]?",
+  },
+  {
+    titulo: "Ligação · dia 4 (pedir 20 minutos)",
+    texto: "[Nome], é o [vendedor], da Ayio, do Seu Cartório. Te mandei um e-mail e uma mensagem nesta semana. Queria só 20 minutos com você para entender como funciona o atendimento por WhatsApp aí no [cartório] e mostrar o que outros cartórios mudaram. Fica melhor [dia] às [hora] ou [dia] às [hora]?",
+  },
+  {
+    titulo: "WhatsApp · dia 6 (vídeo)",
+    texto: "[Nome], gravei um vídeo de 1 minuto mostrando o Seu Cartório atendendo o WhatsApp de um cartório como o de vocês: [link]. Somos a Ayio, a empresa que desenvolve a plataforma. Faz sentido conversarmos 20 minutos?",
+  },
+  {
+    titulo: "WhatsApp · dia 10 (depoimento)",
+    texto: "[Nome], olha o que o(a) [titular cliente], do [cartório cliente], falou depois de 1 mês com o Seu Cartório: \"[depoimento curto]\". Se quiser, conto em 20 minutos como foi a implantação deles.",
+  },
+  {
+    titulo: "E-mail · dia 11 (convite para o webinar)",
+    texto: "Assunto: Webinar: atendimento por WhatsApp em cartórios, [data]\n\n[Nome], bom dia.\n\nA Ayio, empresa do Seu Cartório, vai mostrar em [data], às [hora], como cartórios estão organizando o atendimento por WhatsApp: fila, respostas automáticas, LGPD e relatório para o titular. São 40 minutos, com perguntas no final.\n\nInscrição: [link]\n\n[vendedor]\nAyio · Seu Cartório",
   },
   {
     titulo: "WhatsApp · dia 12 (encerramento)",
-    texto: "[Nome], vou parar de insistir para não atrapalhar sua rotina. Se o atendimento por WhatsApp virar prioridade, é só me chamar aqui.\n\nPosso voltar a falar com você daqui a 3 meses?",
+    texto: "[Nome], aqui é [vendedor], da Ayio (Seu Cartório). Vou parar de insistir para não atrapalhar sua rotina. Se o atendimento por WhatsApp virar prioridade, é só me chamar aqui.\n\nPosso voltar a falar com você daqui a 3 meses?",
   },
   {
     titulo: "Reunião de apresentação · diagnóstico",
@@ -39,7 +57,7 @@ export const SCRIPTS = [
   },
   {
     titulo: "Retorno 2/4 (dia 4) · ligação",
-    texto: "[Nome], é o [seu nome], do Seu Cartório. Liguei para saber se ficou alguma dúvida na proposta e confirmar: a decisão continua para [data combinada]? Mais alguém precisa ver? Posso fazer 10 minutos com vocês e a TI.",
+    texto: "[Nome], é o [seu nome], da Ayio, do Seu Cartório. Liguei para saber se ficou alguma dúvida na proposta e confirmar: a decisão continua para [data combinada]? Mais alguém precisa ver? Posso fazer 10 minutos com vocês e a TI.",
   },
   {
     titulo: "Retorno 3/4 (dia 6) · titular",
@@ -55,11 +73,11 @@ export const SCRIPTS = [
   },
   {
     titulo: "Retomada depois de 90 dias",
-    texto: "[Nome], tudo bem? Conversamos há uns meses sobre o atendimento por WhatsApp do cartório. Muita coisa mudou desde então: [novidade ou caso novo]. O momento de vocês mudou? Posso mostrar em 15 minutos.",
+    texto: "[Nome], tudo bem? Aqui é [vendedor], da Ayio, a empresa do Seu Cartório. Conversamos há uns meses sobre o atendimento por WhatsApp do cartório. Muita coisa mudou desde então: [novidade ou caso novo]. O momento de vocês mudou? Posso mostrar em 15 minutos.",
   },
   {
     titulo: "Implantação · onboarding (D0)",
-    texto: "[Nome], bem-vindos ao Seu Cartório! Segue o onboarding para preencher. Vamos marcar o treinamento da equipe (e já ativamos tudo na mesma reunião): [dia] às [hora] fica bom?",
+    texto: "[Nome], bem-vindos ao Seu Cartório! Aqui é [seu nome], da Ayio. Segue o onboarding para preencher. Vamos marcar o treinamento da equipe (e já ativamos tudo na mesma reunião): [dia] às [hora] fica bom?",
   },
   {
     titulo: "Pedido de indicação",

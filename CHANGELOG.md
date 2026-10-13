@@ -11,6 +11,25 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 42J — E-mail primeiro e Ayio nos textos (versão 1.17)
+
+- **Cadência começa pelo e-mail de apresentação** (dia 1). A ligação e o
+  WhatsApp passam para o dia 2 e citam o e-mail. Os outros dias continuam
+  iguais (4, 6, 8, 10, 11 e 12).
+- **Textos falam da Ayio**: quem se apresenta é "da Ayio, a empresa que
+  desenvolve o Seu Cartório". Mudaram os roteiros de e-mail, ligação,
+  WhatsApp, retornos, retomada e onboarding, além do tour e do guia.
+- **Roteiros novos**: um por dia da cadência (e-mail do dia 1, ligação do
+  dia 2, ligação do dia 4, vídeo do dia 6, depoimento do dia 10, webinar do
+  dia 11). "O que falar agora" passa a seguir o dia certo, o retorno da
+  proposta (1/4 a 4/4) e a Corregedoria.
+- **Registrar o toque de e-mail** mostra o texto já preenchido com o
+  cartório e o vendedor, com os botões "Abrir no meu e-mail" (mailto, sai
+  do e-mail da própria pessoa) e "Copiar texto". Nada é enviado pelo
+  servidor.
+
+---
+
 ## Sprint 42I — Marketing no Comercial (versão 1.16)
 
 Aba **Marketing** no Comercial: o calendário das ações de marketing e o

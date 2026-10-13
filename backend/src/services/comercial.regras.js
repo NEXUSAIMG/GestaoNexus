@@ -79,9 +79,11 @@ export const MOTIVOS_PERDA = [
   'Fora do funil (sem interesse)', 'Desistência (usou e desistiu)', 'Outro',
 ];
 
+// Sprint 42J — o 1º contato é o e-mail de apresentação (Ayio, a empresa do
+// Seu Cartório); a ligação do dia 2 já pode citar o e-mail.
 export const CADENCIA = [
-  { d: 1,  canal: 'Ligação + WhatsApp', acao: 'Falar com titular ou responsável; se não atender, mensagem curta com a dor' },
-  { d: 2,  canal: 'E-mail',             acao: 'Caso de cartório parecido com um número de resultado' },
+  { d: 1,  canal: 'E-mail',             acao: 'E-mail de apresentação: quem somos (Ayio, a empresa do Seu Cartório) e o caso de um cartório parecido' },
+  { d: 2,  canal: 'Ligação + WhatsApp', acao: 'Ligar para o titular ou responsável citando o e-mail; se não atender, mensagem curta com a dor' },
   { d: 4,  canal: 'Ligação',            acao: 'Pedir 20 minutos para diagnóstico do atendimento' },
   { d: 6,  canal: 'WhatsApp',           acao: 'Vídeo de 60 segundos do atendimento funcionando' },
   { d: 8,  canal: 'Ligação',            acao: 'Nova tentativa em outro horário' },

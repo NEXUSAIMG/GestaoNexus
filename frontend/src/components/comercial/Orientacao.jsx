@@ -94,7 +94,7 @@ function proximaAcaoBase(lead, cfg, admin) {
 
   switch (lead.etapa) {
     case 'prospect':
-      return { nivel: 'info', titulo: 'Comece os contatos', texto: 'Este cartório ainda não recebeu contato. Ao começar, ele entra na cadência de 12 dias e o 1º toque aparece em Hoje.', acao: 'etapa:cadencia', rotulo: 'Começar cadência hoje' };
+      return { nivel: 'info', titulo: 'Comece os contatos', texto: 'Este cartório ainda não recebeu contato. Ao começar, ele entra na cadência de 12 dias e o 1º toque (o e-mail de apresentação da Ayio) aparece em Hoje.', acao: 'etapa:cadencia', rotulo: 'Começar cadência hoje' };
     case 'cadencia': {
       const feitos = lead.toques_cadencia || {};
       const prox = CAD_DIAS.find((d) => !feitos[d]);

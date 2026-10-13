@@ -14,7 +14,7 @@ export const GUIA_ETAPAS = {
     objetivo: 'Cartório que ainda não recebeu nenhum contato (no quadro antigo: "Cliente" e "Em prospecção").',
     fazer: [
       'Confira se o cadastro está certo (nome, cidade, telefone; CNS se tiver).',
-      'Mude a etapa para "Em contatos" no dia em que for fazer o 1º contato.',
+      'Mude a etapa para "Em contatos" no dia em que for fazer o 1º contato: o e-mail de apresentação da Ayio.',
     ],
     avancar: 'Vai para Em contatos quando você começar os contatos.',
     prazo: '2 dias depois de pegar da fila. Cartório parado aqui é lista esquecida.',
@@ -22,7 +22,7 @@ export const GUIA_ETAPAS = {
   cadencia: {
     objetivo: 'Conseguir uma reunião de apresentação com o titular ou responsável.',
     fazer: [
-      'Faça o toque do dia que aparece em Hoje — ligação, WhatsApp ou e-mail, nessa ordem do roteiro.',
+      'Faça o toque do dia que aparece em Hoje. O 1º é sempre o e-mail de apresentação (Ayio, a empresa do Seu Cartório); depois vêm ligação e WhatsApp, na ordem do roteiro.',
       'Registre cada toque com o resultado (atendeu, não atendeu, caixa postal…).',
       'Se a pessoa topar conversar, escolha "Agendou reunião" e informe data e hora: o cartório vai sozinho para Reunião de apresentação.',
     ],
@@ -186,7 +186,11 @@ export const COMO_FUNCIONA = {
   },
   scripts: {
     titulo: 'Scripts: o que falar',
-    itens: ['Roteiros, não falas decoradas. Troque os campos entre colchetes e mantenha a ordem.'],
+    itens: [
+      'Roteiros, não falas decoradas. Troque os campos entre colchetes e mantenha a ordem.',
+      'Apresente-se sempre como da Ayio, a empresa que desenvolve o Seu Cartório.',
+      'A cadência começa pelo e-mail de apresentação (dia 1); a ligação do dia 2 cita esse e-mail.',
+    ],
   },
 };
 
@@ -229,7 +233,7 @@ export const FAQ = [
 export const TOUR = [
   {
     titulo: 'Boas-vindas ao Comercial',
-    texto: 'Aqui fica todo o trabalho de venda do Seu Cartório: quem contatar, o que falar e o que fazer em cada etapa. Leva 1 minuto para entender.',
+    texto: 'Aqui fica todo o trabalho de venda do Seu Cartório, o produto da Ayio: quem contatar, o que falar e o que fazer em cada etapa. Leva 1 minuto para entender.',
   },
   {
     titulo: '1. Comece o dia em "Hoje"',
@@ -266,17 +270,23 @@ export const TOUR = [
 // ---------------------------------------------------------------------------
 export function scriptDoPasso(lead) {
   if (!lead) return null;
+  if (lead.etapa === 'prospect') return 'E-mail · dia 1 (apresentação)';
   if (lead.etapa === 'cadencia') {
     const feitos = Object.keys(lead.toques_cadencia || {}).map(Number);
     const proximo = [1, 2, 4, 6, 8, 10, 11, 12].find((d) => !feitos.includes(d));
-    if (proximo === 1) return 'Abertura por ligação';
-    if (proximo === 2) return 'E-mail · dia 2';
-    if (proximo === 12) return 'WhatsApp · dia 12 (encerramento)';
-    return 'Abertura por ligação';
+    return {
+      1: 'E-mail · dia 1 (apresentação)', 2: 'Ligação · dia 2 (abertura)', 4: 'Ligação · dia 4 (pedir 20 minutos)',
+      6: 'WhatsApp · dia 6 (vídeo)', 8: 'Ligação · dia 4 (pedir 20 minutos)', 10: 'WhatsApp · dia 10 (depoimento)',
+      11: 'E-mail · dia 11 (convite para o webinar)', 12: 'WhatsApp · dia 12 (encerramento)',
+    }[proximo] || 'WhatsApp · dia 12 (encerramento)';
   }
   if (lead.etapa === 'diagnostico') return 'Reunião de apresentação · diagnóstico';
-  if (lead.etapa === 'proposta' || lead.etapa === 'corregedoria') return 'Aguardando retorno · acompanhamento';
+  if (lead.etapa === 'proposta') {
+    const n = Math.min(Number(lead.toques_pos_proposta || 0), 3);
+    return ['Retorno 1/4 (dia 2) · WhatsApp com um caso', 'Retorno 2/4 (dia 4) · ligação', 'Retorno 3/4 (dia 6) · titular', 'Retorno 4/4 (dia 7) · encerramento educado'][n];
+  }
+  if (lead.etapa === 'corregedoria') return 'Aguardando a Corregedoria · acompanhamento quinzenal';
   if (lead.etapa === 'ganho') return lead.implantacao_inicio && !(lead.toques_marco || {})[0] ? 'Implantação · onboarding (D0)' : 'Pedido de indicação';
-  if (lead.etapa === 'prospect') return 'Abertura por ligação';
+  if (lead.etapa === 'perdido') return 'Retomada depois de 90 dias';
   return null;
 }

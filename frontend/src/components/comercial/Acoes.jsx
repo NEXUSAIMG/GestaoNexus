@@ -2,6 +2,44 @@ import { useState } from 'react';
 import { api, mensagemDeErro } from '../../api/client.js';
 import { Modal, Erro, Campo, inputCls, btnCls, btnPrimCls, localParaIso } from './ui.jsx';
 import { Dica } from './Ajuda.jsx';
+import { SCRIPTS } from './scripts.js';
+import { scriptDoPasso } from './guia.js';
+
+/**
+ * Sprint 42J — texto do e-mail da cadência com o que já se sabe do cartório
+ * preenchido. Devolve { assunto, corpo } a partir do roteiro "Assunto: …".
+ */
+export function emailDoRoteiro(titulo, lead, vendedor) {
+  const s = SCRIPTS.find((x) => x.titulo === titulo);
+  if (!s) return null;
+  const nome = (lead.contato || '').split(/[,(/]/)[0].trim();
+  let t = s.texto
+    .replaceAll('[cartório]', lead.nome || '[cartório]')
+    .replaceAll('[vendedor]', vendedor || '[vendedor]');
+  if (nome) t = t.replaceAll('[Nome]', nome).replaceAll('[nome]', nome);
+  const m = t.match(/^Assunto:\s*(.*)\n+/);
+  return m ? { assunto: m[1], corpo: t.slice(m[0].length) } : { assunto: '', corpo: t };
+}
+
+function AjudaEmail({ cfg, lead, dia }) {
+  const [copiado, setCopiado] = useState(false);
+  const titulo = { 1: 'E-mail · dia 1 (apresentação)', 11: 'E-mail · dia 11 (convite para o webinar)' }[dia] || scriptDoPasso(lead);
+  const vendedor = cfg.pessoas?.find((p) => p.id === cfg.eu?.id)?.nome;
+  const e = emailDoRoteiro(titulo, lead, vendedor);
+  if (!e || !e.assunto) return null;
+  const href = `mailto:${encodeURIComponent(lead.email || '')}?subject=${encodeURIComponent(e.assunto)}&body=${encodeURIComponent(e.corpo)}`;
+  async function copiar() { try { await navigator.clipboard.writeText(`Assunto: ${e.assunto}\n\n${e.corpo}`); setCopiado(true); setTimeout(() => setCopiado(false), 1500); } catch { /* sem clipboard */ } }
+  return (
+    <div className="space-y-2 rounded-md border border-nexus-100 bg-nexus-50/60 p-3 text-sm">
+      <p className="text-xs text-slate-600">Envie do <b>seu e-mail</b> e troque o que ainda estiver entre colchetes. Depois registre aqui o resultado (“Mensagem enviada”, se ninguém respondeu ainda).</p>
+      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-white p-2 text-xs leading-relaxed text-slate-700"><b>Assunto:</b> {e.assunto}{'\n\n'}{e.corpo}</div>
+      <div className="flex flex-wrap gap-2">
+        <a href={href} className={btnPrimCls + ' !px-2 !py-1 text-xs'} target="_blank" rel="noreferrer">Abrir no meu e-mail{lead.email ? '' : ' (sem e-mail no cadastro)'}</a>
+        <button type="button" className={btnCls + ' !px-2 !py-1 text-xs'} onClick={copiar}>{copiado ? 'Copiado' : 'Copiar texto'}</button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Modais de registro do módulo Comercial (Sprint 42B).
@@ -62,6 +100,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
     <Modal titulo={`${tipo === 'cadencia' ? `Toque dia ${dia}` : 'Registrar contato'} · ${lead.nome}`} onFechar={onFechar}
       rodape={<Botoes onFechar={onFechar} enviando={enviando} onClick={registrar} />}>
       {passo && <p className="text-sm text-slate-600"><b>{passo.canal}</b> — {passo.acao}</p>}
+      {/^e-mail/i.test(canal) && <AjudaEmail cfg={cfg} lead={lead} dia={passo?.d} />}
       <Erro>{erro}</Erro>
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Canal">

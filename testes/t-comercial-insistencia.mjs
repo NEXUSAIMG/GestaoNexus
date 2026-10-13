@@ -13,6 +13,8 @@ const novo = async (nome, extra = {}) => (await post('/comercial/leads', { nome:
 titulo('Config');
 ok(cfg.retorno?.length === 4 && /Encerramento/.test(cfg.retorno[3].acao) && cfg.dias_para_voltar === 90, 'roteiro de retorno com 4 contatos, o último é o encerramento; retomada em 90 dias');
 
+ok(cfg.cadencia?.[0]?.d === 1 && cfg.cadencia[0].canal === 'E-mail' && /Ayio/.test(cfg.cadencia[0].acao), '(42J) cadência começa pelo e-mail de apresentação da Ayio');
+
 titulo('Portão de "Sumiu"');
 const a = await novo('Cartório Insistência A', { etapa: 'cadencia' });
 const r1 = await put(`/comercial/leads/${a.id}`, { etapa: 'perdido', motivo_perda: 'Sumiu' });
