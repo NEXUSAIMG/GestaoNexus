@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { TrendingUp, HelpCircle } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { TrendingUp, HelpCircle, Tv } from 'lucide-react';
 import { api, mensagemDeErro } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Funil from '../components/comercial/Funil.jsx';
@@ -97,6 +97,9 @@ export default function Comercial() {
         </div>
         <div className="flex items-center gap-2">
           {aviso && <span className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white" role="status">{aviso}</span>}
+          <Link to="/comercial/tv" title="Painel em tela cheia para a TV da sala" className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
+            <Tv size={16} /> Modo TV
+          </Link>
           <button type="button" onClick={() => setAba('ajuda')} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
             <HelpCircle size={16} /> Dúvidas?
           </button>

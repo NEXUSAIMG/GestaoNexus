@@ -31,7 +31,7 @@
  */
 import { query, pool } from '../config/database.js';
 import { AppError } from '../utils/errors.js';
-import { publicarMudanca } from './realtime.service.js';
+import { publicarMudanca, publicarComercial } from './realtime.service.js';
 import {
   ETAPA, MARCOS_IMPLANTACAO, hojeBR, aplicarEtapa, pendenciasPortao, ehRetrocesso,
 } from './comercial.regras.js';
@@ -598,7 +598,11 @@ export function espelharDepois(req, res, next) {
           }
         })
         .catch((err) => console.error('[comercial.espelho]', err.message))
-        .finally(() => original(corpo));
+        .finally(() => {
+          original(corpo);
+          // Sprint 42M — avisa as TVs abertas (modo TV) que algo mudou
+          publicarComercial(req.path);
+        });
       return res;
     };
     next();

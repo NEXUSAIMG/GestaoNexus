@@ -38,6 +38,7 @@ import Cartorios from './pages/Cartorios.jsx';
 import Cartorio from './pages/Cartorio.jsx';
 import Comercial from './pages/Comercial.jsx';
 import Apresentacao from './pages/Apresentacao.jsx';
+import ComercialTv from './pages/ComercialTv.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
@@ -79,6 +80,19 @@ export default function App() {
             <Bloqueado>
               <Apresentacao />
             </Bloqueado>
+          </ProtectedRoute>
+        }
+      />
+
+      {/*
+        /comercial/tv — Sprint 42M: painel do Comercial para a TV da sala.
+        Tela cheia, sem menu, atualiza sozinho. Liberado como o /comercial.
+      */}
+      <Route
+        path="/comercial/tv"
+        element={
+          <ProtectedRoute>
+            <ComercialTv />
           </ProtectedRoute>
         }
       />

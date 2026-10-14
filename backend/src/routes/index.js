@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { autenticar, exigirAcessoCompleto } from '../middleware/auth.middleware.js';
 import { streamQuadro } from '../controllers/stream.controller.js';
+import { streamComercial } from '../controllers/comercial.tv.controller.js';
 import authRoutes from './auth.routes.js';
 import sociosRoutes from './socios.routes.js';
 import pessoasRoutes from './pessoas.routes.js';
@@ -97,6 +98,8 @@ router.use('/instancias', instanciasRoutes);
 router.use('/cartorios', cartoriosRoutes);
 
 // Sprint 42 — Comercial (funil de vendas do Seu Cartório)
+// Sprint 42M — SSE do modo TV: autentica pelo token na query (EventSource não manda header)
+router.get('/comercial/stream', streamComercial);
 router.use('/comercial', comercialRoutes);
 
 // ============================================================================

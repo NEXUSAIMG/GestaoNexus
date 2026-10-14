@@ -18,6 +18,7 @@ import {
 } from '../controllers/comercial.marketing.controller.js';
 import { marcarGestorComercial } from '../services/comercial.dados.js';
 import { espelharDepois } from '../services/comercial.espelho.js';
+import { painelTv } from '../controllers/comercial.tv.controller.js';
 
 /**
  * Módulo Comercial — Sprint 42 / 42B.
@@ -37,6 +38,7 @@ router.use(espelharDepois);
 router.get('/config', config);
 router.get('/painel', painel);
 router.get('/placar', obterPlacar);
+router.get('/tv', painelTv); // Sprint 42M — modo TV (só leitura)
 
 router.get('/metas', obterMetas);
 router.put('/metas/:mes', salvarMetas);

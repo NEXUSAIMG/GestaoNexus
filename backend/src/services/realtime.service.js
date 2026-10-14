@@ -51,3 +51,25 @@ export function assinarQuadro(quadroId, handler) {
 export function totalConexoes() {
   return conexoesAbertas;
 }
+
+// ---------------------------------------------------------------------------
+// Sprint 42M — canal do Comercial (modo TV). Mesmo barramento, outro tópico:
+// qualquer escrita no módulo avisa as TVs abertas para recarregarem.
+// ---------------------------------------------------------------------------
+export function publicarComercial(tipo = 'mudou') {
+  bus.emit('comercial', { tipo, em: Date.now() });
+}
+
+export function assinarComercial(handler) {
+  bus.on('comercial', handler);
+  conexoesAbertas += 1;
+  return () => {
+    bus.off('comercial', handler);
+    conexoesAbertas = Math.max(0, conexoesAbertas - 1);
+  };
+}
+
+/** Ouvinte interno (não conta como conexão) — ex.: invalidar cache da TV. */
+export function aoMudarComercial(handler) {
+  bus.on('comercial', handler);
+}
