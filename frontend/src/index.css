@@ -99,4 +99,9 @@ body {
 .tv-entrar { animation: tv-entrar 0.6s ease-out; }
 @keyframes tv-celebrar { 0% { opacity: 0; transform: scale(0.92); } 12% { opacity: 1; transform: scale(1.02); } 20% { transform: scale(1); } }
 .tv-celebrar { animation: tv-celebrar 1.2s ease-out; }
-@media (prefers-reduced-motion: reduce) { .tv-entrar, .tv-celebrar { animation: none; } }
+/* Sprint 42N — troca de tela e barra de progresso da alternância */
+@keyframes tv-trocar { from { opacity: 0; } to { opacity: 1; } }
+.tv-trocar { animation: tv-trocar 0.5s ease-out; }
+@keyframes tv-progresso { from { width: 0; } to { width: 100%; } }
+.tv-progresso { animation-name: tv-progresso; animation-timing-function: linear; animation-fill-mode: forwards; }
+@media (prefers-reduced-motion: reduce) { .tv-entrar, .tv-celebrar, .tv-trocar { animation: none; } }

@@ -219,6 +219,7 @@ export async function calcularTv() {
     })),
     funil,
     fila_sem_dono: totais.fila || 0,
+    calendario: await calendarioReunioes(hoje),
   };
 }
 
@@ -245,4 +246,86 @@ export function descreverEvento(f) {
     default:
       return { texto: f.tipo, tom: 'neutro' };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 42N — Calendário das reuniões (tela que alterna com o painel na TV)
+// ---------------------------------------------------------------------------
+
+const TIPO_CURTO = { diagnostico: 'Apresentação', ativacao: 'Ativação', resultado: 'Resultado', outra: 'Outra' };
+
+/** Segunda-feira da semana de `iso` (YYYY-MM-DD). */
+export function segundaDaSemana(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay(); // 0 = domingo
+  dt.setUTCDate(dt.getUTCDate() - ((dow + 6) % 7));
+  return dt.toISOString().slice(0, 10);
+}
+
+function somarDias(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Reuniões desta semana e da próxima (seg → sex), com QUEM MARCOU
+ * (criado_por) e quem conduz (responsável). Remarcadas e canceladas
+ * ficam de fora: a remarcação já aparece como a reunião nova.
+ * Também devolve o placar de "quem marcou" (período e hoje).
+ */
+export async function calendarioReunioes(hoje) {
+  const inicio = segundaDaSemana(hoje);
+  const fim = somarDias(inicio, 11); // sexta da semana seguinte
+  const { rows } = await query(
+    `SELECT r.id, r.tipo, r.status,
+            to_char(r.inicio AT TIME ZONE ${FUSO}, 'YYYY-MM-DD') AS dia,
+            to_char(r.inicio AT TIME ZONE ${FUSO}, 'HH24:MI') AS hora,
+            l.nome AS lead, l.cidade, l.uf,
+            r.criado_por_id, pc.nome AS marcou_nome,
+            COALESCE(r.responsavel_id, r.criado_por_id) AS conduz_id, pr.nome AS conduz_nome,
+            (r.criado_em AT TIME ZONE ${FUSO})::date::text AS marcada_em
+       FROM comercial_reunioes r
+       JOIN comercial_leads l ON l.id = r.lead_id AND l.arquivado_em IS NULL
+       LEFT JOIN pessoas_acesso pc ON pc.id = r.criado_por_id
+       LEFT JOIN pessoas_acesso pr ON pr.id = COALESCE(r.responsavel_id, r.criado_por_id)
+      WHERE (r.inicio AT TIME ZONE ${FUSO})::date BETWEEN $1::date AND $2::date
+        AND r.status IN ('agendada', 'realizada', 'faltou')
+      ORDER BY r.inicio`,
+    [inicio, fim],
+  );
+
+  const reunioes = rows.map((r) => ({
+    id: r.id, dia: r.dia, hora: r.hora, status: r.status,
+    tipo: TIPO_CURTO[r.tipo] || r.tipo,
+    lead: r.lead, local: [r.cidade, r.uf].filter(Boolean).join('/') || null,
+    marcou: r.criado_por_id ? nomeCurto(r.marcou_nome) : null,
+    marcou_id: r.criado_por_id,
+    conduz: r.conduz_id && r.conduz_id !== r.criado_por_id ? nomeCurto(r.conduz_nome) : null,
+    marcada_hoje: r.marcada_em === hoje,
+  }));
+
+  // Dias úteis do período (seg–sex das duas semanas; feriado vem marcado)
+  const dias = [];
+  for (let i = 0; i < 12; i++) {
+    const d = somarDias(inicio, i);
+    const dow = new Date(d + 'T12:00:00Z').getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    dias.push({ dia: d, util: ehDiaUtil(d), hoje: d === hoje, passado: d < hoje });
+  }
+
+  // Placar de quem marcou (reuniões que caem no período)
+  const porPessoa = new Map();
+  for (const r of reunioes) {
+    if (!r.marcou_id) continue;
+    const p = porPessoa.get(r.marcou_id) || { id: r.marcou_id, nome: r.marcou, total: 0, realizadas: 0, hoje: 0 };
+    p.total += 1;
+    if (r.status === 'realizada') p.realizadas += 1;
+    if (r.marcada_hoje) p.hoje += 1;
+    porPessoa.set(r.marcou_id, p);
+  }
+  const marcadores = [...porPessoa.values()].sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
+
+  return { inicio, fim, dias, reunioes, marcadores };
 }
