@@ -2,6 +2,7 @@ import { query } from '../config/database.js';
 import {
   ETAPAS, ETAPA, RESULTADOS, RESULTADOS_CONECTAM, TIPOS_REUNIAO,
   hojeBR, mesDe, ehDiaUtil, diasUteisDoMes, desdobrarMeta, metaPessoa,
+  MARCOS_TRIAL, DIAS_TRIAL, SINAIS, situacaoTrial, pontuacao, addDias,
 } from './comercial.regras.js';
 import {
   carregarFeriados, conferirPagamentosAsaas, metasDoMes, totaisFunil, placar,
@@ -220,6 +221,8 @@ export async function calcularTv() {
     funil,
     fila_sem_dono: totais.fila || 0,
     calendario: await calendarioReunioes(hoje),
+    trial: await controleTrial(hoje, desd),
+    mes_visao: await visaoMes(hoje, { metas, desd, diasUteis, rankMes }),
   };
 }
 
@@ -328,4 +331,181 @@ export async function calendarioReunioes(hoje) {
   const marcadores = [...porPessoa.values()].sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
 
   return { inicio, fim, dias, reunioes, marcadores };
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 42O — Controle do trial (tela da TV)
+// ---------------------------------------------------------------------------
+
+/**
+ * Trials em andamento, marco a marco, mais os números do mês:
+ * iniciados × meta (desdobrada das metas do Comercial) e o que já decidiu.
+ * Mesmas regras da aba Trial (situacaoTrial): uso < 40 pts a partir do D3
+ * é crítico; passou da data de decisão sem decidir é crítico.
+ */
+export async function controleTrial(hoje, desd = {}) {
+  const inicioMes = mesDe(hoje) + '-01';
+  const [{ rows: leads }, { rows: [mes] }, { rows: decisoes }] = await Promise.all([
+    query(
+      `SELECT l.id, l.nome, l.cidade, l.uf, l.etapa, l.dono_id, pd.nome AS dono_nome,
+              l.trial_inicio::text AS trial_inicio, l.trial_fim::text AS trial_fim, l.trial_prorrogado,
+              l.meta_sucesso, l.sinais,
+              COALESCE((SELECT jsonb_object_agg(t.dia::text, t.data::text) FROM comercial_toques t
+                         WHERE t.lead_id = l.id AND t.tipo = 'trial' AND t.estornado_em IS NULL), '{}'::jsonb) AS toques_trial,
+              (SELECT to_char(r.inicio AT TIME ZONE ${FUSO}, 'YYYY-MM-DD HH24:MI') FROM comercial_reunioes r
+                WHERE r.lead_id = l.id AND r.tipo = 'resultado' AND r.status = 'agendada' ORDER BY r.inicio LIMIT 1) AS reuniao_resultado,
+              EXISTS (SELECT 1 FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status IN ('enviada','aceita')) AS tem_proposta
+         FROM comercial_leads l LEFT JOIN pessoas_acesso pd ON pd.id = l.dono_id
+        WHERE l.arquivado_em IS NULL AND l.etapa = 'trial' AND l.trial_inicio IS NOT NULL
+        ORDER BY l.trial_inicio`,
+    ),
+    query(
+      `SELECT
+         count(*) FILTER (WHERE (marcos->>'trial')::date >= $1::date)::int AS iniciados,
+         count(*) FILTER (WHERE marcos ? 'trial' AND etapa = 'ganho' AND (marcos->>'ganho')::date >= $1::date)::int AS ganhos,
+         count(*) FILTER (WHERE marcos ? 'trial' AND pago_em >= $1::date)::int AS pagos,
+         count(*) FILTER (WHERE marcos ? 'trial' AND etapa = 'perdido' AND (marcos->>'perdido')::date >= $1::date)::int AS perdidos,
+         count(*) FILTER (WHERE marcos ? 'trial' AND etapa IN ('proposta','corregedoria') AND etapa_desde >= $1::date)::int AS pensando
+         FROM comercial_leads WHERE arquivado_em IS NULL`,
+      [inicioMes],
+    ),
+    query(
+      `SELECT COALESCE(motivo_perda, 'Sem motivo') AS motivo, count(*)::int AS n
+         FROM comercial_leads
+        WHERE arquivado_em IS NULL AND marcos ? 'trial' AND etapa = 'perdido' AND (marcos->>'perdido')::date >= $1::date
+        GROUP BY 1 ORDER BY 2 DESC`,
+      [inicioMes],
+    ),
+  ]);
+
+  const ativos = leads.map((l) => {
+    const sit = situacaoTrial(l, hoje);
+    const feitos = l.toques_trial || {};
+    const marcos = MARCOS_TRIAL.map((m) => {
+      const previsto = m.d === DIAS_TRIAL && l.trial_fim ? l.trial_fim : addDias(l.trial_inicio, m.d);
+      const estado = feitos[m.d] ? 'feito' : previsto < hoje ? 'atrasado' : previsto === hoje ? 'hoje' : 'futuro';
+      return { d: m.d, n: m.n, previsto, estado };
+    });
+    return {
+      id: l.id, nome: l.nome, local: [l.cidade, l.uf].filter(Boolean).join('/') || null,
+      dono: l.dono_id ? nomeCurto(l.dono_nome) : null, dono_id: l.dono_id,
+      dia: sit.dia, fim: sit.fim, prorrogado: !!l.trial_prorrogado,
+      pontos: pontuacao(l), sinais: SINAIS.map((x) => ({ k: x.k, n: x.n, ok: !!(l.sinais || {})[x.k] })),
+      nivel: sit.nivel, texto: sit.texto, vencido: sit.vencido,
+      meta_sucesso: l.meta_sucesso || null,
+      proximo: sit.proximo_marco ? { d: sit.proximo_marco.d, n: sit.proximo_marco.n, previsto: marcos.find((m) => m.d === sit.proximo_marco.d)?.previsto, atrasado: marcos.find((m) => m.d === sit.proximo_marco.d)?.estado === 'atrasado' } : null,
+      marcos, atrasados: marcos.filter((m) => m.estado === 'atrasado').length,
+      reuniao_resultado: l.reuniao_resultado, tem_proposta: l.tem_proposta,
+    };
+  });
+  // Quem precisa de atenção primeiro: crítico → atenção → no caminho; depois a decisão mais próxima
+  const peso = { crit: 0, warn: 1, ok: 2 };
+  ativos.sort((a, b) => peso[a.nivel] - peso[b.nivel] || b.atrasados - a.atrasados || a.fim.localeCompare(b.fim));
+
+  const fimSemana = addDias(hoje, 7);
+  const decididos = mes.ganhos + mes.perdidos;
+  return {
+    ativos,
+    resumo: {
+      em_andamento: ativos.length,
+      criticos: ativos.filter((t) => t.nivel === 'crit').length,
+      atencao: ativos.filter((t) => t.nivel === 'warn').length,
+      marcos_atrasados: ativos.reduce((s, t) => s + t.atrasados, 0),
+      decidem_semana: ativos.filter((t) => t.fim <= fimSemana).length,
+      uso_medio: ativos.length ? Math.round(ativos.reduce((s, t) => s + t.pontos, 0) / ativos.length) : null,
+    },
+    mes: {
+      ...mes,
+      meta_iniciados: desd.propostas_mes || 0, // desdobrarMeta: nº de trials do mês
+      conversao: decididos ? Math.round((mes.ganhos / decididos) * 100) : null,
+      motivos_perda: decisoes,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 42O — Visão do mês (tela da TV)
+// ---------------------------------------------------------------------------
+
+/**
+ * O mês inteiro numa tela: meta × realizado com ritmo esperado pelo dia útil,
+ * projeção de fechamento, série dia a dia e ranking do mês.
+ * Projeção = realizado ÷ dias úteis decorridos × dias úteis do mês.
+ */
+export async function visaoMes(hoje, { metas, desd, diasUteis, rankMes }) {
+  const mes = mesDe(hoje);
+  const inicio = mes + '-01';
+  const [y, m] = mes.split('-').map(Number);
+  const ultimo = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+
+  const [{ rows: [tot] }, { rows: porDia }] = await Promise.all([
+    query(
+      `SELECT
+         (SELECT count(*) FROM comercial_toques t JOIN comercial_leads l ON l.id = t.lead_id AND l.arquivado_em IS NULL
+           WHERE t.data BETWEEN $1::date AND $2::date AND t.estornado_em IS NULL)::int AS toques,
+         (SELECT count(*) FROM comercial_toques t JOIN comercial_leads l ON l.id = t.lead_id AND l.arquivado_em IS NULL
+           WHERE t.data BETWEEN $1::date AND $2::date AND t.estornado_em IS NULL AND t.resultado = ANY($3))::int AS conexoes,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND (l.marcos->>'cadencia')::date BETWEEN $1::date AND $2::date)::int AS novos,
+         (SELECT count(*) FROM comercial_reunioes r JOIN comercial_leads l ON l.id = r.lead_id AND l.arquivado_em IS NULL
+           WHERE r.status = 'realizada' AND (r.inicio AT TIME ZONE ${FUSO})::date BETWEEN $1::date AND $2::date)::int AS reunioes,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND (l.marcos->>'trial')::date BETWEEN $1::date AND $2::date)::int AS trials,
+         (SELECT count(*) FROM comercial_propostas x JOIN comercial_leads l ON l.id = x.lead_id AND l.arquivado_em IS NULL
+           WHERE x.enviada_em BETWEEN $1::date AND $2::date)::int AS propostas,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.etapa = 'ganho' AND (l.marcos->>'ganho')::date BETWEEN $1::date AND $2::date)::int AS ganhos,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.pago_em BETWEEN $1::date AND $2::date)::int AS pagos,
+         (SELECT COALESCE(sum(COALESCE(l.pago_valor, l.valor_mensal)), 0) FROM comercial_leads l
+           WHERE l.arquivado_em IS NULL AND l.pago_em BETWEEN $1::date AND $2::date)::float AS receita`,
+      [inicio, hoje, RESULTADOS_CONECTAM],
+    ),
+    query(
+      `WITH d AS (SELECT generate_series($1::date, $2::date, interval '1 day')::date AS dia)
+       SELECT d.dia::text AS dia,
+         (SELECT count(*) FROM comercial_toques t JOIN comercial_leads l ON l.id = t.lead_id AND l.arquivado_em IS NULL
+           WHERE t.data = d.dia AND t.estornado_em IS NULL)::int AS toques,
+         (SELECT count(*) FROM comercial_reunioes r JOIN comercial_leads l ON l.id = r.lead_id AND l.arquivado_em IS NULL
+           WHERE r.status = 'realizada' AND (r.inicio AT TIME ZONE ${FUSO})::date = d.dia)::int AS reunioes,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.etapa = 'ganho' AND (l.marcos->>'ganho')::date = d.dia)::int AS ganhos,
+         (SELECT count(*) FROM comercial_leads l WHERE l.arquivado_em IS NULL AND l.pago_em = d.dia)::int AS pagos
+         FROM d ORDER BY d.dia`,
+      [inicio, ultimo],
+    ),
+  ]);
+
+  const du = diaUtilDoMes(hoje);
+  // dias úteis já "gastos": hoje conta pela metade do expediente só no front; aqui, os encerrados + hoje
+  const decorridos = Math.max(1, du.n);
+  const proj = (v) => Math.round((v / decorridos) * du.de);
+  const metaDiaToques = Number(metas.metaToquesDia) || desd.contatos_dia || 0;
+
+  const indicadores = [
+    { k: 'pagos', nome: 'Clientes pagos', feito: tot.pagos, meta: Number(metas.metaClientes) || 0, moeda: false },
+    { k: 'receita', nome: 'Receita nova (mensal)', feito: tot.receita, meta: desd.receita_nova || 0, moeda: true },
+    { k: 'trials', nome: 'Trials iniciados', feito: tot.trials, meta: desd.propostas_mes || 0, moeda: false },
+    { k: 'reunioes', nome: 'Reuniões realizadas', feito: tot.reunioes, meta: desd.diagnosticos_mes || 0, moeda: false },
+    { k: 'toques', nome: 'Contatos', feito: tot.toques, meta: metaDiaToques * diasUteis, moeda: false },
+  ].map((x) => ({ ...x, projecao: proj(x.feito) }));
+
+  const dias = porDia.map((d) => ({
+    ...d, util: ehDiaUtil(d.dia), futuro: d.dia > hoje, hoje: d.dia === hoje,
+  }));
+
+  const taxa = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const funil = {
+    contato_reuniao: { real: taxa(tot.reunioes, tot.toques), meta: Number(metas.taxaContatoDiag) || null },
+    reuniao_trial: { real: taxa(tot.trials, tot.reunioes), meta: Number(metas.taxaDiagTrial) || null },
+    trial_pago: { real: taxa(tot.pagos, tot.trials), meta: Number(metas.taxaTrialPago) || null },
+    conexao: taxa(tot.conexoes, tot.toques),
+  };
+
+  const ranking = rankMes
+    .map((r) => ({
+      id: r.id, nome: nomeCurto(r.nome), toques: r.toques, reunioes: r.reunioes_realizadas,
+      propostas: r.propostas, ganhos: r.assinados, pagos: r.pagos, receita: r.receita,
+    }))
+    .sort((a, b) => b.pagos - a.pagos || b.receita - a.receita || b.ganhos - a.ganhos || b.reunioes - a.reunioes || b.toques - a.toques);
+
+  return {
+    mes, inicio, fim: ultimo, dia_util: du, totais: tot, indicadores,
+    meta_dia_toques: metaDiaToques, dias, funil, ranking,
+  };
 }

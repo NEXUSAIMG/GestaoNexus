@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Phone, MessageCircle, UserPlus, CalendarCheck, Trophy, Radio, Maximize2, X,
   CalendarClock, Activity, Target, CalendarDays, LayoutDashboard, CheckCircle2, UserX, Sparkles,
+  FlaskConical, AlertTriangle, Hourglass, Gauge, FileText, CalendarRange, Pause, Play,
 } from 'lucide-react';
 import { api, BASE_URL, mensagemDeErro } from '../api/client.js';
 
@@ -23,12 +24,18 @@ const CELEBRACAO_MS = 12_000;
 
 /**
  * Sprint 42N — telas que se alternam na TV. Tempos em segundos, ajustáveis
- * pela URL: /comercial/tv?painel=40&reunioes=25 · ?fixo=reunioes trava numa tela.
+ * pela URL: /comercial/tv?painel=40&mes=30&trial=25&reunioes=25 · ?fixo=trial trava numa tela.
+ * Na própria TV: botão Pausar no rodapé ou barra de espaço (fica guardado no navegador).
  */
 const TELAS = [
   { k: 'painel', nome: 'Painel do dia', icone: LayoutDashboard, padrao: 40 },
+  { k: 'mes', nome: 'Visão do mês', icone: CalendarRange, padrao: 30 },
+  { k: 'trial', nome: 'Trials', icone: FlaskConical, padrao: 25 },
   { k: 'reunioes', nome: 'Reuniões marcadas', icone: CalendarDays, padrao: 25 },
 ];
+/** Tela de trials só entra na roda se houver trial em andamento ou no mês. */
+const telaDisponivel = (k, dados) => k !== 'trial'
+  || !!(dados?.trial && (dados.trial.resumo.em_andamento > 0 || dados.trial.mes.iniciados > 0));
 function lerConfigTelas() {
   const q = new URLSearchParams(window.location.search);
   const dur = Object.fromEntries(TELAS.map((t) => {
@@ -77,8 +84,22 @@ export default function ComercialTv() {
   const [celebrar, setCelebrar] = useState(null);
   const [cursor, setCursor] = useState(true);
   const config = useMemo(lerConfigTelas, []);
-  const [tela, setTela] = useState(config.fixo || 'painel');
+  const [tela, setTela] = useState(() => {
+    if (config.fixo) return config.fixo;
+    try { return localStorage.getItem('tv_pausado') === '1' ? (localStorage.getItem('tv_tela') || 'painel') : 'painel'; } catch { return 'painel'; }
+  });
   const [giro, setGiro] = useState(0); // muda a cada troca (reinicia a barrinha de progresso)
+  // Pausa da alternância: guardada no navegador da TV (sobrevive à recarga das 3h)
+  const [pausado, setPausado] = useState(() => {
+    try { return localStorage.getItem('tv_pausado') === '1'; } catch { return false; }
+  });
+  const alternarPausa = useCallback(() => {
+    setPausado((p) => {
+      try { localStorage.setItem('tv_pausado', p ? '0' : '1'); } catch { /* sem storage */ }
+      return !p;
+    });
+    setGiro((g) => g + 1);
+  }, []);
   const vistos = useRef(null);
   const timer = useRef(null);
 
@@ -153,18 +174,25 @@ export default function ComercialTv() {
 
   // Alterna as telas sozinho (pausa durante a celebração)
   const irPara = useCallback((k) => { setTela(k); setGiro((g) => g + 1); }, []);
+  const dadosRef = useRef(null);
+  dadosRef.current = dados;
   const proxima = useCallback((passo = 1) => {
     setTela((atual) => {
-      const i = TELAS.findIndex((t) => t.k === atual);
-      return TELAS[(i + passo + TELAS.length) % TELAS.length].k;
+      let i = TELAS.findIndex((t) => t.k === atual);
+      for (let n = 0; n < TELAS.length; n++) {
+        i = (i + passo + TELAS.length) % TELAS.length;
+        if (telaDisponivel(TELAS[i].k, dadosRef.current)) return TELAS[i].k;
+      }
+      return 'painel';
     });
     setGiro((g) => g + 1);
   }, []);
   useEffect(() => {
-    if (config.fixo || celebrar) return undefined;
+    try { localStorage.setItem('tv_tela', tela); } catch { /* sem storage */ }
+    if (config.fixo || celebrar || pausado) return undefined;
     const id = setTimeout(() => proxima(1), config.dur[tela] * 1000);
     return () => clearTimeout(id);
-  }, [tela, giro, celebrar, config, proxima]);
+  }, [tela, giro, celebrar, pausado, config, proxima]);
 
   // Esconde o cursor parado; F = tela cheia
   useEffect(() => {
@@ -174,12 +202,13 @@ export default function ComercialTv() {
       if (e.key === 'f' || e.key === 'F') telaCheia();
       else if (e.key === 'ArrowRight') proxima(1);
       else if (e.key === 'ArrowLeft') proxima(-1);
+      else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); alternarPausa(); }
     };
     mexeu();
     window.addEventListener('mousemove', mexeu);
     window.addEventListener('keydown', tecla);
     return () => { clearTimeout(id); window.removeEventListener('mousemove', mexeu); window.removeEventListener('keydown', tecla); };
-  }, [proxima]);
+  }, [proxima, alternarPausa]);
 
   const esperadoDia = esperadoAgora(agora);
   const esperadoMes = dados
@@ -202,6 +231,10 @@ export default function ComercialTv() {
           <div key={tela} className="tv-trocar flex min-h-0 flex-1 flex-col gap-[1.1em]">
             {tela === 'reunioes' && dados.calendario ? (
               <TelaReunioes cal={dados.calendario} agora={agora} />
+            ) : tela === 'mes' && dados.mes_visao ? (
+              <TelaMes v={dados.mes_visao} esperado={esperadoMes} />
+            ) : tela === 'trial' && dados.trial ? (
+              <TelaTrial tr={dados.trial} hoje={dados.hoje} />
             ) : (
               <>
                 <Kpis dados={dados} esperado={esperadoDia} />
@@ -224,7 +257,7 @@ export default function ComercialTv() {
         )}
 
         {dados && (
-          <Indicador tela={tela} giro={giro} config={config} pausado={!!celebrar} onIr={irPara} />
+          <Indicador tela={tela} giro={giro} config={config} parado={!!celebrar || pausado} pausado={pausado} onPausa={alternarPausa} onIr={irPara} dados={dados} />
         )}
       </div>
 
@@ -520,19 +553,26 @@ function Celebracao({ evento, onFechar }) {
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Abas no rodapé: qual tela está no ar e quanto falta para trocar. */
-function Indicador({ tela, giro, config, pausado, onIr }) {
+function Indicador({ tela, giro, config, parado, pausado, onPausa, onIr, dados }) {
   return (
     <div className="absolute inset-x-0 bottom-[0.35em] flex items-center justify-center gap-[0.8em]">
-      {TELAS.map((t) => {
+      {!config.fixo && (
+        <button type="button" onClick={onPausa} title={pausado ? 'Retomar a alternância (espaço)' : 'Parar nesta tela (espaço)'}
+          className={`flex items-center gap-[0.4em] rounded-full px-[0.9em] py-[0.3em] text-[0.95em] font-semibold ${pausado ? 'bg-amber-400 text-slate-950' : 'bg-slate-800/70 text-slate-300 hover:text-white'}`}>
+          {pausado ? <Play className="h-[1em] w-[1em]" /> : <Pause className="h-[1em] w-[1em]" />}
+          {pausado ? 'Pausado · retomar' : 'Pausar'}
+        </button>
+      )}
+      {TELAS.filter((t) => telaDisponivel(t.k, dados)).map((t) => {
         const ativa = t.k === tela;
         const Icone = t.icone;
         return (
           <button key={t.k} type="button" onClick={() => onIr(t.k)}
             className={`relative flex items-center gap-[0.45em] overflow-hidden rounded-full px-[0.9em] py-[0.3em] text-[0.95em] transition-colors ${ativa ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-300'}`}>
             <Icone className="h-[1em] w-[1em]" /> {t.nome}
-            {ativa && !config.fixo && (
+            {ativa && !config.fixo && !pausado && (
               <span key={giro} className="tv-progresso absolute bottom-0 left-0 h-[2px] bg-sky-400"
-                style={{ animationDuration: `${config.dur[t.k]}s`, animationPlayState: pausado ? 'paused' : 'running' }} />
+                style={{ animationDuration: `${config.dur[t.k]}s`, animationPlayState: parado ? 'paused' : 'running' }} />
             )}
           </button>
         );
@@ -688,5 +728,304 @@ function CartaoReuniao({ r, cor, jaPassou }) {
         {r.conduz && <span className="text-slate-400"> → {r.conduz}</span>}
       </div>
     </li>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 42O — Controle do trial
+// ─────────────────────────────────────────────────────────────────────────
+const NIVEL_TRIAL = {
+  crit: { faixa: 'bg-rose-500', pill: 'bg-rose-500/15 text-rose-300 ring-rose-500/40' },
+  warn: { faixa: 'bg-amber-400', pill: 'bg-amber-400/15 text-amber-200 ring-amber-400/40' },
+  ok: { faixa: 'bg-emerald-400', pill: 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/30' },
+};
+const dataCurta = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
+const diasAte = (de, ate) => Math.round((new Date(ate + 'T12:00:00') - new Date(de + 'T12:00:00')) / 864e5);
+
+function TelaTrial({ tr, hoje }) {
+  const { resumo: r, mes: m, ativos } = tr;
+  const visiveis = ativos.slice(0, 5);
+  const resto = ativos.length - visiveis.length;
+  const tiles = [
+    { icone: FlaskConical, rotulo: 'Em andamento', valor: r.em_andamento },
+    { icone: AlertTriangle, rotulo: 'Precisam de ação', valor: r.criticos, cor: r.criticos ? 'text-rose-300' : '' },
+    { icone: Hourglass, rotulo: 'Marcos atrasados', valor: r.marcos_atrasados, cor: r.marcos_atrasados ? 'text-amber-300' : '' },
+    { icone: CalendarClock, rotulo: 'Decidem em 7 dias', valor: r.decidem_semana, cor: 'text-sky-300' },
+    { icone: Gauge, rotulo: 'Uso médio', valor: r.uso_medio == null ? '—' : `${r.uso_medio}`, sufixo: r.uso_medio == null ? '' : 'pts',
+      cor: r.uso_medio == null ? '' : r.uso_medio < 40 ? 'text-rose-300' : r.uso_medio < 60 ? 'text-amber-300' : 'text-emerald-300' },
+  ];
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+      <section className="col-span-9 flex min-h-0 flex-col gap-[0.8em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+            <FlaskConical className="h-[1.1em] w-[1.1em] text-amber-300" /> Trials em andamento
+            <span className="text-[0.65em] font-normal text-slate-400">14 dias guiados até a decisão</span>
+          </h2>
+        </div>
+        <div className="grid grid-cols-5 gap-[0.6em]">
+          {tiles.map((t) => (
+            <div key={t.rotulo} className="rounded-lg bg-slate-800/60 px-[0.8em] py-[0.5em]">
+              <div className="flex items-center gap-[0.4em] text-[0.9em] text-slate-400"><t.icone className="h-[1em] w-[1em]" /> {t.rotulo}</div>
+              <div className={`text-[2.2em] font-bold leading-tight tabular-nums ${t.cor || ''}`}>{t.valor}<span className="text-[0.5em] font-medium text-slate-400"> {t.sufixo}</span></div>
+            </div>
+          ))}
+        </div>
+        {ativos.length === 0 ? (
+          <div className="grid flex-1 place-items-center text-[1.4em] text-slate-500">Nenhum trial em andamento agora.</div>
+        ) : (
+          <ul className="flex min-h-0 flex-1 flex-col gap-[0.55em] overflow-hidden">
+            {visiveis.map((t) => <LinhaTrialTv key={t.id} t={t} hoje={hoje} />)}
+            {resto > 0 && <li className="text-center text-[0.95em] text-slate-400">+{resto} trial{resto === 1 ? '' : 's'} em andamento (veja a aba Trial no Comercial)</li>}
+          </ul>
+        )}
+      </section>
+
+      <div className="col-span-3 flex min-h-0 flex-col gap-[1.1em]">
+        <Painel titulo="Trials do mês" icone={Target}>
+          <div className="mb-[0.3em] flex items-baseline justify-between">
+            <span className="text-[1.05em] text-slate-300">Iniciados</span>
+            <span className="tabular-nums"><span className="text-[1.9em] font-bold">{m.iniciados}</span>{m.meta_iniciados > 0 && <span className="text-[1.1em] text-slate-500"> / {m.meta_iniciados}</span>}</span>
+          </div>
+          {m.meta_iniciados > 0 && <BarraMeta feito={m.iniciados} meta={m.meta_iniciados} nivel={nivel(m.iniciados, m.meta_iniciados, null)} grossa />}
+          <dl className="mt-[0.8em] grid grid-cols-2 gap-[0.5em]">
+            {[['Viraram cliente', m.ganhos, 'text-emerald-300'], ['Já pagaram', m.pagos, 'text-emerald-300'], ['Pensando', m.pensando, 'text-sky-300'], ['Perdidos', m.perdidos, 'text-rose-300']].map(([rot, v, cor]) => (
+              <div key={rot} className="rounded-lg bg-slate-800/50 px-[0.6em] py-[0.4em]">
+                <dt className="text-[0.85em] text-slate-400">{rot}</dt>
+                <dd className={`text-[1.7em] font-bold leading-tight tabular-nums ${v ? cor : 'text-slate-500'}`}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-[0.7em] text-[1em] text-slate-300">
+            Conversão do trial: <b className="text-[1.3em] tabular-nums text-slate-100">{m.conversao == null ? '—' : `${m.conversao}%`}</b>
+            <span className="text-slate-500"> dos que decidiram</span>
+          </div>
+        </Painel>
+        <Painel titulo="Por que perdemos" icone={UserX} className="flex-1">
+          {m.motivos_perda.length === 0 ? (
+            <div className="text-[1em] text-slate-500">Nenhum trial perdido este mês.</div>
+          ) : (
+            <ul className="flex flex-col gap-[0.4em]">
+              {m.motivos_perda.slice(0, 4).map((x) => (
+                <li key={x.motivo} className="flex items-center justify-between text-[1.02em]">
+                  <span className="truncate text-slate-300">{x.motivo}</span>
+                  <span className="font-semibold tabular-nums text-rose-300">{x.n}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-auto border-t border-slate-800 pt-[0.6em] text-[0.88em] leading-snug text-slate-400">
+            Uso abaixo de 40 pts a partir do D3: <b className="text-slate-200">ligar no mesmo dia</b>. Prorrogar só pela gestão, uma vez, até 7 dias.
+          </div>
+        </Painel>
+      </div>
+    </div>
+  );
+}
+
+function LinhaTrialTv({ t, hoje }) {
+  const nv = NIVEL_TRIAL[t.nivel] || NIVEL_TRIAL.ok;
+  const faltam = diasAte(hoje, t.fim);
+  const posHoje = Math.max(0, Math.min(100, (t.dia / 14) * 100));
+  return (
+    <li className="relative flex min-h-0 flex-1 items-stretch gap-[0.9em] overflow-hidden rounded-lg bg-slate-800/50 py-[0.55em] pl-[1em] pr-[0.8em]">
+      <span className={`absolute inset-y-0 left-0 w-[0.35em] ${nv.faixa}`} />
+      {/* identificação */}
+      <div className="flex w-[19em] shrink-0 flex-col justify-center">
+        <div className="truncate text-[1.3em] font-semibold" title={t.nome}>{t.nome}</div>
+        <div className="truncate text-[0.9em] text-slate-400">{t.dono || 'sem dono'}{t.local ? ` · ${t.local}` : ''}</div>
+        <div className="mt-[0.25em] flex flex-wrap items-center gap-[0.35em]">
+          <span className={`rounded-full px-[0.6em] py-[0.05em] text-[0.8em] font-semibold ring-1 ${nv.pill}`}>{t.texto}</span>
+          {t.prorrogado && <span className="rounded-full bg-violet-400/15 px-[0.5em] text-[0.75em] text-violet-300">prorrogado</span>}
+          {t.tem_proposta && <span className="inline-flex items-center gap-[0.2em] rounded-full bg-sky-400/10 px-[0.5em] text-[0.75em] text-sky-300"><FileText className="h-[0.9em] w-[0.9em]" />proposta</span>}
+        </div>
+      </div>
+      {/* linha do tempo D0–D14 */}
+      <div className="flex min-w-0 flex-1 flex-col justify-center">
+        <div className="mb-[0.2em] flex items-baseline justify-between text-[0.85em]">
+          <span className="font-semibold text-slate-200">{t.dia <= 14 ? `Dia ${Math.max(0, t.dia)} de 14` : `Dia ${t.dia} · ${t.dia - 14} além dos 14`}</span>
+          <span className={t.vencido ? 'font-semibold text-rose-300' : faltam <= 2 ? 'font-semibold text-amber-300' : 'text-slate-400'}>
+            {t.vencido ? `decisão venceu em ${dataCurta(t.fim)}` : faltam === 0 ? 'decide hoje' : `decide ${dataCurta(t.fim)} · em ${faltam} dia${faltam === 1 ? '' : 's'}`}
+          </span>
+        </div>
+        <div className="relative mx-[0.6em] h-[2.6em]">
+          <div className="absolute inset-x-0 top-[0.75em] h-[3px] rounded bg-slate-700" />
+          <div className="absolute left-0 top-[0.75em] h-[3px] rounded bg-sky-500/70" style={{ width: `${posHoje}%` }} />
+          {!t.vencido && <div className="absolute top-[0.2em] h-[1.4em] w-[2px] bg-white/80" style={{ left: `${posHoje}%` }} title="hoje" />}
+          {t.marcos.map((mk) => {
+            const left = (mk.d / 14) * 100;
+            const est = {
+              feito: 'bg-emerald-400 border-emerald-400',
+              atrasado: 'bg-rose-500 border-rose-400 animate-pulse',
+              hoje: 'bg-amber-400 border-amber-300',
+              futuro: 'bg-slate-900 border-slate-500',
+            }[mk.estado];
+            return (
+              <div key={mk.d} className="absolute flex -translate-x-1/2 flex-col items-center" style={{ left: `${left}%` }} title={`D${mk.d} · ${mk.n} · ${dataCurta(mk.previsto)}`}>
+                <span className={`mt-[0.35em] h-[0.85em] w-[0.85em] rounded-full border-2 ${est}`} />
+                <span className={`mt-[0.15em] text-[0.72em] tabular-nums ${mk.estado === 'atrasado' ? 'font-bold text-rose-300' : mk.estado === 'hoje' ? 'font-bold text-amber-300' : 'text-slate-500'}`}>D{mk.d}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="truncate text-[0.88em]">
+          {t.proximo ? (
+            <span className={t.proximo.atrasado ? 'text-rose-300' : 'text-slate-300'}>
+              <b>Próximo: D{t.proximo.d} · {t.proximo.n}</b> {t.proximo.atrasado ? `— atrasado desde ${dataCurta(t.proximo.previsto)}` : `— ${t.proximo.previsto === hoje ? 'hoje' : dataCurta(t.proximo.previsto)}`}
+            </span>
+          ) : <span className="text-emerald-300">Todos os marcos feitos — registrar a decisão</span>}
+        </div>
+      </div>
+      {/* uso */}
+      <div className="flex w-[9.5em] shrink-0 flex-col justify-center">
+        <div className="flex items-baseline gap-[0.3em]">
+          <span className={`text-[2em] font-bold leading-none tabular-nums ${t.pontos < 40 ? 'text-rose-300' : t.pontos < 60 ? 'text-amber-300' : 'text-emerald-300'}`}>{t.pontos}</span>
+          <span className="text-[0.85em] text-slate-400">pts de uso</span>
+        </div>
+        <div className="mt-[0.35em] flex gap-[0.25em]">
+          {t.sinais.map((x) => (
+            <span key={x.k} title={x.n} className={`h-[0.5em] flex-1 rounded-full ${x.ok ? 'bg-emerald-400' : 'bg-slate-700'}`} />
+          ))}
+        </div>
+        <div className="mt-[0.3em] truncate text-[0.78em] text-slate-500">
+          {t.reuniao_resultado ? `resultado ${dataCurta(t.reuniao_resultado.slice(0, 10))} ${t.reuniao_resultado.slice(11)}` : 'sem reunião de resultado'}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 42O — Visão do mês
+// ─────────────────────────────────────────────────────────────────────────
+const fmtNum = (n, moeda) => (moeda ? brl(n) : Number(n || 0).toLocaleString('pt-BR'));
+
+function TelaMes({ v, esperado }) {
+  const nomeMes = new Date(v.inicio + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-[1.1em]">
+      <div className="grid grid-cols-5 gap-[1.1em]">
+        {v.indicadores.map((i) => {
+          const nv = nivel(i.feito, i.meta, esperado);
+          const batera = i.meta > 0 && i.projecao >= i.meta;
+          return (
+            <div key={i.k} className="flex flex-col gap-[0.4em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+              <div className="text-[1.05em] text-slate-400">{i.nome}</div>
+              <div className="flex items-baseline gap-[0.35em]">
+                <span className={`font-bold leading-none tabular-nums ${i.moeda ? 'text-[2.4em]' : 'text-[3.2em]'}`}>{fmtNum(i.feito, i.moeda)}</span>
+                {i.meta > 0 && <span className="text-[1.2em] text-slate-500 tabular-nums">/ {fmtNum(i.meta, i.moeda)}</span>}
+              </div>
+              {i.meta > 0 && <BarraMeta feito={i.feito} meta={i.meta} nivel={nv} esperado={esperado} grossa />}
+              <div className="flex items-baseline justify-between text-[0.95em]">
+                <span className="text-slate-400">{i.meta > 0 ? `${pct(i.feito, i.meta)}% da meta` : 'sem meta'}</span>
+                <span className={batera ? 'font-semibold text-emerald-300' : 'font-semibold text-amber-300'} title="Projeção de fechamento no ritmo atual">
+                  projeção {fmtNum(i.projecao, i.moeda)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+        <div className="col-span-8 flex min-h-0 flex-col gap-[1.1em]">
+          <Painel titulo={`Contatos por dia útil · ${nomeMes}`} icone={Activity} className="flex-1"
+            extra={<span className="text-[0.95em] text-slate-400">dia útil {v.dia_util.n} de {v.dia_util.de} · ritmo esperado {esperado ?? '—'}%</span>}>
+            <GraficoDias dias={v.dias.filter((d) => d.util)} metaDia={v.meta_dia_toques} />
+          </Painel>
+          <FunilMes f={v.funil} />
+        </div>
+        <Painel titulo="Ranking do mês" icone={Trophy} className="col-span-4"
+          extra={<span className="text-[0.9em] text-slate-400">pago › fechado › reunião</span>}>
+          {v.ranking.length === 0 ? (
+            <div className="text-[1.1em] text-slate-500">Sem atividade no mês ainda.</div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col gap-[0.45em] overflow-hidden">
+              <div className="grid grid-cols-[2em_1fr_3.2em_3.2em_3.6em_4em] gap-[0.4em] px-[0.4em] text-[0.82em] uppercase tracking-wide text-slate-500">
+                <span /><span>Vendedor</span><span className="text-center">Pago</span><span className="text-center">Fech.</span><span className="text-center">Reun.</span><span className="text-right">Cont.</span>
+              </div>
+              {v.ranking.slice(0, 8).map((r, i) => (
+                <div key={r.id} className={`grid grid-cols-[2em_1fr_3.2em_3.2em_3.6em_4em] items-center gap-[0.4em] rounded-lg px-[0.4em] py-[0.5em] ${i === 0 && (r.pagos || r.ganhos) ? 'bg-amber-400/10 ring-1 ring-amber-400/40' : 'bg-slate-800/50'}`}>
+                  <span className={`grid h-[1.7em] w-[1.7em] place-items-center rounded-full text-[0.95em] font-bold ${MEDALHA[i] || 'bg-slate-700 text-slate-200'}`}>{i + 1}</span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[1.25em] font-semibold">{r.nome}</div>
+                    <div className="truncate text-[0.82em] text-slate-400">{r.receita ? `${brl(r.receita)}/mês` : `${r.propostas} proposta${r.propostas === 1 ? '' : 's'}`}</div>
+                  </div>
+                  <span className={`text-center text-[1.4em] font-bold tabular-nums ${r.pagos ? 'text-emerald-300' : 'text-slate-500'}`}>{r.pagos}</span>
+                  <span className="text-center text-[1.25em] tabular-nums">{r.ganhos}</span>
+                  <span className="text-center text-[1.25em] tabular-nums">{r.reunioes}</span>
+                  <span className="text-right text-[1.1em] tabular-nums text-slate-300">{r.toques}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Painel>
+      </div>
+    </div>
+  );
+}
+
+/** Barras dos dias úteis do mês com a linha da meta diária de contatos. */
+function GraficoDias({ dias, metaDia }) {
+  const max = Math.max(metaDia || 0, ...dias.map((d) => d.toques), 1) * 1.12;
+  const yMeta = metaDia ? (metaDia / max) * 100 : null;
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 items-end gap-[0.35em] border-b border-slate-700 pb-0">
+        {yMeta != null && (
+          <div className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-amber-300/70" style={{ bottom: `${yMeta}%` }}>
+            <span className="absolute -top-[1.5em] right-0 rounded bg-slate-900 px-[0.4em] text-[0.82em] font-semibold text-amber-200">meta {metaDia}/dia</span>
+          </div>
+        )}
+        {dias.map((d) => {
+          const h = d.futuro ? 0 : (d.toques / max) * 100;
+          const bateu = metaDia && d.toques >= metaDia;
+          return (
+            <div key={d.dia} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+              {!d.futuro && <span className={`mb-[0.15em] text-[0.8em] tabular-nums ${d.hoje ? 'font-bold text-amber-200' : 'text-slate-400'}`}>{d.toques}</span>}
+              <div className={`w-full rounded-t ${d.futuro ? 'h-[3px] bg-slate-800' : bateu ? 'bg-emerald-400/85' : 'bg-sky-500/75'} ${d.hoje ? 'ring-2 ring-amber-300' : ''}`}
+                style={d.futuro ? undefined : { height: `${Math.max(h, 1.5)}%` }} title={`${d.dia}: ${d.toques} contatos, ${d.reunioes} reuniões`} />
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-[0.3em] flex gap-[0.35em]">
+        {dias.map((d) => (
+          <span key={d.dia} className={`min-w-0 flex-1 text-center text-[0.78em] tabular-nums ${d.hoje ? 'font-bold text-amber-200' : d.futuro ? 'text-slate-600' : 'text-slate-400'}`}>{Number(d.dia.slice(8))}</span>
+        ))}
+      </div>
+      <div className="mt-[0.4em] flex items-center gap-[1.2em] text-[0.85em] text-slate-400">
+        <span className="flex items-center gap-[0.35em]"><span className="h-[0.8em] w-[0.8em] rounded-sm bg-emerald-400/85" />bateu a meta do dia</span>
+        <span className="flex items-center gap-[0.35em]"><span className="h-[0.8em] w-[0.8em] rounded-sm bg-sky-500/75" />abaixo da meta</span>
+        <span className="flex items-center gap-[0.35em]"><span className="h-[0.8em] w-[0.8em] rounded-sm ring-2 ring-amber-300" />hoje (em andamento)</span>
+      </div>
+    </div>
+  );
+}
+
+function FunilMes({ f }) {
+  const passos = [
+    { rot: 'Contato → reunião', ...f.contato_reuniao },
+    { rot: 'Reunião → trial', ...f.reuniao_trial },
+    { rot: 'Trial → pago', ...f.trial_pago },
+  ];
+  return (
+    <div className="grid grid-cols-4 gap-[0.8em]">
+      {passos.map((p) => {
+        const ok = p.real != null && p.meta != null && p.real >= p.meta;
+        return (
+          <div key={p.rot} className="rounded-xl border border-slate-800 bg-slate-900/70 px-[1em] py-[0.7em]">
+            <div className="text-[0.95em] text-slate-400">{p.rot}</div>
+            <div className="flex items-baseline gap-[0.4em]">
+              <span className={`text-[2.1em] font-bold tabular-nums ${p.real == null ? 'text-slate-500' : ok ? 'text-emerald-300' : 'text-amber-300'}`}>{p.real == null ? '—' : `${Math.min(p.real, 999).toLocaleString('pt-BR')}%`}</span>
+              {p.meta != null && <span className="text-[1em] text-slate-500">meta {p.meta}%</span>}
+            </div>
+          </div>
+        );
+      })}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-[1em] py-[0.7em]">
+        <div className="text-[0.95em] text-slate-400">Conexão (atenderam)</div>
+        <div className="text-[2.1em] font-bold tabular-nums text-slate-100">{f.conexao == null ? '—' : `${f.conexao.toLocaleString('pt-BR')}%`}</div>
+      </div>
+    </div>
   );
 }
