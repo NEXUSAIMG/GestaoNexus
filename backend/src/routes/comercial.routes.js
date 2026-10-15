@@ -19,6 +19,7 @@ import {
 import { marcarGestorComercial } from '../services/comercial.dados.js';
 import { espelharDepois } from '../services/comercial.espelho.js';
 import { painelTv } from '../controllers/comercial.tv.controller.js';
+import adaptaiRoutes from './adaptai.routes.js';
 
 /**
  * Módulo Comercial — Sprint 42 / 42B.
@@ -39,6 +40,9 @@ router.get('/config', config);
 router.get('/painel', painel);
 router.get('/placar', obterPlacar);
 router.get('/tv', painelTv); // Sprint 42M — modo TV (só leitura)
+
+// Sprint 43 — frente AdaptAI (escolas, foco em TEA)
+router.use('/adaptai', adaptaiRoutes);
 
 router.get('/metas', obterMetas);
 router.put('/metas/:mes', salvarMetas);

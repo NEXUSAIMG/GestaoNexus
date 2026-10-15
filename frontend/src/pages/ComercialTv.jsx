@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, UserPlus, CalendarCheck, Trophy, Radio, Maximize2, X,
   CalendarClock, Activity, Target, CalendarDays, LayoutDashboard, CheckCircle2, UserX, Sparkles,
   FlaskConical, AlertTriangle, Hourglass, Gauge, FileText, CalendarRange, Pause, Play,
-  Map as MapIcon, Flame, Thermometer,
+  Map as MapIcon, Flame, Thermometer, GraduationCap, Route,
 } from 'lucide-react';
 import { api, BASE_URL, mensagemDeErro } from '../api/client.js';
 // Mapa do Brasil: @svg-maps/brazil (CC BY 4.0) — crédito exibido na tela do mapa
@@ -27,7 +27,7 @@ const CELEBRACAO_MS = 12_000;
 
 /**
  * Sprint 42N — telas que se alternam na TV. Tempos em segundos, ajustáveis
- * pela URL: /comercial/tv?painel=40&funil=30&mapa=30&mes=30&trial=25&reunioes=25 · ?fixo=mapa trava numa tela.
+ * pela URL: /comercial/tv?painel=40&funil=30&mapa=30&mes=30&trial=25&reunioes=25&adaptai=30 · ?fixo=adaptai trava numa tela.
  * Na própria TV: botão Pausar no rodapé ou barra de espaço (fica guardado no navegador).
  */
 const TELAS = [
@@ -37,10 +37,11 @@ const TELAS = [
   { k: 'mes', nome: 'Visão do mês', icone: CalendarRange, padrao: 30 },
   { k: 'trial', nome: 'Trials', icone: FlaskConical, padrao: 25 },
   { k: 'reunioes', nome: 'Reuniões marcadas', icone: CalendarDays, padrao: 25 },
+  { k: 'adaptai', nome: 'AdaptAI', icone: GraduationCap, padrao: 30 }, // Sprint 43
 ];
 /** Tela de trials só entra na roda se houver trial em andamento ou no mês. */
-const telaDisponivel = (k, dados) => k !== 'trial'
-  || !!(dados?.trial && (dados.trial.resumo.em_andamento > 0 || dados.trial.mes.iniciados > 0));
+const telaDisponivel = (k, dados) => (k === 'adaptai' ? !!dados?.adaptai : k !== 'trial'
+  || !!(dados?.trial && (dados.trial.resumo.em_andamento > 0 || dados.trial.mes.iniciados > 0)));
 function lerConfigTelas() {
   const q = new URLSearchParams(window.location.search);
   const dur = Object.fromEntries(TELAS.map((t) => {
@@ -234,7 +235,9 @@ export default function ComercialTv() {
           <div className="grid flex-1 place-items-center text-[2em] text-slate-500">Carregando o painel…</div>
         ) : (
           <div key={tela} className="tv-trocar flex min-h-0 flex-1 flex-col gap-[1.1em]">
-            {tela === 'reunioes' && dados.calendario ? (
+            {tela === 'adaptai' && dados.adaptai ? (
+              <TelaAdaptai a={dados.adaptai} agora={agora} />
+            ) : tela === 'reunioes' && dados.calendario ? (
               <TelaReunioes cal={dados.calendario} agora={agora} />
             ) : tela === 'mapa' && dados.mapa ? (
               <TelaMapa m={dados.mapa} />
@@ -1289,3 +1292,117 @@ function TelaFunilQuente({ f }) {
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 43 — tela da frente AdaptAI (escolas de Belém, foco em TEA)
+// ─────────────────────────────────────────────────────────────────────────
+const NOMES_META_AD = { contatos: 'Contatos', decisores: 'Decisores', visitas: 'Visitas', diagnosticos: 'Diagnósticos', demos: 'Demos / oficinas', propostas: 'Propostas / pilotos' };
+const DIA_ABREV = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+function TelaAdaptai({ a, agora }) {
+  const n = a.semana.numeros; const m = a.semana.metas;
+  const dow = agora.getDay();
+  const esperado = dow === 0 || dow === 6 ? 100 : Math.round(((dow - 1) + Math.min(1, Math.max(0, (agora.getHours() - 8) / 10))) / 5 * 100);
+  const funil = a.funil.filter((e) => !['perdido', 'nutricao'].includes(e.k));
+  const max = Math.max(1, ...funil.map((e) => e.qtd));
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-[1.1em]">
+      <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-violet-800 via-violet-700 to-fuchsia-700 px-[1.2em] py-[0.8em]">
+        <div className="flex items-center gap-[0.7em]">
+          <GraduationCap className="h-[2.2em] w-[2.2em]" />
+          <div>
+            <p className="text-[1.9em] font-bold leading-none">AdaptAI · escolas de Belém</p>
+            <p className="text-[1em] text-violet-200">Vender inclusão, não software · semana de {dataAd(a.semana.inicio)} a {dataAd(a.semana.fim)}</p>
+          </div>
+        </div>
+        <div className="flex gap-[1.6em] text-center">
+          <Num v={a.totais.escolas} r="escolas" />
+          <Num v={a.pilotos.length} r="pilotos" />
+          <Num v={a.totais.ganhos} r="clientes" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-6 gap-[1em]">
+        {Object.keys(NOMES_META_AD).map((k) => {
+          const nv = nivel(n[k], m[k], esperado);
+          return (
+            <div key={k} className="flex flex-col gap-[0.4em] rounded-xl border border-violet-500/30 bg-violet-500/10 p-[0.9em]">
+              <span className="text-[1.05em] text-violet-200">{NOMES_META_AD[k]}</span>
+              <div className="flex items-baseline gap-[0.3em]"><span className="text-[3em] font-bold leading-none tabular-nums">{n[k]}</span><span className="text-[1.3em] text-slate-400 tabular-nums">/ {m[k]}</span></div>
+              <BarraMeta feito={n[k]} meta={m[k]} nivel={nv} esperado={esperado} />
+              <span className="text-[0.9em] text-slate-400">{n[k] >= m[k] ? 'Meta da semana batida! ✅' : `faltam ${m[k] - n[k]}`}{k === 'demos' && n.demos_agendadas ? ` · +${n.demos_agendadas} agendadas` : ''}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+        <Painel titulo="Funil das escolas" icone={Activity} className="col-span-4 overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col justify-around gap-[0.3em]">
+            {funil.map((e) => (
+              <div key={e.k} className="grid grid-cols-[10.5em_1fr_2.5em] items-center gap-[0.6em]">
+                <span className="truncate text-[1em] text-slate-300">{e.n}</span>
+                <div className="h-[1em] overflow-hidden rounded bg-slate-800">
+                  <div className={`h-full rounded transition-all duration-700 ${e.k === 'ganho' ? 'bg-emerald-400' : 'bg-gradient-to-r from-violet-500 to-fuchsia-500'}`} style={{ width: `${(e.qtd / max) * 100}%` }} />
+                </div>
+                <span className="text-right text-[1.2em] font-semibold tabular-nums">{e.qtd}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-[0.6em] grid grid-cols-3 gap-[0.5em] border-t border-slate-800 pt-[0.6em]">
+            {['A', 'B', 'C'].map((p) => (
+              <div key={p} className="text-center">
+                <span className={`inline-block rounded px-[0.5em] text-[1em] font-bold ${p === 'A' ? 'bg-violet-500 text-white' : p === 'B' ? 'bg-violet-300/30 text-violet-200' : 'bg-slate-700 text-slate-300'}`}>{p}</span>
+                <p className="text-[1.3em] font-semibold tabular-nums">{a.prioridades[p].tocadas}<span className="text-[0.75em] text-slate-500">/{a.prioridades[p].total}</span></p>
+                <p className="text-[0.8em] text-slate-500">contatadas</p>
+              </div>
+            ))}
+          </div>
+        </Painel>
+
+        <Painel titulo="Próximas reuniões e visitas" icone={CalendarClock} className="col-span-4 overflow-hidden"
+          extra={a.rota_hoje && <span className="flex items-center gap-[0.3em] rounded-full bg-violet-500/20 px-[0.6em] py-[0.1em] text-[0.95em] text-violet-200"><Route className="h-[1em] w-[1em]" />Rota {a.rota_hoje.rota} hoje · {a.rota_hoje.n}</span>}>
+          {!a.agenda.length && <p className="text-[1.1em] text-slate-500">Nada marcado. Toda conversa termina com a data da próxima.</p>}
+          <ul className="flex flex-col gap-[0.5em] overflow-hidden">
+            {a.agenda.map((r, i) => (
+              <li key={i} className="flex items-center gap-[0.8em] rounded-lg bg-slate-800/60 px-[0.7em] py-[0.45em]">
+                <div className="w-[4.2em] shrink-0 text-center">
+                  <p className="text-[0.85em] uppercase text-violet-300">{DIA_ABREV[new Date(r.data + 'T12:00:00').getDay()]} {dataAd(r.data)}</p>
+                  <p className="text-[1.3em] font-bold tabular-nums">{hora(r.quando)}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[1.1em] font-semibold">{r.escola}</p>
+                  <p className="truncate text-[0.95em] text-slate-400">{r.tipo_n}{r.bairro ? ` · ${r.bairro}` : ''}{r.pessoa ? ` · ${r.pessoa}` : ''}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Painel>
+
+        <div className="col-span-4 flex min-h-0 flex-col gap-[1.1em]">
+          <Painel titulo="Pilotos de 30 dias" icone={FlaskConical}>
+            {!a.pilotos.length && <p className="text-[1.1em] text-slate-500">Nenhum piloto em andamento.</p>}
+            <ul className="flex flex-col gap-[0.6em]">
+              {a.pilotos.slice(0, 4).map((p, i) => (
+                <li key={i}>
+                  <div className="flex items-baseline justify-between"><span className="truncate text-[1.1em] font-semibold">{p.nome}</span><span className={`text-[1em] tabular-nums ${p.vencido ? 'text-red-300' : 'text-fuchsia-300'}`}>dia {p.dia}/{p.de}</span></div>
+                  <div className="mt-[0.2em] h-[0.55em] overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${p.vencido ? 'bg-red-400' : 'bg-fuchsia-500'}`} style={{ width: `${Math.min(100, (p.dia / (p.de || 30)) * 100)}%` }} /></div>
+                  {p.marco && <p className="text-[0.9em] text-slate-400">próximo: {p.marco} · {dataAd(p.marco_data)}</p>}
+                </li>
+              ))}
+            </ul>
+          </Painel>
+          <Painel titulo="Acontecendo" icone={Radio} className="flex-1 overflow-hidden">
+            <ul className="flex flex-col gap-[0.45em] overflow-hidden">
+              {a.feed.map((f, i) => (
+                <li key={i} className="text-[1em] leading-snug"><span className="text-slate-500 tabular-nums">{hora(f.quando)}</span> <b className="text-slate-200">{f.pessoa?.split(' ')[0] || ''}</b> <span className="text-slate-400">{f.tipo_n.toLowerCase()} ·</span> <span className="text-slate-200">{f.escola}</span></li>
+              ))}
+            </ul>
+          </Painel>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Num({ v, r }) { return <div><p className="text-[2em] font-bold leading-none tabular-nums">{v}</p><p className="text-[0.9em] text-violet-200">{r}</p></div>; }
+function dataAd(s) { if (!s) return ''; const [, mm, dd] = String(s).slice(0, 10).split('-'); return `${dd}/${mm}`; }

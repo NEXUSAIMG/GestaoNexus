@@ -1,6 +1,7 @@
 import { verificarToken } from '../utils/jwt.js';
 import { query } from '../config/database.js';
 import { calcularTv } from '../services/comercial.tv.js';
+import { calcularAdaptTv } from '../services/adaptai.dados.js';
 import { assinarComercial, aoMudarComercial } from '../services/realtime.service.js';
 
 /**
@@ -24,8 +25,9 @@ export async function painelTv(_req, res, next) {
     if (cache.dados && agora - cache.em < CACHE_MS) return res.json(cache.dados);
     if (!cache.promessa) {
       const g = geracao;
-      cache.promessa = calcularTv()
-        .then((d) => {
+      cache.promessa = Promise.all([calcularTv(), calcularAdaptTv().catch((e) => { console.error('[tv adaptai]', e.message); return null; })])
+        .then(([d, adaptai]) => {
+          d = { ...d, adaptai }; // Sprint 43 — tela AdaptAI na TV
           cache = { em: g === geracao ? Date.now() : 0, dados: d, promessa: null };
           return d;
         })

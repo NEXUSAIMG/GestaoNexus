@@ -13,6 +13,7 @@ import { ToqueModal } from '../components/comercial/Acoes.jsx';
 import { ComoFunciona, Tour, VistaAjuda } from '../components/comercial/Ajuda.jsx';
 import { VistaProcesso } from '../components/comercial/Processo.jsx';
 import { VistaMarketing } from '../components/comercial/Marketing.jsx';
+import AdaptAI from '../components/adaptai/AdaptAI.jsx';
 
 /**
  * Comercial — Sprint 42.
@@ -54,6 +55,9 @@ export default function Comercial() {
   const [toque, setToque] = useState(null); // {lead, tipo, dia}
   const [escopo, setEscopo] = useState(() => { try { return localStorage.getItem('comercial-escopo') || (admin ? 'equipe' : 'meus'); } catch { return admin ? 'equipe' : 'meus'; } });
   const [tour, setTour] = useState(false);
+  // Sprint 43 — frente de vendas: Seu Cartório (cartórios) ou AdaptAI (escolas)
+  const [frente, setFrente] = useState(() => { try { return localStorage.getItem('comercial-frente') || 'seucartorio'; } catch { return 'seucartorio'; } });
+  useEffect(() => { try { localStorage.setItem('comercial-frente', frente); } catch { /* ok */ } }, [frente]);
   useEffect(() => { try { localStorage.setItem('comercial-escopo', escopo); } catch { /* ok */ } }, [escopo]);
 
   useEffect(() => { try { localStorage.setItem('comercial-aba', aba); } catch { /* ok */ } }, [aba]);
@@ -93,19 +97,25 @@ export default function Comercial() {
         <div className="flex items-center gap-2">
           <TrendingUp size={22} className="text-nexus-700" />
           <h1 className="text-xl font-semibold text-slate-900">Comercial</h1>
-          <span className="text-sm text-slate-500">Seu Cartório</span>
+          <div role="tablist" aria-label="Frente de vendas" className="ml-1 inline-flex rounded-lg bg-slate-100 p-0.5">
+            {[['seucartorio', 'Seu Cartório'], ['adaptai', 'AdaptAI']].map(([k, n]) => (
+              <button key={k} type="button" role="tab" aria-selected={frente === k} onClick={() => setFrente(k)}
+                className={`rounded-md px-3 py-1 text-sm font-medium ${frente === k ? (k === 'adaptai' ? 'bg-violet-700 text-white shadow' : 'bg-white text-nexus-800 shadow') : 'text-slate-500 hover:text-slate-800'}`}>{n}</button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {aviso && <span className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white" role="status">{aviso}</span>}
           <Link to="/comercial/tv" title="Painel em tela cheia para a TV da sala" className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
             <Tv size={16} /> Modo TV
           </Link>
-          <button type="button" onClick={() => setAba('ajuda')} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
+          {frente === 'seucartorio' && <button type="button" onClick={() => setAba('ajuda')} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-nexus-700 hover:bg-nexus-50">
             <HelpCircle size={16} /> Dúvidas?
-          </button>
+          </button>}
         </div>
       </div>
 
+      {frente === 'adaptai' ? <AdaptAI onAviso={setAviso} /> : (<>
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {ABAS.map(([k, n]) => (
           <button key={k} type="button" role="tab" aria-selected={aba === k} onClick={() => setAba(k)}
@@ -151,8 +161,9 @@ export default function Comercial() {
           {painel && aba === 'metas' && <VistaMetas painel={painel} cfg={cfg} onSalvo={recarregar} />}
         </>
       )}
+      </>)}
 
-      {cfg && <Tour forcar={tour} onFechar={() => setTour(false)} />}
+      {cfg && frente === 'seucartorio' && <Tour forcar={tour} onFechar={() => setTour(false)} />}
       {cfg && aberto && (
         <LeadDrawer id={aberto.id} cfg={cfg} padrao={{ origem: '', dono_id: pessoa?.id || '' }}
           onFechar={() => setAberto(null)} onMudou={recarregar}

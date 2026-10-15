@@ -11,6 +11,67 @@ cards), o ritmo virou diário e consolidamos aqui pra evitar fragmentação.
 
 ---
 
+## Sprint 43 — Frente AdaptAI no Comercial (versão 1.20)
+
+Nova frente de vendas: o AdaptAI, vendido para escolas de Belém (foco em
+estudantes com TEA), segundo o "Método de vendas (diretoria)" e o "Plano
+comercial B2B para escolas de Belém" (out/2026). Fica dentro do Comercial,
+num seletor no topo (Seu Cartório | AdaptAI), com funil, regras e números
+próprios. O Seu Cartório não muda.
+
+- **Três funis:**
+  - escolas: Lista → Contato feito → Decisor alcançado → Qualificada →
+    Demo/oficina feita → Proposta/piloto → Negociação → Ganho, Perdido ou
+    Nutrição;
+  - redes públicas (SEMEC, SEDUC, CAEE): Mapeamento → Apresentação
+    institucional → Piloto em escolas/CAEE → Parecer técnico → Contratação;
+  - canais indicadores (clínicas, terapeutas, associações).
+- **Portões no servidor:**
+  - decisor com nome;
+  - BANT completo (dor, decisor, prazo, orçamento);
+  - demo ou oficina realizada;
+  - diagnóstico + piloto definido (critério e início) ou proposta enviada
+    antes de Proposta/piloto;
+  - perdido com motivo.
+  - Voltar etapa exige justificativa. A gestão força com justificativa.
+- **Cadência multicanal de 20 dias** (D1 visita/ligação, D1 WhatsApp,
+  D3 e-mail, D6 material, D9 ligação, D14 exemplo, D20 encerramento), com o
+  modelo de mensagem de cada passo e botão copiar. O primeiro contato com
+  resposta leva a escola para Contato feito sozinho. Demo ou oficina feita
+  leva para Demo/oficina feita.
+- **Pontuação 0 a 10** (etapas 0-3, porte 0-3, acesso 0-2, rota 0-2) e
+  prioridade A/B/C. Rotas A (terça), B (quarta) e C (sob demanda) pelo
+  bairro, com "abrir rota no Google Maps" de até 10 escolas.
+- **Piloto de 30 dias:**
+  - marcos D0, D15 e D30;
+  - métricas (tempo antes/depois, adaptações, uso semanal, satisfação);
+  - critério de sucesso por escrito.
+- **Telas:**
+  - Hoje: metas da semana, rotina do dia, agenda, rota, cadência, pilotos,
+    parados, nutrição e sem próximo passo;
+  - Funil, Escolas e Rotas;
+  - Pilotos;
+  - Semana e metas: indicadores de sexta, conversão por etapa, 8 semanas,
+    prioridades, motivos de perda e placar por pessoa;
+  - Plano e kit: 4 semanas, kit de curadoria e decisões da diretoria;
+  - Método.
+- **Modo TV:** nova tela "AdaptAI" na alternância (semana × metas, funil,
+  próximas reuniões, pilotos, cobertura A/B/C e feed).
+- **Lista inicial:** botão da gestão carrega as 34 escolas e redes do plano
+  (dados de diretórios públicos, marcados "a confirmar"; nota preliminar).
+- **LGPD:** nenhum campo guarda dado de aluno; aviso na ficha e nos registros.
+
+Arquivos:
+- migração `041_adaptai.sql`;
+- `services/adaptai.regras.js`, `adaptai.dados.js`, `adaptai.lista-belem.js`;
+- `controllers/adaptai.controller.js`, `routes/adaptai.routes.js`
+  (em `/comercial/adaptai`);
+- `components/adaptai/*`; `pages/Comercial.jsx`, `ComercialTv.jsx`.
+
+Teste: `node testes/t-comercial-adaptai.mjs` (32 verificações).
+
+---
+
 ## Sprint 42L — O trial volta: ciclo guiado de 14 dias (versão 1.19)
 
 Decisão da empresa em 13/10/2026, à tarde: o trial volta para todos, como
