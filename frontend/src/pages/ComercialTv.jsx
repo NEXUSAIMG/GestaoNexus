@@ -4,8 +4,11 @@ import {
   Phone, MessageCircle, UserPlus, CalendarCheck, Trophy, Radio, Maximize2, X,
   CalendarClock, Activity, Target, CalendarDays, LayoutDashboard, CheckCircle2, UserX, Sparkles,
   FlaskConical, AlertTriangle, Hourglass, Gauge, FileText, CalendarRange, Pause, Play,
+  Map as MapIcon, Flame, Thermometer,
 } from 'lucide-react';
 import { api, BASE_URL, mensagemDeErro } from '../api/client.js';
+// Mapa do Brasil: @svg-maps/brazil (CC BY 4.0) — crédito exibido na tela do mapa
+import mapaBrasil from '@svg-maps/brazil';
 
 /**
  * Sprint 42M — Comercial · modo TV.
@@ -24,11 +27,13 @@ const CELEBRACAO_MS = 12_000;
 
 /**
  * Sprint 42N — telas que se alternam na TV. Tempos em segundos, ajustáveis
- * pela URL: /comercial/tv?painel=40&mes=30&trial=25&reunioes=25 · ?fixo=trial trava numa tela.
+ * pela URL: /comercial/tv?painel=40&funil=30&mapa=30&mes=30&trial=25&reunioes=25 · ?fixo=mapa trava numa tela.
  * Na própria TV: botão Pausar no rodapé ou barra de espaço (fica guardado no navegador).
  */
 const TELAS = [
   { k: 'painel', nome: 'Painel do dia', icone: LayoutDashboard, padrao: 40 },
+  { k: 'funil', nome: 'Funil quente', icone: Flame, padrao: 30 },
+  { k: 'mapa', nome: 'Mapa', icone: MapIcon, padrao: 30 },
   { k: 'mes', nome: 'Visão do mês', icone: CalendarRange, padrao: 30 },
   { k: 'trial', nome: 'Trials', icone: FlaskConical, padrao: 25 },
   { k: 'reunioes', nome: 'Reuniões marcadas', icone: CalendarDays, padrao: 25 },
@@ -231,6 +236,10 @@ export default function ComercialTv() {
           <div key={tela} className="tv-trocar flex min-h-0 flex-1 flex-col gap-[1.1em]">
             {tela === 'reunioes' && dados.calendario ? (
               <TelaReunioes cal={dados.calendario} agora={agora} />
+            ) : tela === 'mapa' && dados.mapa ? (
+              <TelaMapa m={dados.mapa} />
+            ) : tela === 'funil' && dados.funil_quente ? (
+              <TelaFunilQuente f={dados.funil_quente} />
             ) : tela === 'mes' && dados.mes_visao ? (
               <TelaMes v={dados.mes_visao} esperado={esperadoMes} />
             ) : tela === 'trial' && dados.trial ? (
@@ -1026,6 +1035,257 @@ function FunilMes({ f }) {
         <div className="text-[0.95em] text-slate-400">Conexão (atenderam)</div>
         <div className="text-[2.1em] font-bold tabular-nums text-slate-100">{f.conexao == null ? '—' : `${f.conexao.toLocaleString('pt-BR')}%`}</div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 42P — Mapa da presença
+// ─────────────────────────────────────────────────────────────────────────
+// Do frio ao quente; cliente fecha em verde. Mesmas chaves de ESTAGIOS_MAPA (backend).
+const COR_ESTAGIO = {
+  cliente: '#10b981', trial: '#f97316', negociacao: '#f59e0b', reuniao: '#0ea5e9', contato: '#2563a8', prospeccao: '#3b4a5e',
+};
+const SEM_PRESENCA = '#1a2536';
+const CALLOUT = ['RN', 'PB', 'PE', 'AL', 'SE', 'DF', 'ES', 'RJ'];
+const COL_CHAMADA = 640;
+
+function TelaMapa({ m }) {
+  const porUf = useMemo(() => Object.fromEntries(m.estados.map((u) => [u.uf, u])), [m.estados]);
+  const svgRef = useRef(null);
+  const [centros, setCentros] = useState({});
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const c = {};
+    el.querySelectorAll('path[data-uf]').forEach((p) => {
+      const b = p.getBBox();
+      c[p.dataset.uf] = { x: b.x + b.width / 2, y: b.y + b.height / 2, w: b.width, h: b.height };
+    });
+    setCentros(c);
+  }, []);
+  // Ajustes finos de rótulo onde o centro do retângulo cai fora do estado
+  const AJUSTE = { PA: { x: 0, y: 10 }, AM: { x: 0, y: 6 }, MG: { x: 6, y: 0 }, BA: { x: -6, y: 4 }, GO: { x: 0, y: 6 }, PI: { x: 4, y: 16 }, MA: { x: -6, y: -4 }, CE: { x: 0, y: -2 } };
+  // Estados pequenos ou estreitos: rótulo fora do mapa, empilhado na coluna do mar
+  const chamadas = useMemo(() => {
+    const lista = CALLOUT.filter((uf) => centros[uf]).map((uf) => ({ uf, x: centros[uf].x, y: centros[uf].y }))
+      .sort((a, b) => a.y - b.y);
+    let ult = -Infinity;
+    lista.forEach((c) => { c.ly = Math.max(c.y, ult + 23); ult = c.ly; });
+    return lista;
+  }, [centros]);
+  const presentes = m.estados.length;
+  const kpis = [
+    { rot: 'Estados com cliente', v: m.estados_com.cliente, cor: COR_ESTAGIO.cliente },
+    { rot: 'Negociando (trial, proposta, reunião)', v: m.estados.filter((u) => u.trial || u.negociacao || u.reuniao).length, cor: COR_ESTAGIO.negociacao },
+    { rot: 'Com alguma presença', v: presentes, sufixo: '/ 27', cor: '#cbd5e1' },
+  ];
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+      <section className="relative col-span-7 flex min-h-0 flex-col rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+          <MapIcon className="h-[1.1em] w-[1.1em] text-sky-400" /> Nossa presença no Brasil
+        </h2>
+        <div className="relative min-h-0 flex-1">
+          <svg ref={svgRef} viewBox="0 0 715 639" className="absolute inset-0 h-full w-full" role="img" aria-label="Mapa do Brasil colorido pelo estágio mais avançado em cada estado">
+            {mapaBrasil.locations.map((loc) => {
+              const uf = loc.id.toUpperCase();
+              const u = porUf[uf];
+              return (
+                <path key={loc.id} data-uf={uf} d={loc.path}
+                  fill={u ? COR_ESTAGIO[u.melhor] : SEM_PRESENCA}
+                  stroke="#0b1220" strokeWidth="1.2" strokeLinejoin="round">
+                  <title>{loc.name}</title>
+                </path>
+              );
+            })}
+            {Object.entries(centros).filter(([uf]) => !CALLOUT.includes(uf)).map(([uf, c]) => {
+              const u = porUf[uf];
+              const aj = AJUSTE[uf] || { x: 0, y: 0 };
+              const x = c.x + aj.x; const y = c.y + aj.y;
+              const destaque = u && u.melhor !== 'prospeccao';
+              const fundoClaro = u && ['cliente', 'trial', 'negociacao', 'reuniao'].includes(u.melhor);
+              return (
+                <g key={uf} pointerEvents="none">
+                  <text x={x} y={y + (destaque ? -2 : 4)} textAnchor="middle" fontSize="13" fontWeight="700"
+                    fill={fundoClaro ? '#0b1220' : '#e2e8f0'}>{uf}</text>
+                  {destaque && (
+                    <text x={x} y={y + 13} textAnchor="middle" fontSize="11" fontWeight="600"
+                      fill={fundoClaro ? '#0b1220' : '#cbd5e1'}>
+                      {u.cliente ? `${u.cliente} cliente${u.cliente === 1 ? '' : 's'}` : `${u.ativos} ativo${u.ativos === 1 ? '' : 's'}`}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+            {chamadas.map(({ uf, x, y, ly }) => {
+              const u = porUf[uf];
+              const destaque = u && u.melhor !== 'prospeccao';
+              return (
+                <g key={uf} pointerEvents="none">
+                  <circle cx={x} cy={y} r="2.2" fill="#94a3b8" />
+                  <polyline points={`${x},${y} ${COL_CHAMADA - 30},${ly} ${COL_CHAMADA - 6},${ly}`} fill="none" stroke="#64748b" strokeWidth="0.8" />
+                  <rect x={COL_CHAMADA - 4} y={ly - 9} width="10" height="10" rx="2" fill={u ? COR_ESTAGIO[u.melhor] : SEM_PRESENCA} stroke="#475569" strokeWidth="0.6" />
+                  <text x={COL_CHAMADA + 11} y={ly + 0.5} fontSize="12.5" fontWeight="700" fill={destaque ? '#f8fafc' : '#94a3b8'}>{uf}</text>
+                  {destaque && (
+                    <text x={COL_CHAMADA + 33} y={ly + 0.5} fontSize="11" fontWeight="600" fill={COR_ESTAGIO[u.melhor] === '#2563a8' ? '#7cb4ee' : COR_ESTAGIO[u.melhor]}>
+                      {u.cliente ? `${u.cliente} cli.` : `${u.ativos} at.`}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="mt-[0.5em] flex flex-wrap items-center gap-x-[1.2em] gap-y-[0.3em] text-[0.95em] text-slate-300">
+          {m.estagios.map((e) => (
+            <span key={e.k} className="flex items-center gap-[0.4em]">
+              <span className="h-[0.9em] w-[0.9em] rounded-sm" style={{ background: COR_ESTAGIO[e.k] }} />{e.n}
+            </span>
+          ))}
+          <span className="flex items-center gap-[0.4em] text-slate-500"><span className="h-[0.9em] w-[0.9em] rounded-sm" style={{ background: SEM_PRESENCA }} />sem presença</span>
+        </div>
+        <div className="absolute bottom-[0.6em] right-[1em] text-[0.7em] text-slate-600">Mapa: svg-maps/brazil · CC BY 4.0</div>
+      </section>
+
+      <div className="col-span-5 flex min-h-0 flex-col gap-[1.1em]">
+        <div className="grid grid-cols-3 gap-[0.8em]">
+          {kpis.map((k) => (
+            <div key={k.rot} className="rounded-xl border border-slate-800 bg-slate-900/70 px-[0.9em] py-[0.7em]">
+              <div className="text-[0.9em] leading-tight text-slate-400">{k.rot}</div>
+              <div className="text-[2.6em] font-bold leading-tight tabular-nums" style={{ color: k.cor }}>{k.v}<span className="text-[0.45em] font-medium text-slate-500"> {k.sufixo || ''}</span></div>
+            </div>
+          ))}
+        </div>
+        <Painel titulo="Por estado" icone={Target} className="flex-1"
+          extra={<span className="text-[0.85em] text-slate-400">do mais avançado ao mais frio</span>}>
+          <div className="grid grid-cols-[3em_1fr_4.1em_4.1em_4.1em_4.1em_4.1em_4.4em] items-end gap-x-[0.3em] px-[0.3em] pb-[0.3em] text-[1.05em]">
+            {['UF', '', 'Cliente', 'Trial', 'Prop.', 'Reun.', 'Contato', 'Prosp.'].map((t, i) => (
+              <span key={i} className={`text-[0.7em] uppercase tracking-wide text-slate-500 ${i === 0 ? '' : i === 7 ? 'text-right' : 'text-center'}`}>{t}</span>
+            ))}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-[0.25em] overflow-hidden">
+            {m.estados.filter((u) => u.melhor !== 'prospeccao').slice(0, 12).map((u) => (
+              <div key={u.uf} className="grid grid-cols-[3em_1fr_4.1em_4.1em_4.1em_4.1em_4.1em_4.4em] items-center gap-x-[0.3em] rounded-md bg-slate-800/40 px-[0.3em] py-[0.25em] text-[1.05em] tabular-nums">
+                <span className="flex items-center gap-[0.35em] font-bold"><span className="h-[0.75em] w-[0.75em] rounded-sm" style={{ background: COR_ESTAGIO[u.melhor] }} />{u.uf}</span>
+                <span />
+                {['cliente', 'trial', 'negociacao', 'reuniao', 'contato'].map((k) => (
+                  <span key={k} className="text-center font-semibold" style={{ color: u[k] ? COR_ESTAGIO[k] === '#2563a8' ? '#7cb4ee' : COR_ESTAGIO[k] : '#334155' }}>{u[k] || '·'}</span>
+                ))}
+                <span className="text-right text-slate-400">{u.prospeccao || '·'}</span>
+              </div>
+            ))}
+            {m.estados.filter((u) => u.melhor === 'prospeccao').length > 0 && (
+              <div className="mt-[0.3em] text-[0.9em] text-slate-400">
+                Só prospecção: {m.estados.filter((u) => u.melhor === 'prospeccao').map((u) => u.uf).join(', ')}
+              </div>
+            )}
+          </div>
+          {(m.sem_uf_ativos > 0 || m.uf_inferida > 0) && (
+            <div className="mt-[0.5em] border-t border-slate-800 pt-[0.5em] text-[0.85em] leading-snug text-slate-400">
+              {m.sem_uf_ativos > 0 && <><b className="text-amber-300">{m.sem_uf_ativos}</b> em negociação sem estado no cadastro (fora do mapa). </>}
+              {m.uf_inferida > 0 && <>{m.uf_inferida} com estado deduzido pelo nome.</>}
+            </div>
+          )}
+        </Painel>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 42P — Funil quente
+// ─────────────────────────────────────────────────────────────────────────
+const COR_ETAPA_FUNIL = {
+  cadencia: '#2563a8', diagnostico: '#0ea5e9', trial: '#f97316', proposta: '#f59e0b', corregedoria: '#eab308', ganho: '#10b981',
+};
+const corTemp = (t) => (t >= 75 ? '#f43f5e' : t >= 60 ? '#f97316' : t >= 35 ? '#f59e0b' : '#64748b');
+
+function TelaFunilQuente({ f }) {
+  const fila = f.funil.find((e) => e.k === 'prospect');
+  const etapas = f.funil.filter((e) => e.k !== 'prospect');
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+      <section className="col-span-6 flex min-h-0 flex-col gap-[0.6em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <div className="flex items-baseline justify-between">
+          <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+            <Flame className="h-[1.1em] w-[1.1em] text-orange-400" /> Onde estão os cartórios hoje
+          </h2>
+          {fila && <span className="text-[1em] text-slate-400">+ <b className="text-slate-200 tabular-nums">{fila.total.toLocaleString('pt-BR')}</b> na fila de prospecção</span>}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-[0.4em] py-[0.4em]">
+          {etapas.map((e, i) => {
+            // Formato de funil: a largura vem da posição (de cima pra baixo), o número diz o volume
+            const n = etapas.length;
+            const passo = 52 / Math.max(1, n - 1);
+            const topo = 100 - i * passo;
+            const base = topo - (i === n - 1 ? passo * 0.6 : passo);
+            const recuo = ((topo - base) / 2 / topo) * 100;
+            const cor = COR_ETAPA_FUNIL[e.k] || '#475569';
+            const escuro = ['trial', 'proposta', 'corregedoria', 'ganho', 'diagnostico'].includes(e.k);
+            return (
+              <div key={e.k} className="flex min-h-[3em] flex-1 items-stretch">
+                <div className="flex flex-1 justify-center">
+                  <div className="relative flex flex-col items-center justify-center px-[1.2em] text-center transition-all duration-700"
+                    style={{ width: `${topo}%`, background: cor, clipPath: `polygon(0 0, 100% 0, ${100 - recuo}% 100%, ${recuo}% 100%)` }}>
+                    <span className={`text-[2.3em] font-extrabold leading-none tabular-nums ${escuro ? 'text-slate-950' : 'text-white'}`}>{e.total}</span>
+                    <span className={`mt-[0.15em] text-[1.1em] font-semibold leading-tight ${escuro ? 'text-slate-900' : 'text-white/90'}`}>{e.nome}</span>
+                  </div>
+                </div>
+                <div className="flex w-[5.5em] shrink-0 items-center pl-[0.6em]">
+                  {e.quentes > 0 && (
+                    <span className="inline-flex items-center gap-[0.2em] rounded-full bg-rose-500/15 px-[0.55em] py-[0.15em] text-[1.25em] font-bold text-rose-300">
+                      <Flame className="h-[0.85em] w-[0.85em]" />{e.quentes}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-center gap-[1.4em] text-[1em]">
+          <span className="text-slate-400">Temperatura de quem está em negociação:</span>
+          <span className="font-bold text-rose-300">{f.resumo.quentes} quentes</span>
+          <span className="font-bold text-amber-300">{f.resumo.mornos} mornos</span>
+          <span className="font-bold text-slate-400">{f.resumo.frios} frios</span>
+        </div>
+      </section>
+
+      <section className="col-span-6 flex min-h-0 flex-col gap-[0.6em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+          <Thermometer className="h-[1.1em] w-[1.1em] text-rose-400" /> Mais quentes agora
+        </h2>
+        {f.quentes.length === 0 ? (
+          <div className="grid flex-1 place-items-center text-[1.3em] text-slate-500">Nenhum cartório em negociação ainda.</div>
+        ) : (
+          <ul className="flex min-h-0 flex-1 flex-col gap-[0.45em] overflow-hidden">
+            {f.quentes.slice(0, 8).map((q, i) => (
+              <li key={q.id} className="flex min-h-0 flex-1 items-center gap-[0.8em] rounded-lg bg-slate-800/50 px-[0.8em] py-[0.35em]">
+                <span className="w-[1.4em] text-center text-[1.2em] font-bold text-slate-500">{i + 1}</span>
+                <div className="flex w-[4.4em] shrink-0 flex-col items-center">
+                  <span className="text-[1.7em] font-extrabold leading-none tabular-nums" style={{ color: corTemp(q.temperatura) }}>{q.temperatura}°</span>
+                  <div className="mt-[0.25em] h-[0.35em] w-full overflow-hidden rounded-full bg-slate-700">
+                    <div className="h-full rounded-full" style={{ width: `${q.temperatura}%`, background: corTemp(q.temperatura) }} />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-[0.5em]">
+                    <span className="truncate text-[1.2em] font-semibold">{q.nome}</span>
+                  </div>
+                  <div className="flex items-center gap-[0.4em] text-[0.88em] text-slate-400">
+                    <span className="rounded px-[0.4em] font-semibold text-slate-950" style={{ background: COR_ETAPA_FUNIL[q.etapa] || '#64748b' }}>{q.etapa_nome}</span>
+                    <span className="truncate">{[q.dono, q.local].filter(Boolean).join(' · ')}</span>
+                  </div>
+                  <div className="truncate text-[0.88em] text-slate-300">{q.motivos.join(' · ')}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="text-[0.82em] leading-snug text-slate-500">
+          Temperatura (0–100): estágio + reunião marcada nos próximos dias + resposta recente + proposta na mesa + uso no trial − dias sem contato. Quente a partir de {f.limiar}°.
+        </div>
+      </section>
     </div>
   );
 }

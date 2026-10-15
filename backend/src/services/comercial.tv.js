@@ -223,6 +223,7 @@ export async function calcularTv() {
     calendario: await calendarioReunioes(hoje),
     trial: await controleTrial(hoje, desd),
     mes_visao: await visaoMes(hoje, { metas, desd, diasUteis, rankMes }),
+    ...(await mapaEQuentes(hoje)),
   };
 }
 
@@ -507,5 +508,152 @@ export async function visaoMes(hoje, { metas, desd, diasUteis, rankMes }) {
   return {
     mes, inicio, fim: ultimo, dia_util: du, totais: tot, indicadores,
     meta_dia_toques: metaDiaToques, dias, funil, ranking,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 42P — Mapa da presença e funil dos mais quentes (telas da TV)
+// ---------------------------------------------------------------------------
+
+export const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+const NOME_UF = {
+  'acre': 'AC', 'alagoas': 'AL', 'amazonas': 'AM', 'amapa': 'AP', 'bahia': 'BA', 'ceara': 'CE', 'distrito federal': 'DF',
+  'espirito santo': 'ES', 'goias': 'GO', 'maranhao': 'MA', 'minas gerais': 'MG', 'mato grosso do sul': 'MS', 'mato grosso': 'MT',
+  'para': 'PA', 'paraiba': 'PB', 'pernambuco': 'PE', 'piaui': 'PI', 'parana': 'PR', 'rio de janeiro': 'RJ',
+  'rio grande do norte': 'RN', 'rondonia': 'RO', 'roraima': 'RR', 'rio grande do sul': 'RS', 'santa catarina': 'SC',
+  'sergipe': 'SE', 'sao paulo': 'SP', 'tocantins': 'TO',
+};
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/**
+ * UF do cadastro; se vazia ou inválida, tenta pelo nome (só para exibir,
+ * nada é gravado): "TJPE - ...", "... - Rio Verde/GO", "Estado de São Paulo".
+ */
+export function ufDoLead(l) {
+  const u = String(l.uf || '').trim().toUpperCase();
+  if (UFS.includes(u)) return { uf: u, inferida: false };
+  const nome = semAcento(l.nome);
+  let m = nome.match(/\bTJ([A-Z]{2})\b/);
+  if (m && UFS.includes(m[1])) return { uf: m[1], inferida: true };
+  m = nome.match(/[\/(\-–]\s*([A-Z]{2})\s*\)?\s*$/);
+  if (m && UFS.includes(m[1])) return { uf: m[1], inferida: true };
+  m = nome.toLowerCase().match(/estado d[eo] ([a-z ]+?)(?:[,.)]|$)/);
+  if (m && NOME_UF[m[1].trim()]) return { uf: NOME_UF[m[1].trim()], inferida: true };
+  return { uf: null, inferida: false };
+}
+
+// Do mais avançado ao mais frio — o mapa pinta cada estado pelo melhor estágio que tem.
+export const ESTAGIOS_MAPA = [
+  { k: 'cliente', n: 'Cliente', etapas: ['ganho'] },
+  { k: 'trial', n: 'Em trial', etapas: ['trial'] },
+  { k: 'negociacao', n: 'Proposta / negociação', etapas: ['proposta', 'corregedoria'] },
+  { k: 'reuniao', n: 'Reunião de apresentação', etapas: ['diagnostico'] },
+  { k: 'contato', n: 'Em contato', etapas: ['cadencia'] },
+  { k: 'prospeccao', n: 'Só prospecção', etapas: ['prospect'] },
+];
+const ESTAGIO_DA_ETAPA = Object.fromEntries(ESTAGIOS_MAPA.flatMap((e) => e.etapas.map((et) => [et, e.k])));
+
+/**
+ * Temperatura de 0 a 100 de um cartório em negociação, com os motivos.
+ * Estágio dá a base; o que aconteceu nos últimos dias esquenta; parado esfria.
+ */
+export function temperatura(l, hoje) {
+  const motivos = [];
+  let t = { cadencia: 15, diagnostico: 35, trial: 50, proposta: 50, corregedoria: 45 }[l.etapa] ?? 0;
+  if (l.etapa === 'trial') {
+    const pts = pontuacao(l);
+    t += Math.round(pts / 5); // até +20
+    motivos.push(`trial · ${pts} pts de uso`);
+  }
+  if (l.proposta_valor) { t += 10; motivos.push(`proposta ${Number(l.proposta_valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}`); }
+  if (l.proxima_reuniao) {
+    const dias = Math.round((Date.parse(l.proxima_reuniao.slice(0, 10)) - Date.parse(hoje)) / 864e5);
+    if (dias <= 7) { t += dias <= 1 ? 20 : 12; motivos.push(dias === 0 ? `reunião hoje ${l.proxima_reuniao.slice(11)}` : dias === 1 ? `reunião amanhã ${l.proxima_reuniao.slice(11)}` : `reunião em ${dias} dias`); }
+  }
+  if (l.ultima_conexao) {
+    const dias = Math.round((Date.parse(hoje) - Date.parse(l.ultima_conexao)) / 864e5);
+    if (dias <= 3) { t += 20; motivos.push(dias === 0 ? 'respondeu hoje' : `respondeu há ${dias} dia${dias === 1 ? '' : 's'}`); }
+    else if (dias <= 7) { t += 10; motivos.push(`respondeu há ${dias} dias`); }
+  }
+  const semContato = l.ultimo_toque ? Math.round((Date.parse(hoje) - Date.parse(l.ultimo_toque)) / 864e5) : null;
+  if (semContato == null || semContato > 14) { t -= 15; motivos.push(semContato == null ? 'nenhum contato registrado' : `${semContato} dias sem contato`); }
+  return { t: Math.max(0, Math.min(100, t)), motivos };
+}
+
+export async function mapaEQuentes(hoje) {
+  const { rows } = await query(
+    `SELECT l.id, l.nome, l.cidade, l.uf, l.etapa, l.dono_id, pd.nome AS dono_nome, l.sinais,
+            l.trial_inicio::text AS trial_inicio, l.etapa_desde::text AS etapa_desde,
+            (SELECT max(t.data)::text FROM comercial_toques t WHERE t.lead_id = l.id AND t.estornado_em IS NULL) AS ultimo_toque,
+            (SELECT max(t.data)::text FROM comercial_toques t WHERE t.lead_id = l.id AND t.estornado_em IS NULL
+               AND t.resultado = ANY($1)) AS ultima_conexao,
+            (SELECT to_char(min(r.inicio) AT TIME ZONE ${FUSO}, 'YYYY-MM-DD HH24:MI') FROM comercial_reunioes r
+              WHERE r.lead_id = l.id AND r.status = 'agendada' AND r.inicio >= now() - interval '2 hours') AS proxima_reuniao,
+            (SELECT x.valor_mensal::float FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada'
+              ORDER BY x.enviada_em DESC LIMIT 1) AS proposta_valor
+       FROM comercial_leads l LEFT JOIN pessoas_acesso pd ON pd.id = l.dono_id
+      WHERE l.arquivado_em IS NULL AND l.etapa <> 'perdido'`,
+    [RESULTADOS_CONECTAM],
+  );
+
+  // ---- Mapa: contagem por UF e estágio ----
+  const porUf = {};
+  let semUf = 0; let semUfAtivos = 0; let inferidas = 0;
+  for (const l of rows) {
+    const est = ESTAGIO_DA_ETAPA[l.etapa];
+    if (!est) continue;
+    const { uf, inferida } = ufDoLead(l);
+    if (!uf) { semUf += 1; if (est !== 'prospeccao') semUfAtivos += 1; continue; }
+    if (inferida) inferidas += 1;
+    const u = (porUf[uf] ||= { uf, total: 0, ...Object.fromEntries(ESTAGIOS_MAPA.map((e) => [e.k, 0])) });
+    u[est] += 1; u.total += 1;
+  }
+  const ordemEst = ESTAGIOS_MAPA.map((e) => e.k);
+  const estados = Object.values(porUf).map((u) => ({
+    ...u,
+    melhor: ordemEst.find((k) => u[k] > 0),
+    ativos: u.total - u.prospeccao,
+  })).sort((a, b) => ordemEst.indexOf(a.melhor) - ordemEst.indexOf(b.melhor) || b.cliente - a.cliente || b.ativos - a.ativos || b.total - a.total);
+  const totais = Object.fromEntries(ESTAGIOS_MAPA.map((e) => [e.k, estados.reduce((s, u) => s + u[e.k], 0)]));
+  const mapa = {
+    estagios: ESTAGIOS_MAPA.map(({ k, n }) => ({ k, n })),
+    estados, totais,
+    estados_com: Object.fromEntries(ordemEst.map((k) => [k, estados.filter((u) => u[k] > 0).length])),
+    sem_uf: semUf, sem_uf_ativos: semUfAtivos, uf_inferida: inferidas,
+  };
+
+  // ---- Funil quente ----
+  const etapasFunil = ['prospect', 'cadencia', 'diagnostico', 'trial', 'proposta', 'corregedoria', 'ganho'];
+  const contagem = Object.fromEntries(etapasFunil.map((e) => [e, 0]));
+  const quentes = [];
+  for (const l of rows) {
+    if (contagem[l.etapa] != null) contagem[l.etapa] += 1;
+    if (!['cadencia', 'diagnostico', 'trial', 'proposta', 'corregedoria'].includes(l.etapa)) continue;
+    const { t, motivos } = temperatura(l, hoje);
+    const { uf } = ufDoLead(l);
+    quentes.push({
+      id: l.id, nome: l.nome, etapa: l.etapa, etapa_nome: ETAPA[l.etapa]?.n || l.etapa,
+      local: [l.cidade, uf].filter(Boolean).join('/') || null,
+      dono: l.dono_id ? nomeCurto(l.dono_nome) : null, temperatura: t, motivos,
+    });
+  }
+  quentes.sort((a, b) => b.temperatura - a.temperatura || a.nome.localeCompare(b.nome));
+  const QUENTE = 60;
+  const funil = etapasFunil.map((e) => ({
+    k: e, nome: ETAPA[e]?.n || e, total: contagem[e],
+    quentes: quentes.filter((q) => q.etapa === e && q.temperatura >= QUENTE).length,
+  })).filter((e) => e.total > 0 || ['cadencia', 'diagnostico', 'trial', 'proposta', 'ganho'].includes(e.k));
+
+  return {
+    mapa,
+    funil_quente: {
+      funil, limiar: QUENTE,
+      quentes: quentes.slice(0, 10),
+      resumo: {
+        quentes: quentes.filter((q) => q.temperatura >= QUENTE).length,
+        mornos: quentes.filter((q) => q.temperatura >= 35 && q.temperatura < QUENTE).length,
+        frios: quentes.filter((q) => q.temperatura < 35).length,
+      },
+    },
   };
 }
