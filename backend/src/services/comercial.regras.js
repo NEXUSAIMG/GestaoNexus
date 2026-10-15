@@ -356,14 +356,29 @@ export function toqueDevido(l, hoje = hojeBR()) {
  * l.proposta_enviada_em = envio da proposta vigente;
  * l.toques_pos_proposta = contatos registrados depois do envio.
  */
+/**
+ * Base do roteiro de retorno: o envio da proposta. Lead em Aguardando retorno
+ * SEM proposta registrada (veio do quadro antigo ou foi forçado) usa a data em
+ * que entrou na etapa — sem isso ele ficava parado para sempre: o roteiro nunca
+ * começava e "Sumiu" nunca era liberado (fix dos Lembretes de 14/10).
+ */
+export function baseRetorno(l) {
+  if (l.etapa !== 'proposta') return null;
+  return l.proposta_enviada_em || l.etapa_desde || null;
+}
+
 export function retornoDevido(l, hoje = hojeBR()) {
-  if (l.etapa !== 'proposta' || !l.proposta_enviada_em) return null;
+  const base = baseRetorno(l);
+  if (!base) return null;
   const feitos = Number(l.toques_pos_proposta || 0);
   if (feitos >= RETORNO.length) return null;
   const passo = RETORNO[feitos];
-  const previsto = addDias(l.proposta_enviada_em, passo.d);
+  const previsto = addDias(base, passo.d);
   if (previsto > hoje) return null;
-  return { ...passo, n: feitos + 1, de: RETORNO.length, previsto, atrasado: previsto < hoje };
+  return {
+    ...passo, n: feitos + 1, de: RETORNO.length, previsto, atrasado: previsto < hoje,
+    sem_proposta: !l.proposta_enviada_em,
+  };
 }
 
 /**

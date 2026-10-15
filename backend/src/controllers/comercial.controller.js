@@ -9,6 +9,7 @@ import {
   hojeBR, mesDe, addDias, aplicarEtapa, pendenciasPortao, ehRetrocesso,
   RETORNO, MOTIVOS_VOLTAM, DIAS_PARA_VOLTAR, pendenciasPerda,
   MARCOS_TRIAL, DIAS_TRIAL, PRORROGACAO_MAX,
+  baseRetorno,
 } from '../services/comercial.regras.js';
 import {
   SELECT_LEAD, enriquecer, carregarLead, reunioesDoLead, propostasDoLead,
@@ -195,6 +196,36 @@ function checarRetroativo(req, inicio) {
   if (new Date(inicio).getTime() < Date.now() - 3600_000 && !ehGestor(req)) {
     throw new AppError('Reunião no passado só pode ser registrada pela gestão comercial (registro retroativo).', 403, 'retroativo');
   }
+}
+
+/**
+ * Lembretes 14/10 — reunião duplicada. Barra uma segunda reunião do mesmo tipo
+ * quando o cartório já tem uma agendada (o caminho certo é Remarcar) ou já tem
+ * uma registrada no mesmo dia (registro em dobro). "Outra" fica livre.
+ */
+async function checarReuniaoDuplicada(client, leadId, tipo, inicio) {
+  if (tipo === 'outra') return;
+  const { rows } = await client.query(
+    `SELECT r.status, to_char(r.inicio AT TIME ZONE 'America/Sao_Paulo', 'DD/MM "às" HH24:MI') AS quando, p.nome AS criou,
+            (r.inicio AT TIME ZONE 'America/Sao_Paulo')::date = ($3::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date AS mesmo_dia
+       FROM comercial_reunioes r LEFT JOIN pessoas_acesso p ON p.id = r.criado_por_id
+      WHERE r.lead_id = $1 AND r.tipo = $2
+        AND (r.status = 'agendada'
+          OR (r.status IN ('realizada','faltou')
+              AND (r.inicio AT TIME ZONE 'America/Sao_Paulo')::date = ($3::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date))
+      ORDER BY (r.status = 'agendada') DESC, r.inicio LIMIT 1`,
+    [leadId, tipo, inicio],
+  );
+  if (!rows.length) return;
+  const r = rows[0];
+  const nome = String(TIPOS_REUNIAO[tipo] || 'reunião').split(' (')[0];
+  const quem = r.criou ? ` (registrada por ${r.criou})` : '';
+  throw new AppError(
+    r.status === 'agendada'
+      ? `Este cartório já tem ${nome} agendada para ${r.quando}${quem}. Para mudar a data use "Remarcar"; se não vai acontecer, marque como "Cancelada".`
+      : `Já existe ${nome} registrada em ${r.quando} (${r.status})${quem}. Se esse registro está errado, peça à gestão para excluí-lo.`,
+    409, 'reuniao_duplicada',
+  );
 }
 
 /** Troca de responsável: gestão troca livre; os demais pegam lead sem dono ou repassam o próprio. */
@@ -571,11 +602,13 @@ export async function registrarToque(req, res, next) {
     if (d.tipo === 'trial' && lead.etapa !== 'trial') throw new AppError('Este cartório não está em trial.', 400, 'fora_do_trial');
     // Sprint 42G — em Aguardando retorno, o próximo passo vem do roteiro de
     // retorno: registrou o contato, o sistema já marca o seguinte.
-    if (lead.etapa === 'proposta' && lead.proposta_enviada_em && d.tipo === 'avulso' && !(d.proximo_passo && d.proxima_data)) {
-      const feitos = Number(lead.toques_pos_proposta || 0) + (hoje > lead.proposta_enviada_em ? 1 : 0);
+    const baseRet = baseRetorno(lead);
+    if (baseRet && d.tipo === 'avulso' && !(d.proximo_passo && d.proxima_data)) {
+      // contato de hoje entra na conta quando é depois do envio (sem proposta: sempre)
+      const feitos = Number(lead.toques_pos_proposta || 0) + (!lead.proposta_enviada_em || hoje > lead.proposta_enviada_em ? 1 : 0);
       const passo = RETORNO[feitos];
       if (passo) {
-        const previsto = addDias(lead.proposta_enviada_em, passo.d);
+        const previsto = addDias(baseRet, passo.d);
         d.proximo_passo = `Retorno ${feitos + 1}/${RETORNO.length} (${passo.canal}): ${passo.acao}`;
         d.proxima_data = previsto > hoje ? previsto : addDias(hoje, 1);
       }
@@ -623,6 +656,7 @@ export async function registrarToque(req, res, next) {
     }
     await client.query(`UPDATE comercial_leads SET ${sets.join(', ')} WHERE id = $1`, vals);
     if (d.reuniao) {
+      await checarReuniaoDuplicada(client, lead.id, d.reuniao.tipo, d.reuniao.inicio);
       await client.query(
         `INSERT INTO comercial_reunioes (lead_id, tipo, inicio, participantes, nota, responsavel_id, criado_por_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -721,6 +755,7 @@ export async function agendarReuniao(req, res, next) {
     checarRetroativo(req, d.inicio);
     const lead = await carregarLead(req.params.id);
     exigirContatoLiberado(lead);
+    await checarReuniaoDuplicada({ query }, lead.id, d.tipo, d.inicio);
     const { rows } = await query(
       `INSERT INTO comercial_reunioes (lead_id, tipo, inicio, participantes, nota, responsavel_id, criado_por_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -750,6 +785,35 @@ export async function desfechoReuniao(req, res, next) {
     if (!rowCount) throw new AppError('Esta reunião já tem desfecho registrado.', 409, 'ja_registrado');
     await query(`UPDATE comercial_leads SET atualizado_em = now() WHERE id = $1`, [r.lead_id]);
     await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.reuniao.desfecho', detalhes: { reuniao_id: r.id, lead_id: r.lead_id, status: b.status }, req });
+    res.json({ reunioes: await reunioesDoLead(r.lead_id) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * DELETE /comercial/reunioes/:id {motivo} — só a gestão. Para registro errado
+ * ou em dobro (Lembretes 14/10). A reunião sai das contas; o que era fica no
+ * histórico do cartório (comercial_alteracoes) e no log de ações.
+ */
+export async function excluirReuniao(req, res, next) {
+  try {
+    exigirGestor(req, 'Só a gestão comercial exclui reunião.');
+    const b = z.object({ motivo: justificativa }).parse(req.body || {});
+    const { rows } = await query(
+      `SELECT r.*, to_char(r.inicio AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') AS quando, p.nome AS criou
+         FROM comercial_reunioes r LEFT JOIN pessoas_acesso p ON p.id = r.criado_por_id WHERE r.id = $1`,
+      [req.params.id],
+    );
+    if (!rows.length) throw new NaoEncontradoError('Reunião não encontrada');
+    const r = rows[0];
+    const desc = `${String(TIPOS_REUNIAO[r.tipo] || r.tipo).split(' (')[0]} de ${r.quando} (${r.status}${r.criou ? `, registrada por ${r.criou}` : ''})`;
+    await query(`DELETE FROM comercial_reunioes WHERE id = $1`, [r.id]);
+    await query(
+      `INSERT INTO comercial_alteracoes (lead_id, campo, de, para, pessoa_id) VALUES ($1,'reuniao_excluida',$2,$3,$4)`,
+      [r.lead_id, desc, b.motivo, req.pessoa.id],
+    );
+    await query(`UPDATE comercial_leads SET atualizado_em = now() WHERE id = $1`, [r.lead_id]);
+    const { quando, criou, ...snapshot } = r;
+    await registrarAcao({ pessoa_acesso_id: req.pessoa.id, acao: 'comercial.reuniao.excluir', detalhes: { reuniao: snapshot, motivo: b.motivo }, req });
     res.json({ reunioes: await reunioesDoLead(r.lead_id) });
   } catch (err) { next(err); }
 }

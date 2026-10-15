@@ -158,6 +158,7 @@ export function VistaHoje({ painel, cfg, escopo, onAbrir, onToque, onMarco, onMu
               <b className="text-slate-700">Retorno {x.n}/{x.de} · {x.canal}</b> — {x.acao}
               {x.lead.dono_nome && <> · {x.lead.dono_nome}</>}
               {x.atrasado && <> <Pill nivel="crit">atrasado desde {dataBr(x.previsto)}</Pill></>}
+              {x.sem_proposta && <> <Pill nivel="warn" title="Registre a proposta enviada na ficha do cartório">sem proposta registrada</Pill></>}
             </p>
           </div>
           <button type="button" className={btnMini} onClick={() => onToque(x.lead, 'avulso')}>Registrar</button>

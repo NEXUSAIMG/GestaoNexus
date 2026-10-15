@@ -398,6 +398,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
                 </div>
                 <Pill nivel={ST_REUNIAO[r.status]}>{r.status}</Pill>
                 {r.status === 'agendada' && <button type="button" className="text-xs font-medium text-nexus-700 hover:underline" onClick={() => setModal({ tipo: 'desfecho', reuniao: r })}>desfecho</button>}
+                {gestor && <button type="button" className="text-xs font-medium text-red-700 hover:underline" title="Só a gestão: para registro errado ou em dobro" onClick={() => setModal({ tipo: 'excluirReuniao', reuniao: r })}>excluir</button>}
               </li>
             ))}
           </ul>
@@ -528,6 +529,16 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
       {modal?.tipo === 'estornar' && <EstornoModal url={modal.url} corpoExtra={modal.corpo} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'reuniao' && <ReuniaoModal cfg={cfg} lead={leadMin} tipoPadrao={modal.tipoReuniao || (etapaReal === 'ganho' ? 'ativacao' : 'diagnostico')} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'desfecho' && <DesfechoModal reuniao={modal.reuniao} onFechar={() => setModal(null)} onFeito={aposModal} />}
+      {modal?.tipo === 'excluirReuniao' && (
+        <TextoModal titulo="Excluir reunião"
+          explicacao={`${cfg.tipos_reuniao[modal.reuniao.tipo]} de ${dataHoraBr(modal.reuniao.inicio)} (${modal.reuniao.status}). Use só para registro errado ou em dobro: a reunião sai das contas e do calendário, e fica registrado no histórico quem excluiu e por quê. Para reunião que não vai acontecer, prefira o desfecho "Cancelada".`}
+          rotulo="Por que excluir? *"
+          onFechar={() => setModal(null)}
+          onConfirmar={async (motivo) => {
+            try { await api.delete(`/comercial/reunioes/${modal.reuniao.id}`, { data: { motivo } }); await aposModal(); }
+            catch (err) { setModal(null); setErro(mensagemDeErro(err)); }
+          }} />
+      )}
       {modal?.tipo === 'prorrogar' && <ProrrogarModal lead={leadMin} max={cfg.prorrogacao_max || 7} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'proposta' && <PropostaModal lead={leadMin} onFechar={() => setModal(null)} onFeito={aposModal} />}
       {modal?.tipo === 'pagamento' && <PagamentoModal lead={leadMin} hoje={hoje} onFechar={() => setModal(null)} onFeito={aposModal} />}
@@ -561,6 +572,7 @@ export default function LeadDrawer({ id, cfg, padrao, onFechar, onMudou, onCriad
 }
 
 const ROTULO_CAMPO = {
+  reuniao_excluida: 'Reunião excluída (motivo)',
   nome: 'Nome', segmento: 'Segmento', cidade: 'Cidade', uf: 'UF', contato: 'Titular', telefone: 'Telefone', email: 'E-mail',
   cns: 'CNS', cnpj: 'CNPJ', dono_id: 'Responsável', origem: 'Origem', campanha: 'Campanha', valor_mensal: 'Valor mensal',
   motivo_perda: 'Motivo da perda', motivo_perda_obs: 'Detalhe da perda', proximo_passo: 'Próximo passo', proxima_data: 'Data do próximo passo',

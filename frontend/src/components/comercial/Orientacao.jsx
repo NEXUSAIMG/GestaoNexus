@@ -153,6 +153,12 @@ function proximaAcaoBase(lead, cfg, admin) {
     case 'proposta': {
       const vig = (lead.propostas || []).find((x) => x.status === 'enviada');
       if (vig && vig.validade < hoje) return { nivel: 'crit', titulo: 'A proposta venceu', texto: 'Ligue para o cartório. Se ainda houver interesse, registre uma nova proposta; se não, marque como Perdido com o motivo.', acao: 'toque:avulso', rotulo: 'Registrar ligação' };
+      // Lembretes 14/10 — em Aguardando retorno sem proposta registrada o roteiro
+      // conta da entrada na etapa; o primeiro pedido é registrar a proposta enviada.
+      if (!vig && !(lead.propostas || []).some((x) => x.status === 'aceita')) {
+        const dias = diffDias(lead.etapa_desde, hoje);
+        return { nivel: 'crit', titulo: 'Sem proposta registrada', texto: `Está em Aguardando retorno há ${dias} dia${dias === 1 ? '' : 's'} sem proposta no sistema. Se a proposta foi enviada, registre-a (plano, valor e validade): o roteiro de retorno passa a valer. Se não foi, volte o cartório para a etapa certa.`, acao: 'proposta', rotulo: 'Registrar proposta' };
+      }
       // Sprint 42G — roteiro de retorno: insistir com método
       if (vig && cfg.retorno) {
         const feitos = Number(lead.toques_pos_proposta || 0);

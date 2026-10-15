@@ -93,7 +93,8 @@ export const SELECT_LEAD = `
          (SELECT max(x.enviada_em)::text FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada') AS proposta_enviada_em,
          (SELECT count(*)::int FROM comercial_toques t
            WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso')
-             AND t.data > (SELECT max(x.enviada_em) FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada')) AS toques_pos_proposta,
+             AND t.data > COALESCE((SELECT max(x.enviada_em) FROM comercial_propostas x WHERE x.lead_id = l.id AND x.status = 'enviada'),
+                                   CASE WHEN l.etapa = 'proposta' THEN l.etapa_desde - 1 END)) AS toques_pos_proposta,
          (SELECT count(*)::int FROM comercial_toques t
            WHERE t.lead_id = l.id AND t.estornado_em IS NULL AND t.tipo IN ('cadencia','avulso') AND t.data >= l.etapa_desde) AS toques_na_etapa,
          -- Sprint 42K — contatos que tiveram resposta nesta etapa (para "3 sem resposta")

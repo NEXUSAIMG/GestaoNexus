@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   config, listar, obter, verificar, criar, atualizar, arquivar,
   registrarToque, estornarToque, estornarToqueRoteiro,
-  agendarReuniao, desfechoReuniao, remarcarReuniao,
+  agendarReuniao, desfechoReuniao, remarcarReuniao, excluirReuniao,
   registrarProposta, statusProposta, confirmarPagamento, recompensaIndicacao,
   painel, obterMetas, salvarMetas,
   importarLista, prorrogarTrial, previaImportarQuadro, importarQuadro, pegarDaFila, listarEspelhos, atualizarEspelho,
@@ -63,6 +63,7 @@ router.post('/toques/:id/estornar', estornarToque);
 router.post('/leads/:id/reunioes', agendarReuniao);
 router.post('/reunioes/:id/desfecho', desfechoReuniao);
 router.post('/reunioes/:id/remarcar', remarcarReuniao);
+router.delete('/reunioes/:id', excluirReuniao); // só a gestão; registro errado/duplicado
 
 // Proposta, pagamento, indicação
 router.post('/leads/:id/propostas', registrarProposta);
