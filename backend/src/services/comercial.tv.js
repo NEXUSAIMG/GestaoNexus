@@ -7,6 +7,7 @@ import {
 import {
   carregarFeriados, conferirPagamentosAsaas, metasDoMes, totaisFunil, placar,
 } from './comercial.dados.js';
+import { rankingEmails } from './comercial.emails.js';
 
 /**
  * Sprint 42M — Painel de TV do Comercial ("modo TV").
@@ -224,6 +225,22 @@ export async function calcularTv() {
     trial: await controleTrial(hoje, desd),
     mes_visao: await visaoMes(hoje, { metas, desd, diasUteis, rankMes }),
     ...(await mapaEQuentes(hoje)),
+    emails: await emailsDoMes(inicioMes, hoje), // Sprint 44
+  };
+}
+
+/** Sprint 44 — e-mails mais utilizados no mês (tela da TV): só modelo e nome curto. */
+export async function emailsDoMes(de, ate) {
+  const r = await rankingEmails(de, ate);
+  return {
+    de: r.de, ate: r.ate, total_envios: r.total_envios, taxa_resposta: r.taxa_resposta, sem_modelo: r.sem_modelo,
+    modelos: r.modelos.slice(0, 8).map((m) => ({
+      id: m.id, titulo: m.titulo, envios: m.envios, respostas: m.respostas, reunioes: m.reunioes, taxa_resposta: m.taxa_resposta,
+    })),
+    pessoas: r.pessoas.filter((p) => p.id && (p.envios || p.sem_modelo)).slice(0, 8).map((p) => ({
+      id: p.id, nome: nomeCurto(p.nome), envios: p.envios, sem_modelo: p.sem_modelo, taxa_resposta: p.taxa_resposta,
+      mais_usado: p.mais_usado ? { titulo: p.mais_usado.titulo, envios: p.mais_usado.envios } : null,
+    })),
   };
 }
 

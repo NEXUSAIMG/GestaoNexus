@@ -45,7 +45,7 @@ router.get('/saude', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     node_env: process.env.NODE_ENV ?? '(não definido)',
-    versao: '1.20', // bump a cada deploy novo (1.20 = Sprint 43 frente AdaptAI no Comercial)
+    versao: '1.21', // bump a cada deploy novo (1.21 = Sprint 44 e-mails mais utilizados)
     sprints_ativas: 'até 34 (Projetos: subtarefas, dependências, campos personalizados, '
       + 'WIP, tipo de coluna, vínculos de negócio, apontamento de horas)',
   });

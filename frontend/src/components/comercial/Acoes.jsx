@@ -21,22 +21,60 @@ export function emailDoRoteiro(titulo, lead, vendedor) {
   return m ? { assunto: m[1], corpo: t.slice(m[0].length) } : { assunto: '', corpo: t };
 }
 
-function AjudaEmail({ cfg, lead, dia }) {
+/**
+ * Sprint 44 — preenche um modelo de e-mail da biblioteca com o que já se sabe
+ * do cartório. Devolve { assunto, corpo }.
+ */
+export function preencherModelo(modelo, lead, vendedor) {
+  if (!modelo) return null;
+  const nome = (lead?.contato || '').split(/[,(/]/)[0].trim();
+  const troca = (t) => {
+    let s = String(t || '')
+      .replaceAll('[cartório]', lead?.nome || '[cartório]')
+      .replaceAll('[vendedor]', vendedor || '[vendedor]');
+    if (nome) s = s.replaceAll('[Nome]', nome).replaceAll('[nome]', nome);
+    return s;
+  };
+  return { assunto: troca(modelo.assunto), corpo: troca(modelo.corpo) };
+}
+
+/** Modelo sugerido para o toque: o do dia da cadência; senão, o do passo atual pelo nome. */
+export function modeloSugerido(cfg, lead, dia) {
+  const modelos = cfg.modelos_email || [];
+  const chave = { 1: 'cadencia_d1', 11: 'cadencia_d11' }[dia];
+  if (chave) return modelos.find((m) => m.chave === chave) || null;
+  const passo = scriptDoPasso(lead) || '';
+  if (/dia 1 \(apresenta/i.test(passo)) return modelos.find((m) => m.chave === 'cadencia_d1') || null;
+  if (/dia 11/i.test(passo)) return modelos.find((m) => m.chave === 'cadencia_d11') || null;
+  return null;
+}
+
+function AjudaEmail({ cfg, lead, modeloId, onModelo }) {
   const [copiado, setCopiado] = useState(false);
-  const titulo = { 1: 'E-mail · dia 1 (apresentação)', 11: 'E-mail · dia 11 (convite para o webinar)' }[dia] || scriptDoPasso(lead);
+  const modelos = cfg.modelos_email || [];
+  const modelo = modelos.find((m) => m.id === modeloId) || null;
   const vendedor = cfg.pessoas?.find((p) => p.id === cfg.eu?.id)?.nome;
-  const e = emailDoRoteiro(titulo, lead, vendedor);
-  if (!e || !e.assunto) return null;
-  const href = `mailto:${encodeURIComponent(lead.email || '')}?subject=${encodeURIComponent(e.assunto)}&body=${encodeURIComponent(e.corpo)}`;
+  const e = preencherModelo(modelo, lead, vendedor);
+  const href = e ? `mailto:${encodeURIComponent(lead.email || '')}?subject=${encodeURIComponent(e.assunto)}&body=${encodeURIComponent(e.corpo)}` : null;
   async function copiar() { try { await navigator.clipboard.writeText(`Assunto: ${e.assunto}\n\n${e.corpo}`); setCopiado(true); setTimeout(() => setCopiado(false), 1500); } catch { /* sem clipboard */ } }
   return (
     <div className="space-y-2 rounded-md border border-nexus-100 bg-nexus-50/60 p-3 text-sm">
-      <p className="text-xs text-slate-600">Envie do <b>seu e-mail</b> e troque o que ainda estiver entre colchetes. Depois registre aqui o resultado (“Mensagem enviada”, se ninguém respondeu ainda).</p>
-      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-white p-2 text-xs leading-relaxed text-slate-700"><b>Assunto:</b> {e.assunto}{'\n\n'}{e.corpo}</div>
-      <div className="flex flex-wrap gap-2">
-        <a href={href} className={btnPrimCls + ' !px-2 !py-1 text-xs'} target="_blank" rel="noreferrer">Abrir no meu e-mail{lead.email ? '' : ' (sem e-mail no cadastro)'}</a>
-        <button type="button" className={btnCls + ' !px-2 !py-1 text-xs'} onClick={copiar}>{copiado ? 'Copiado' : 'Copiar texto'}</button>
-      </div>
+      <Campo rotulo="Modelo de e-mail usado">
+        <select className={inputCls} value={modeloId || ''} onChange={(ev) => onModelo(ev.target.value || null)}>
+          <option value="">Nenhum modelo (texto próprio)</option>
+          {modelos.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
+        </select>
+      </Campo>
+      <p className="text-xs text-slate-600">Marque o modelo que você usou: é ele que entra no ranking dos e-mails mais utilizados. Envie do <b>seu e-mail</b> e troque o que ainda estiver entre colchetes. Depois registre aqui o resultado (“Mensagem enviada”, se ninguém respondeu ainda).</p>
+      {e && (
+        <>
+          <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-white p-2 text-xs leading-relaxed text-slate-700"><b>Assunto:</b> {e.assunto}{'\n\n'}{e.corpo}</div>
+          <div className="flex flex-wrap gap-2">
+            <a href={href} className={btnPrimCls + ' !px-2 !py-1 text-xs'} target="_blank" rel="noreferrer">Abrir no meu e-mail{lead.email ? '' : ' (sem e-mail no cadastro)'}</a>
+            <button type="button" className={btnCls + ' !px-2 !py-1 text-xs'} onClick={copiar}>{copiado ? 'Copiado' : 'Copiar texto'}</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -76,6 +114,8 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
   const [nota, setNota] = useState('');
   const [reuniao, setReuniao] = useState({ tipo: 'diagnostico', inicio: '' });
   const [proximo, setProximo] = useState({ passo: '', data: '' });
+  const [modeloId, setModeloId] = useState(() => modeloSugerido(cfg, lead, passo?.d)?.id || null);
+  const ehEmail = /^e-?mail/i.test(canal);
   const { erro, setErro, enviando, enviar } = useEnvio(onFeito);
   const pedeProximo = tipo === 'avulso' && NEGOCIANDO.includes(lead.etapa);
   const ehLigacao = /liga/i.test(canal);
@@ -91,6 +131,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
       tipo, dia: tipo === 'avulso' ? null : dia, canal, resultado,
       duracao_min: duracao === '' ? null : Number(duracao), nota: nota || null,
       proximo_passo: proximo.passo || null, proxima_data: proximo.data || null,
+      modelo_email_id: ehEmail ? modeloId : null,
     };
     if (resultado === 'agendou') corpo.reuniao = { tipo: reuniao.tipo, inicio: localParaIso(reuniao.inicio) };
     enviar(() => api.post(`/comercial/leads/${lead.id}/toques`, corpo));
@@ -100,7 +141,7 @@ export function ToqueModal({ cfg, lead, tipo, dia, canal: canalPadrao, onFechar,
     <Modal titulo={`${tipo === 'cadencia' ? `Toque dia ${dia}` : 'Registrar contato'} · ${lead.nome}`} onFechar={onFechar}
       rodape={<Botoes onFechar={onFechar} enviando={enviando} onClick={registrar} />}>
       {passo && <p className="text-sm text-slate-600"><b>{passo.canal}</b> — {passo.acao}</p>}
-      {/^e-mail/i.test(canal) && <AjudaEmail cfg={cfg} lead={lead} dia={passo?.d} />}
+      {ehEmail && <AjudaEmail cfg={cfg} lead={lead} modeloId={modeloId} onModelo={setModeloId} />}
       <Erro>{erro}</Erro>
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Canal">

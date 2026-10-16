@@ -19,6 +19,9 @@ import {
 import { marcarGestorComercial } from '../services/comercial.dados.js';
 import { espelharDepois } from '../services/comercial.espelho.js';
 import { painelTv } from '../controllers/comercial.tv.controller.js';
+import {
+  listarModelos, criarModelo, atualizarModelo, arquivarModelo, obterRankingEmails,
+} from '../controllers/comercial.emails.controller.js';
 import adaptaiRoutes from './adaptai.routes.js';
 
 /**
@@ -109,6 +112,13 @@ router.post('/marketing/acoes/:id/arquivar', arquivarAcaoMkt);
 router.post('/marketing/lote', loteMarketing);
 router.post('/marketing/datas', criarDataMkt);
 router.delete('/marketing/datas/:id', removerDataMkt);
+
+// Sprint 44 — modelos de e-mail e ranking dos mais utilizados
+router.get('/modelos-email', listarModelos);
+router.post('/modelos-email', criarModelo);
+router.put('/modelos-email/:id', atualizarModelo);
+router.post('/modelos-email/:id/arquivar', arquivarModelo);
+router.get('/emails/ranking', obterRankingEmails);
 
 router.get('/espelho', listarEspelhos);
 router.put('/espelho/:quadroId', exigirAdmin, atualizarEspelho);

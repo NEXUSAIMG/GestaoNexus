@@ -62,9 +62,10 @@ export default function Comercial() {
 
   useEffect(() => { try { localStorage.setItem('comercial-aba', aba); } catch { /* ok */ } }, [aba]);
 
-  useEffect(() => {
+  const carregarCfg = useCallback(() => {
     api.get('/comercial/config').then((r) => { setCfg(r.data); setErro(''); }).catch((err) => setErro(mensagemDeErro(err, 'Não consegui abrir o Comercial.')));
   }, []);
+  useEffect(() => { carregarCfg(); }, [carregarCfg]);
 
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
@@ -146,7 +147,7 @@ export default function Comercial() {
           )}
           {aba === 'ajuda' && <VistaAjuda cfg={cfg} onTour={() => setTour(true)} onProcesso={() => setAba('processo')} />}
           {aba === 'processo' && <VistaProcesso cfg={cfg} painel={painel} />}
-          {aba === 'scripts' && <VistaScripts cfg={cfg} />}
+          {aba === 'scripts' && <VistaScripts cfg={cfg} onMudou={carregarCfg} />}
           {aba === 'controles' && <VistaControles cfg={cfg} onMudou={recarregar} />}
           {aba === 'marketing' && <VistaMarketing cfg={cfg} onAviso={setAviso} />}
           {!['funil', 'scripts', 'controles', 'ajuda', 'marketing'].includes(aba) && !painel && <p className="text-sm text-slate-400">Carregando…</p>}
@@ -156,7 +157,7 @@ export default function Comercial() {
               onToque={(lead, tipo, dia) => setToque({ lead, tipo, dia })} onMarco={marcarMarco} />
           )}
           {painel && aba === 'implantacao' && <VistaImplantacao painel={painel} cfg={cfg} onAbrir={abrir} />}
-          {painel && aba === 'supervisao' && <VistaSupervisao painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar} />}
+          {painel && aba === 'supervisao' && <VistaSupervisao painel={painel} cfg={cfg} onAbrir={abrir} onMudou={recarregar} versao={versao} />}
           {painel && aba === 'placar' && <VistaPlacar painel={painel} cfg={cfg} versao={versao} />}
           {painel && aba === 'metas' && <VistaMetas painel={painel} cfg={cfg} onSalvo={recarregar} />}
         </>

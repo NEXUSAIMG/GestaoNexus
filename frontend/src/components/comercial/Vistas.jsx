@@ -8,6 +8,7 @@ import {
 import { SCRIPTS, OBJECOES } from './scripts.js';
 import { ChecagemModal, UmAUmModal, DesfechoModal } from './Acoes.jsx';
 import { Dica } from './Ajuda.jsx';
+import { EmailsMaisUsados, BibliotecaEmails } from './Emails.jsx';
 
 const nomeEtapa = (cfg, k) => cfg.etapas.find((e) => e.k === k)?.n || k;
 const btnMini = btnPrimCls + ' !px-2 !py-1 text-xs';
@@ -357,7 +358,7 @@ function janelaAtual() {
   return h < 11 ? 'abertura' : h < 15.5 ? 'meio' : 'fechamento';
 }
 
-export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
+export function VistaSupervisao({ painel, cfg, onAbrir, onMudou, versao }) {
   const admin = !!(cfg.eu?.gestor ?? cfg.eu?.admin);
   const [modal, setModal] = useState(null);
   const [erro, setErro] = useState('');
@@ -438,6 +439,7 @@ export function VistaSupervisao({ painel, cfg, onAbrir, onMudou }) {
           </Painel>
         ))}
       </div>
+      <EmailsMaisUsados cfg={cfg} versao={versao} />
       {modal?.tipo === 'checagem' && <ChecagemModal cfg={cfg} sup={modal.sup} janela={janelaAtual()} onFechar={() => setModal(null)} onFeito={() => { setModal(null); onMudou(); }} />}
       {modal?.tipo === '1a1' && <UmAUmModal sup={modal.sup} hoje={cfg.hoje} onFechar={() => setModal(null)} onFeito={() => { setModal(null); onMudou(); }} />}
     </div>
@@ -1017,16 +1019,20 @@ export function VistaImplantacao({ painel, cfg, onAbrir }) {
 // ---------------------------------------------------------------------------
 // SCRIPTS
 // ---------------------------------------------------------------------------
-export function VistaScripts({ cfg }) {
+// Sprint 44 — os e-mails agora vivem na biblioteca de modelos (editável pela gestão)
+const SCRIPTS_SEM_EMAIL = SCRIPTS.filter((s) => !/^e-?mail/i.test(s.titulo));
+
+export function VistaScripts({ cfg, onMudou }) {
   const [copiado, setCopiado] = useState(null);
   async function copiar(i) {
-    try { await navigator.clipboard.writeText(SCRIPTS[i].texto); setCopiado(i); setTimeout(() => setCopiado(null), 1500); } catch { /* sem clipboard */ }
+    try { await navigator.clipboard.writeText(SCRIPTS_SEM_EMAIL[i].texto); setCopiado(i); setTimeout(() => setCopiado(null), 1500); } catch { /* sem clipboard */ }
   }
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">Roteiros, não falas decoradas: adapte as palavras, mantenha a ordem. Troque os campos entre colchetes antes de enviar.</p>
+      <BibliotecaEmails cfg={cfg} onMudou={onMudou} />
       <div className="grid gap-4 lg:grid-cols-2">
-        {SCRIPTS.map((s, i) => (
+        {SCRIPTS_SEM_EMAIL.map((s, i) => (
           <Painel key={s.titulo} titulo={s.titulo} extra={
             <button type="button" className={btnCls + ' !px-2 !py-1 text-xs'} onClick={() => copiar(i)}>
               {copiado === i ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}

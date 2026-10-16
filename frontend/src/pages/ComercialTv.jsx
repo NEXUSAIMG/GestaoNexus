@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, UserPlus, CalendarCheck, Trophy, Radio, Maximize2, X,
   CalendarClock, Activity, Target, CalendarDays, LayoutDashboard, CheckCircle2, UserX, Sparkles,
   FlaskConical, AlertTriangle, Hourglass, Gauge, FileText, CalendarRange, Pause, Play,
-  Map as MapIcon, Flame, Thermometer, GraduationCap, Route,
+  Map as MapIcon, Flame, Thermometer, GraduationCap, Route, Mail,
 } from 'lucide-react';
 import { api, BASE_URL, mensagemDeErro } from '../api/client.js';
 // Mapa do Brasil: @svg-maps/brazil (CC BY 4.0) — crédito exibido na tela do mapa
@@ -27,7 +27,7 @@ const CELEBRACAO_MS = 12_000;
 
 /**
  * Sprint 42N — telas que se alternam na TV. Tempos em segundos, ajustáveis
- * pela URL: /comercial/tv?painel=40&funil=30&mapa=30&mes=30&trial=25&reunioes=25&adaptai=30 · ?fixo=adaptai trava numa tela.
+ * pela URL: /comercial/tv?painel=40&funil=30&mapa=30&mes=30&trial=25&reunioes=25&adaptai=30&emails=25 · ?fixo=adaptai trava numa tela.
  * Na própria TV: botão Pausar no rodapé ou barra de espaço (fica guardado no navegador).
  */
 const TELAS = [
@@ -38,10 +38,12 @@ const TELAS = [
   { k: 'trial', nome: 'Trials', icone: FlaskConical, padrao: 25 },
   { k: 'reunioes', nome: 'Reuniões marcadas', icone: CalendarDays, padrao: 25 },
   { k: 'adaptai', nome: 'AdaptAI', icone: GraduationCap, padrao: 30 }, // Sprint 43
+  { k: 'emails', nome: 'E-mails do mês', icone: Mail, padrao: 25 }, // Sprint 44
 ];
-/** Tela de trials só entra na roda se houver trial em andamento ou no mês. */
-const telaDisponivel = (k, dados) => (k === 'adaptai' ? !!dados?.adaptai : k !== 'trial'
-  || !!(dados?.trial && (dados.trial.resumo.em_andamento > 0 || dados.trial.mes.iniciados > 0)));
+/** Tela de trials só entra na roda se houver trial em andamento ou no mês; a de e-mails, se houver e-mail com modelo no mês. */
+const telaDisponivel = (k, dados) => (k === 'adaptai' ? !!dados?.adaptai
+  : k === 'emails' ? !!(dados?.emails && dados.emails.total_envios > 0)
+    : k !== 'trial' || !!(dados?.trial && (dados.trial.resumo.em_andamento > 0 || dados.trial.mes.iniciados > 0)));
 function lerConfigTelas() {
   const q = new URLSearchParams(window.location.search);
   const dur = Object.fromEntries(TELAS.map((t) => {
@@ -237,6 +239,8 @@ export default function ComercialTv() {
           <div key={tela} className="tv-trocar flex min-h-0 flex-1 flex-col gap-[1.1em]">
             {tela === 'adaptai' && dados.adaptai ? (
               <TelaAdaptai a={dados.adaptai} agora={agora} />
+            ) : tela === 'emails' && dados.emails ? (
+              <TelaEmails e={dados.emails} />
             ) : tela === 'reunioes' && dados.calendario ? (
               <TelaReunioes cal={dados.calendario} agora={agora} />
             ) : tela === 'mapa' && dados.mapa ? (
@@ -1287,6 +1291,78 @@ function TelaFunilQuente({ f }) {
         )}
         <div className="text-[0.82em] leading-snug text-slate-500">
           Temperatura (0–100): estágio + reunião marcada nos próximos dias + resposta recente + proposta na mesa + uso no trial − dias sem contato. Quente a partir de {f.limiar}°.
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 44 — e-mails mais utilizados no mês (equipe e por pessoa)
+// ─────────────────────────────────────────────────────────────────────────
+const pctTv = (n) => (n == null ? '—' : `${String(Math.round(n * 10) / 10).replace('.', ',')}%`);
+
+function TelaEmails({ e }) {
+  const max = Math.max(1, ...e.modelos.map((m) => m.envios));
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-12 gap-[1.1em]">
+      <section className="col-span-7 flex min-h-0 flex-col gap-[0.6em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <div className="flex items-baseline justify-between">
+          <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+            <Mail className="h-[1.1em] w-[1.1em] text-sky-400" /> E-mails mais usados no mês
+          </h2>
+          <span className="text-[1em] text-slate-400">
+            <b className="text-slate-200 tabular-nums">{e.total_envios}</b> envios · resposta <b className="text-emerald-300">{pctTv(e.taxa_resposta)}</b>
+          </span>
+        </div>
+        <ul className="flex min-h-0 flex-1 flex-col gap-[0.45em] overflow-hidden">
+          {e.modelos.map((m, i) => (
+            <li key={m.id} className="flex shrink-0 items-center gap-[0.8em] rounded-lg bg-slate-800/50 px-[0.8em] py-[0.55em]">
+              <span className={`w-[1.4em] text-center text-[1.4em] font-bold ${i === 0 ? 'text-amber-300' : 'text-slate-500'}`}>{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-[0.6em]">
+                  <span className="truncate text-[1.3em] font-semibold">{m.titulo}</span>
+                  <span className="shrink-0 text-[1.8em] font-extrabold leading-none tabular-nums">{m.envios}</span>
+                </div>
+                <div className="mt-[0.3em] h-[0.45em] w-full overflow-hidden rounded-full bg-slate-700">
+                  <div className="h-full rounded-full bg-sky-400 transition-all duration-700" style={{ width: `${(m.envios / max) * 100}%` }} />
+                </div>
+                <div className="mt-[0.2em] text-[0.9em] text-slate-400">
+                  resposta <b className="text-emerald-300">{pctTv(m.taxa_resposta)}</b> · {m.reunioes} reunião(ões) em até 14 dias
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="col-span-5 flex min-h-0 flex-col gap-[0.6em] rounded-xl border border-slate-800 bg-slate-900/70 p-[1em]">
+        <h2 className="flex items-center gap-[0.5em] text-[1.5em] font-semibold text-slate-100">
+          <Trophy className="h-[1.1em] w-[1.1em] text-amber-400" /> Quem mais enviou
+        </h2>
+        {e.pessoas.length === 0 ? (
+          <div className="grid flex-1 place-items-center text-[1.3em] text-slate-500">Ninguém enviou e-mail com modelo ainda.</div>
+        ) : (
+          <ul className="flex min-h-0 flex-1 flex-col gap-[0.45em] overflow-hidden">
+            {e.pessoas.map((p) => (
+              <li key={p.id} className="flex shrink-0 items-center gap-[0.8em] rounded-lg bg-slate-800/50 px-[0.8em] py-[0.55em]">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-[0.6em]">
+                    <span className="truncate text-[1.3em] font-semibold">{p.nome}</span>
+                    <span className="shrink-0 text-[1.6em] font-extrabold leading-none tabular-nums">{p.envios}</span>
+                  </div>
+                  <div className="truncate text-[0.9em] text-slate-400">
+                    {p.mais_usado ? <>mais usado: <span className="text-slate-200">{p.mais_usado.titulo}</span> ({p.mais_usado.envios})</> : 'sem modelo marcado'}
+                    {' · '}resposta {pctTv(p.taxa_resposta)}
+                    {p.sem_modelo > 0 && <span className="text-amber-300"> · {p.sem_modelo} sem modelo</span>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="text-[0.82em] leading-snug text-slate-500">
+          Conta os e-mails registrados com o modelo marcado. Resposta = contato com conexão até 7 dias depois do envio.
         </div>
       </section>
     </div>

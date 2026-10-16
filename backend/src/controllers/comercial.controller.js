@@ -20,6 +20,7 @@ import {
   normalizar, palpiteEtapa, palpiteMotivo, palpiteMarco, salvarEspelho,
 } from '../services/comercial.espelho.js';
 import { campanhasAtivas } from './comercial.marketing.controller.js';
+import { modelosAtivos } from './comercial.emails.controller.js';
 
 /**
  * Módulo Comercial — Sprint 42 (funil) + 42B (controle minucioso).
@@ -110,6 +111,7 @@ const toqueSchema = z.object({
   proximo_passo: txt(1000),
   proxima_data: dataOpc,
   reuniao: reuniaoSchema.optional(),
+  modelo_email_id: z.string().uuid().nullable().optional(), // Sprint 44
 });
 
 const estornoSchema = z.object({ motivo: justificativa });
@@ -266,6 +268,7 @@ export async function config(req, res, next) {
       diagnostico_campos: DIAGNOSTICO_CAMPOS,
       pessoas: await pessoasAtivas(),
       campanhas: await campanhasAtivas(), // Sprint 42I — lista do campo Campanha
+      modelos_email: await modelosAtivos(), // Sprint 44 — modelos de e-mail
       feriados,
       eu: { id: req.pessoa.id, admin: ehAdmin(req), gestor: ehGestor(req) },
       hoje: hojeBR(),
@@ -315,10 +318,12 @@ export async function obter(req, res, next) {
     const [{ rows: toques }, { rows: movimentos }, { rows: alteracoes }, reunioes, propostas] = await Promise.all([
       query(
         `SELECT t.id, t.tipo, t.dia, t.canal, t.resultado, t.duracao_min, t.nota, t.data::text AS data, t.criado_em,
-                t.pessoa_id, p.nome AS pessoa_nome, t.estornado_em, t.estorno_motivo, pe.nome AS estornado_por_nome
+                t.pessoa_id, p.nome AS pessoa_nome, t.estornado_em, t.estorno_motivo, pe.nome AS estornado_por_nome,
+                t.modelo_email_id, me.titulo AS modelo_email
            FROM comercial_toques t
            LEFT JOIN pessoas_acesso p ON p.id = t.pessoa_id
            LEFT JOIN pessoas_acesso pe ON pe.id = t.estornado_por_id
+           LEFT JOIN comercial_modelos_email me ON me.id = t.modelo_email_id
           WHERE t.lead_id = $1 ORDER BY t.criado_em DESC`,
         [req.params.id],
       ),
@@ -624,13 +629,24 @@ export async function registrarToque(req, res, next) {
       || (d.tipo === 'cadencia' ? CADENCIA.find((c) => c.d === d.dia)?.canal : null)
       || null;
 
+    // Sprint 44 — modelo de e-mail usado: só em toque de e-mail e só modelo ativo
+    let modeloEmail = null;
+    if (d.modelo_email_id) {
+      if (!/e-?mail/i.test(canal || '')) throw new AppError('Modelo de e-mail só vale para contato pelo canal E-mail.', 400, 'modelo_fora_do_email');
+      const { rows: [m] } = await client.query(
+        `SELECT id FROM comercial_modelos_email WHERE id = $1 AND arquivado_em IS NULL`, [d.modelo_email_id],
+      );
+      if (!m) throw new AppError('Este modelo de e-mail não existe mais (foi arquivado). Escolha outro.', 400, 'modelo_invalido');
+      modeloEmail = m.id;
+    }
+
     const { rows } = await client.query(
-      `INSERT INTO comercial_toques (lead_id, tipo, dia, canal, resultado, duracao_min, nota, data, pessoa_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO comercial_toques (lead_id, tipo, dia, canal, resultado, duracao_min, nota, data, pessoa_id, modelo_email_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (lead_id, tipo, dia) WHERE tipo IN ('cadencia','marco','trial') AND estornado_em IS NULL DO NOTHING
        RETURNING id`,
       [lead.id, d.tipo, d.tipo === 'avulso' ? null : d.dia, canal, d.resultado ?? null, d.duracao_min ?? null,
-        d.nota ?? null, hoje, req.pessoa.id],
+        d.nota ?? null, hoje, req.pessoa.id, modeloEmail],
     );
     if (!rows.length) {
       // Toque do roteiro já registrado (clique duplo): nada mais acontece.

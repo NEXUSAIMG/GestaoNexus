@@ -591,7 +591,7 @@ function Historico({ cfg, lead, hoje, gestor, onEstornar }) {
       em: t.criado_em, quem: t.pessoa_nome, riscado: !!t.estornado_em,
       // Contato avulso não tem caixinha no roteiro: o estorno é por aqui.
       estornavel: !t.estornado_em && t.tipo === 'avulso' && (gestor || (t.pessoa_id === cfg.eu?.id && t.data === hoje)) ? t : null,
-      txt: `${t.tipo === 'cadencia' ? `Toque dia ${t.dia}` : t.tipo === 'marco' ? `Implantação D${t.dia}` : 'Contato'}${t.canal ? ' · ' + t.canal : ''}${t.resultado ? ' · ' + res(t.resultado) : ''}${t.duracao_min ? ` · ${t.duracao_min} min` : ''}${t.nota ? ': ' + t.nota : ''}`
+      txt: `${t.tipo === 'cadencia' ? `Toque dia ${t.dia}` : t.tipo === 'marco' ? `Implantação D${t.dia}` : 'Contato'}${t.canal ? ' · ' + t.canal : ''}${t.modelo_email ? ` (modelo “${t.modelo_email}”)` : ''}${t.resultado ? ' · ' + res(t.resultado) : ''}${t.duracao_min ? ` · ${t.duracao_min} min` : ''}${t.nota ? ': ' + t.nota : ''}`
         + (t.estornado_em ? ` [ESTORNADO por ${t.estornado_por_nome || '—'}: ${t.estorno_motivo}]` : ''),
     })),
     ...(lead.alteracoes || []).filter((a) => a.campo !== 'etapa').map((a) => {
