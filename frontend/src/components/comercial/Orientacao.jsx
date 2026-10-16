@@ -132,8 +132,12 @@ function proximaAcaoBase(lead, cfg, admin) {
       const falta = cfg.diagnostico_campos.filter((c) => c.obrigatorio && !(lead.diagnostico || {})[c.k]);
       if (falta.length) return { nivel: 'warn', titulo: 'Preencha o diagnóstico', texto: `Falta: ${falta.map((c) => c.n.toLowerCase()).join(', ')}.`, acao: 'foco:campo-diag-' + falta[0].k, rotulo: 'Preencher agora' };
       const vigD = (lead.propostas || []).find((x) => x.status === 'enviada');
-      if (!vigD) return { nivel: 'warn', titulo: 'Envie a proposta em até 2 dias', texto: 'Plano e valor, com a dor e os números que o titular falou na reunião. Argumento de valor: implantação assistida em 48 horas.', acao: 'proposta', rotulo: 'Registrar proposta' };
-      return { nivel: 'info', titulo: 'Proposta enviada: mude para Aguardando retorno', texto: 'Assim o funil mostra que a decisão está com o cartório, com prazo de 7 dias.', acao: 'etapa:proposta', rotulo: 'Mudar para Aguardando retorno' };
+      if (vigD) return { nivel: 'info', titulo: 'Proposta enviada: mude para Aguardando retorno', texto: 'Assim o funil mostra que a decisão está com o cartório, com prazo de 7 dias.', acao: 'etapa:proposta', rotulo: 'Mudar para Aguardando retorno' };
+      // Fix 16/10 — depois da reunião o caminho é o trial guiado (42L), não a proposta direta
+      if (!lead.meta_sucesso) return { nivel: 'warn', titulo: 'Escreva a meta de sucesso do trial', texto: 'O que precisa acontecer em 14 dias para o titular dizer sim, com número. Ex.: responder 90% das mensagens em até 10 minutos.', acao: 'foco:campo-meta', rotulo: 'Preencher a meta' };
+      const resultado = reun.some((r) => r.tipo === 'resultado' && ['agendada', 'realizada'].includes(r.status));
+      if (!resultado) return { nivel: 'warn', titulo: 'Agende a reunião de resultado', texto: 'Com o titular, perto do 12º dia do trial: é nela que se mostra a meta contra o resultado e se pede a decisão.', acao: 'reuniao:resultado', rotulo: 'Agendar reunião de resultado' };
+      return { nivel: 'info', titulo: 'Tudo combinado: comece o trial', texto: 'Mude a etapa para Trial (14 dias). O Nexus marca a ativação (D0) para hoje e mostra cada marco em Hoje no dia certo.', acao: 'etapa:trial', rotulo: 'Começar o trial' };
     }
     case 'corregedoria':
       return { nivel: lead.proxima_data && lead.proxima_data >= hoje ? 'ok' : 'warn', titulo: 'Aguardando a corregedoria', texto: lead.proxima_data && lead.proxima_data >= hoje ? `Próxima cobrança em ${dataBr(lead.proxima_data)}. Autorizou e assinou? Marque como ganho.` : 'Registre a próxima data para cobrar o retorno e ofereça ajuda com os documentos.', acao: lead.proxima_data && lead.proxima_data >= hoje ? 'etapa:ganho' : 'foco:campo-proximo', rotulo: lead.proxima_data && lead.proxima_data >= hoje ? 'Cliente assinou' : 'Marcar próxima cobrança' };
