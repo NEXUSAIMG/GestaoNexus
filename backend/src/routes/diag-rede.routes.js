@@ -32,6 +32,20 @@ router.get('/', async (req, res, next) => {
 
     const out = { node: process.version, testes: [] };
 
+    if (req.query.extra === '2') {
+      // Download da internet PARA o app: o app recebe lento de qualquer origem ou só do Postgres?
+      out.internet = [];
+      for (const n of [100000, 2000000]) {
+        try {
+          const t = agora();
+          const b = await (await fetch(`https://speed.cloudflare.com/__down?bytes=${n}`, { signal: AbortSignal.timeout(30000) })).arrayBuffer();
+          out.internet.push({ pedido: n, ms: Math.round(agora() - t), bytes: b.byteLength });
+        } catch (e) { out.internet.push({ pedido: n, erro: e.message }); }
+      }
+      clearInterval(iv);
+      return res.json(out);
+    }
+
     if (req.query.extra) {
       // Variante A: mesma query, SEM TLS (separa TLS de rede/TCP).
       try {
