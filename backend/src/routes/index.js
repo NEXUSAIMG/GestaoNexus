@@ -3,6 +3,7 @@ import { autenticar, exigirAcessoCompleto } from '../middleware/auth.middleware.
 import { streamQuadro } from '../controllers/stream.controller.js';
 import { streamComercial } from '../controllers/comercial.tv.controller.js';
 import authRoutes from './auth.routes.js';
+import diagRedeRoutes from './diag-rede.routes.js';
 import sociosRoutes from './socios.routes.js';
 import pessoasRoutes from './pessoas.routes.js';
 import representacoesRoutes from './representacoes.routes.js';
@@ -55,6 +56,7 @@ router.get('/saude', (_req, res) => {
 // AUTENTICAÇÃO (sempre liberada — qualquer um pode tentar logar)
 // ============================================================================
 router.use('/auth', authRoutes);
+router.use('/diag-rede', diagRedeRoutes); // TEMPORÁRIO — remover
 
 // ============================================================================
 // LIBERADAS PRA TODAS AS PESSOAS AUTENTICADAS (incluindo acesso_restrito)
