@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import path from 'node:path';
+import { readdirSync } from 'node:fs';
+import pg from 'pg';
 import { pool } from '../config/database.js';
 import { autenticar, exigirAdmin } from '../middleware/auth.middleware.js';
 
@@ -28,6 +31,29 @@ router.get('/', async (req, res, next) => {
     }, 50);
 
     const out = { node: process.version, testes: [] };
+
+    if (req.query.extra) {
+      // Variante A: mesma query, SEM TLS (separa TLS de rede/TCP).
+      try {
+        const c = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: false });
+        await c.connect();
+        const t = agora();
+        const r = await c.query(`SELECT repeat('x', 100000) AS v`);
+        out.sem_tls_100kb = { ms: Math.round(agora() - t), bytes: r.rows[0].v.length };
+        await c.end();
+      } catch (e) { out.sem_tls_100kb = 'ERR ' + e.message; }
+      // Variante B: HTTP entre containers pela rede privada (o próprio serviço).
+      try {
+        const dir = path.resolve(import.meta.dirname, '../../../frontend/dist/assets');
+        const js = readdirSync(dir).find((f) => f.endsWith('.js'));
+        const url = `http://${process.env.RAILWAY_PRIVATE_DOMAIN}:${process.env.PORT}/assets/${js}`;
+        const t = agora();
+        const b = await (await fetch(url, { signal: AbortSignal.timeout(30000) })).arrayBuffer();
+        out.http_privado = { ms: Math.round(agora() - t), bytes: b.byteLength };
+      } catch (e) { out.http_privado = 'ERR ' + e.message; }
+      clearInterval(iv);
+      return res.json(out);
+    }
     const client = await pool.connect();
     try {
       const sock = client.connection?.stream;
